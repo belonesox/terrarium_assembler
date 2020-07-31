@@ -6,3 +6,4 @@ History
 ------------------
 
 * First release on PyPI.
+* Actually couple of months testing in intranet.

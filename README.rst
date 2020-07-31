@@ -14,9 +14,12 @@ casket-assembler
         :alt: Documentation Status
 
 
+Generate Portable Linux Applications, 
+mostly using python packages and any system package,
+that can be run on any Linux,
+without Docker, Snap, Flathub, etc.
 
-
-Generate Portable Linux Applications, just portable folders
+Just portable folder.
 
 
 * Free software: MIT license
@@ -31,7 +34,3 @@ Features
 Credits
 -------
 
-This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypackage`_ project template.
-
-.. _Cookiecutter: https://github.com/audreyr/cookiecutter
-.. _`audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage

@@ -13,7 +13,8 @@ with open('HISTORY.rst') as history_file:
 requirements = [ 
     'easydict',
     'pytictoc',
-
+    'nuitka',
+    'dnf'
 ]
 
 setup_requirements = ['pytest-runner', ]
