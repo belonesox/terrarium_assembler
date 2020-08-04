@@ -9,7 +9,6 @@ import shutil
 import sys
 from tempfile import mkstemp
 import magic
-import click
 import stat
 import re
 import yaml
@@ -61,6 +60,7 @@ class BinRegexps:
 
 @dc.dataclass
 class PythonPackages:
+    pip: list
     build: list
     casket: list
 
@@ -90,22 +90,38 @@ class PackagesSpec:
         return True 
 
 
+
+@dc.dataclass
+class FoldersSpec:
+    folders:   list
+
+
+
+
 class CasketAssembler:
     '''
     Генерация переносимой сборки бинарных линукс-файлов (в частности питон)
     '''
     
     def __init__(self):
+        self.curdir = os.getcwd()
+
         ap = argparse.ArgumentParser(description='Create a portable linux folder-application')
         ap.add_argument('--output', required=True, help='Destination directory')
         ap.add_argument('--release', default=False, action='store_true', help='Release version')
         ap.add_argument('--docs', default=False, action='store_true', help='Output documentation version')
+        ap.add_argument('--stage-checkout', default=False, action='store_true', help='Stage for checkout sources')
+        ap.add_argument('--stage-download', default=False, action='store_true', help='Stage for download binary artifacts')
+        ap.add_argument('--stage-setupsystem', default=False, action='store_true', help='Stage for setup local OS')
+        ap.add_argument('--stage-build-nuitka', default=False, action='store_true', help='Compile Nuitka packages')
         ap.add_argument('--specfile', required=True, help='Specification File')
         
         self.args = args = ap.parse_args()
     
-        self.spec = spec = yaml_load(os.path.expanduser(os.path.expandvars(args.specfile)))    
-        self.root_dir = os.path.expanduser(os.path.expandvars(args.output))
+        specfile_  = expandpath(args.specfile)
+        os.environ['CASKET_SPECDIR'] = os.path.split(specfile_)[0]
+        self.spec = spec = yaml_load(specfile_)    
+        self.root_dir = expandpath(args.output)
 
         self.start_dir = os.getcwd()
          
@@ -129,21 +145,73 @@ class CasketAssembler:
             just_copy=just_copy
         )
 
+        self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath']
+
         nflags_ = {}
         if 'nuitka' in spec:
             nflags_ = spec.nuitka
 
-        self.nuitka_flags = NuitkaFlags(**nflags_)
+        self.nuitkas = NuitkaFlags(**nflags_)
         self.ps = PackagesSpec(**spec.packages)
         self.pp = PythonPackages(**spec.python_packages)
+        fs_ = []
+        if 'folders' in spec:
+            fs_ = spec.folders
+        self.fs = FoldersSpec(folders=fs_)
 
+        self.in_bin = os.path.abspath('in/bin')
         self.src_dir = 'in/src'
         if 'src_dir' in spec:
-            self.src_dir = spec.src_dir
-        self.src_dir = os.path.abspath(self.src_dir)    
+            self.src_dir = expandpath(self.src_dir)    
+        self.out_dir = 'out'
+        self.out_dir = expandpath(self.out_dir)    
         mkdir_p(self.src_dir)    
+        mkdir_p(self.out_dir)    
+        mkdir_p(self.in_bin)    
+
+        os.environ['PATH']="/usr/lib64/ccache:" + os.environ['PATH']
         pass
-    
+
+    def lines2sh(self, name, lines):
+        import stat
+        os.chdir(self.curdir)
+        fname = name + '.sh'
+        with open(os.path.join(fname), 'w', encoding="utf-8") as lf:
+            lf.write("#!/bin/sh\n#Generated %s \n" % name)
+            lf.write("\n".join(lines))
+
+        st = os.stat(fname)
+        os.chmod(fname, st.st_mode | stat.S_IEXEC)
+        pass  
+
+
+    def build_nuitkas(self):
+        if not self.nuitkas:
+            return
+        # if not "builds" in self.nuitkas:
+        #     return
+        # out_dir = os.path.join(self.out_dir)
+        for target_ in self.nuitkas.builds:
+            # outputname = target_.utility
+            # if "outputname" in target_:
+            #     outputname = target_.outputname
+            nflags = self.nuitkas.get_flags(self.out_dir)
+            target_dir = os.path.join(self.out_dir, target_.utility+'.dist')
+            src = os.path.join(self.src_dir, target_.folder, target_.utility) + '.py'
+            lines = []
+            lines.append("""
+export PATH="/usr/lib64/ccache:$PATH"
+""" % vars(self))
+            lines.append(R"""
+python3 -m nuitka --jobs=2 %s %s 
+""" % (nflags, src))
+            self.fs.folders.append(target_dir)
+            build_name = 'build_' + target_.utility
+            self.lines2sh(build_name, lines)
+            if self.args.stage_build_nuitka:
+                os.system("./" + build_name + '.sh') #, shell=True
+        pass
+
 
     def mycopy(self, src, dst):
         '''
@@ -391,6 +459,171 @@ class CasketAssembler:
         os.remove(patched_binary)
         pass
 
+    def checkout_sources(self):
+        '''
+            Just checking out sources.
+            This stage should be done when we have authorization to check them out.
+        '''
+        if not self.pp:
+            return
+
+        root_dir = self.root_dir
+        args = self.args
+
+        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.casket]:
+            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+            git2dir(git_url, git_branch, path_to_dir)        
+        pass
+
+    def explode_pp_node(self, td_):
+        '''
+        Преобразует неоднозначное описание yaml-ноды пакета в git_url и branch
+        '''    
+        git_url = None
+        git_branch = 'master'
+
+        if isinstance(td_, str):
+            git_url = td_
+        else:
+            git_url = td_.url
+            if 'branch' in td_:
+                git_branch = td_.branch
+            if 'cache' in td_:
+                git_url = expandpath(td_.cache)
+
+        path_to_dir = os.path.join(self.src_dir, giturl2folder(git_url))
+        setup_path = path_to_dir
+
+        if 'subdir' in td_:
+            subdir = td_.subdir
+
+        setup_path = path_to_dir
+
+        return git_url, git_branch, path_to_dir, setup_path
+
+    def install_localpythons(self):
+        if not self.pp:
+            return
+
+        root_dir = self.root_dir
+        args = self.args
+        t.tic()
+
+        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.casket]:
+            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+
+    
+            os.chdir(setup_path)
+            make_setup_if_not_exists()
+            release_mod = ''
+            # if self.args.release:
+            #     release_mod = ' --exclude-source-files '
+            scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root /   " % vars()
+            if local_:
+                scmd = "sudo python3 setup.py install --single-version-externally-managed  %(release_mod)s --root /   " % vars()
+            print(scmd)
+            os.system(scmd)
+        print("Install localpythons takes")
+        t.toc()
+        pass
+
+
+
+    def install_packages(self):
+        root_dir = self.root_dir
+        args = self.args
+        packages = []
+        
+        import dnf
+        base = dnf.Base()
+        # base.read_all_repos()
+        base.fill_sack()
+        q_ = base.sack.query()
+        self.installed_packages = q_.installed()
+    
+        t.tic() 
+        scmd = "sudo yum-config-manager --enable remi"
+        os.system(scmd)
+        for package in self.need_packages + self.ps.build + self.ps.casket:
+            # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
+            package_name = None
+            if isinstance(package, str):
+                package_name = package
+    
+                ok_ = list(self.installed_packages.filter(name=package_name))
+                if not ok_:
+                    scmd = 'sudo dnf install -y "%(package_name)s" ' % vars()
+                    os.system(scmd)
+                else:
+                    print('Package ' + package_name + ' already installed!')    
+                    pass
+            else:
+                package_name = package.name
+                package_url = package.url
+                ok_ = list(self.installed_packages.filter(name=package_name))
+                if not ok_:
+                    scmd = 'sudo dnf install -y "%(package_url)s" ' % vars()
+                    os.system(scmd)
+                pass
+            if package_name:
+                packages.append(package_name)
+        print("Install packages takes")
+        t.toc()
+        pass
+
+    def build_wheels(self):
+        os.chdir(self.curdir)
+        bindir_ = os.path.abspath(self.in_bin)
+        lines = []
+        lines.append(R"rm -rf %(in_bin)s/ourwheel/*.*" % vars(self))
+        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.casket]:
+            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+            scmd = "pushd %s" % (path_to_dir)
+            lines.append(scmd)
+            scmd = "python3 setup.py bdist_wheel -d %(in_bin)s/ourwheel " % vars(self)
+            lines.append(scmd)
+            lines.append('popd')
+            pass
+        batfile = "04-build-wheels"
+        self.lines2sh(batfile, lines)
+        # os.system(batfile+'.sh')
+        # os.chdir(self.curdir)
+        # os.chdir(self.output_dir)
+        pass
+
+    def download(self):
+        os.chdir(self.curdir)
+        os.chdir(self.out_dir)
+
+        if not self.pp:
+            return
+
+        root_dir = self.root_dir
+        args = self.args
+
+        lines = []
+
+        for td_ in self.pp.pip:
+            scmd = "python3 -m pip download %s --dest %s/extwheel " % (td_, self.in_bin)
+            lines.append(scmd)                
+
+        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.casket]:
+            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+            os.chdir(setup_path)
+            scmd = "python3 -m pip download %s --dest %s/extwheel " % (
+                setup_path, self.in_bin)
+            lines.append(scmd)                
+            pass
+
+        cmd_name = "02-download-wheels"
+        self.lines2sh(cmd_name, lines)
+
+        if self.args.stage_download:
+            os.chdir(self.curdir)
+            os.system(cmd_name + ".sh", shell=True)
+
+        pass    
+
 
     def process(self):
         '''
@@ -414,7 +647,8 @@ class CasketAssembler:
                     git_url = td_.url
                     subdir = td_.subdir
     
-                path_to_dir = os.path.join(git_url, subdir)
+                path_to_dir = os.path.join(expandpath(git_url), subdir)
+                print("*"*20 + path_to_dir)
                 if not os.path.exists(path_to_dir):
                     import tempfile
                     tmpdir_ = tempfile.mkdtemp('pypg')
@@ -432,12 +666,15 @@ class CasketAssembler:
                 env.lstrip_blocks = True
                 env.rstrip_blocks = True            
                 
+                print(path_to_dir)
                 os.chdir(path_to_dir)
                 for dirpath, dirnames, filenames in os.walk('.'):
                     for dir_ in dirnames:
                         out_dir = os.path.join(root_dir, dirpath, dir_)
-                        if not os.path.exists(out_dir):
-                            os.mkdir(out_dir)
+                        print(out_dir)
+                        mkdir_p(out_dir)
+                        # if not os.path.exists(out_dir):
+                        #     os.mkdir(out_dir)
                         
                     for filename in filenames:
                         fname_  = os.path.join(dirpath, filename)
@@ -467,104 +704,31 @@ class CasketAssembler:
             pass
     
     
-        def install_localpythons(root_dir, args):
-            t.tic()
-            if not 'python_packages' in spec:
-                return
+        if self.args.stage_checkout:
+            self.checkout_sources()
+        #install_templates(root_dir, args)
 
-            for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.casket]:
-                git_url = None
-                git_branch = 'master'
-    
-                if isinstance(td_, str):
-                    git_url = td_
-                else:
-                    git_url = td_.url
-                    if 'branch' in td_:
-                        git_branch = td_.branch
-                    if 'cache' in td_:
-                        git_url = td_.cache
+        self.download()
+        self.build_wheels()
+        return
+
+        if self.args.stage_setupsystem:
+            self.install_packages()
+
+        # if self.args.stage_build_nuitka:
+        self.install_localpythons()
+        self.build_nuitkas()
+            # return
 
 
-                subdir = ""
-                path_to_dir = git_url
 
-                if not os.path.exists(path_to_dir):
-                    # import tempfile
-                    # tmpdir_ = tempfile.mkdtemp('pypg')
-                    
-                    if 'subdir' in td_:
-                        subdir = td_.subdir
-        
-                    # path_to_dir = os.path.join(self.src_dir, 'adir')
-                    path_to_dir = os.path.join(self.src_dir, giturl2folder(git_url))
-        
-                    git2dir(git_url, git_branch, path_to_dir)        
-                    
-                    # # os.chdir(tmpdir_)
-                    # os.chdir(self.src_dir)
-                    # #todo: выяснить, почему --git-dir не работает.
-                    # scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(path_to_dir)s ' % vars()
-                    # os.system(scmd)
-
-                os.chdir(path_to_dir)
-                if subdir:
-                    os.chdir(subdir)
     
-                make_setup_if_not_exists()
-                release_mod = ''
-                # if self.args.release:
-                #     release_mod = ' --exclude-source-files '
-                scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root /   " % vars()
-                if local_:
-                    scmd = "sudo python3 setup.py install --single-version-externally-managed  %(release_mod)s --root /   " % vars()
-                print(scmd)
-                os.system(scmd)
-            print("Install localpythons takes")
-            t.toc()
-                
-    
-        install_localpythons(root_dir, args)
-        install_templates(root_dir, args)
-
-        packages = []
-        
-        import dnf
-        base = dnf.Base()
-        # base.read_all_repos()
-        base.fill_sack()
-        q_ = base.sack.query()
-        self.installed_packages = q_.installed()
-    
-        t.tic() 
-        for package in spec.packages.build + spec.packages.casket:
-            # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
-            package_name = None
-            if isinstance(package, str):
-                package_name = package
-    
-                ok_ = list(self.installed_packages.filter(name=package_name))
-                if not ok_:
-                    scmd = 'sudo dnf install -y "%(package_name)s" ' % vars()
-                    os.system(scmd)
-            else:
-                package_name = package.name
-                package_url = package.url
-                ok_ = list(self.installed_packages.filter(name=package_name))
-                if not ok_:
-                    scmd = 'sudo dnf install -y "%(package_url)s" ' % vars()
-                    os.system(scmd)
-                pass
-            if package_name:
-                packages.append(package_name)
-        print("Install packages takes")
-        t.toc() 
-    
-        self.packages = packages
-        file_list = self.generate_file_list(self.dependencies(self.packages))
+        file_list = self.generate_file_list(self.dependencies(self.ps.casket))
 
         if os.path.exists(root_dir + ".old"):
-            shutil.rmtree(root_dir + ".old")
+            shutil.rmtree(root_dir + ".old", ignore_errors=True)
+        if os.path.exists(root_dir + ".old"):
+            os.system("rm -rf " + root_dir + ".old")
         if os.path.exists(root_dir):
             shutil.move(root_dir, root_dir + ".old")
 
@@ -631,8 +795,8 @@ class CasketAssembler:
         for f in file_list:
             copy_file_to_environment(f)
 
-        if 'folders' in spec:
-            for folder_ in spec.folders:
+        if self.fs:    
+            for folder_ in self.fs.folders:
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
@@ -641,14 +805,13 @@ class CasketAssembler:
                             continue
                         libfile = os.path.join(self.root_dir, f.replace(folder_, 'pbin'))
                         self.add(f, libfile, recursive=False)
-                        # fix_sharedlib(f, libfile)
                 pass
 
     
         install_templates(root_dir, args)
-        install_localpythons(root_dir, args)
+        self.install_localpythons()
         install_templates(root_dir, args)
-        install_localpythons(root_dir, args)
+        self.install_localpythons()
     
         os.chdir(root_dir)
         scmd = "%(root_dir)s/ebin/python3 -m compileall -b . " % vars()

@@ -9,6 +9,7 @@ import shutil
 import stat
 import pathlib
 from easydict import EasyDict as edict
+# from elevate import elevate
 
 def mkdir_p(path):
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
@@ -29,23 +30,23 @@ def folder_size(path, *, follow_symlinks=False):
     except NotADirectoryError:
         return os.stat(path, follow_symlinks=follow_symlinks).st_size
 
-# def mp_magic_create_filemagic(mime_detected, type_detected):
-#     '''
-#     Temp monkeypatching for debugging error cases.
-#     '''
-#     from magic import FileMagic
-#     try:
-#         # mime_encoding = 'utf-8'
-#         # mime_detected.split('; ')
-#         mime_type, mime_encoding = mime_detected.split('; ')
-#     except ValueError:
-#         raise ValueError(mime_detected)
+def mp_magic_create_filemagic(mime_detected, type_detected):
+    '''
+    Temp monkeypatching for debugging error cases.
+    '''
+    from magic import FileMagic
+    try:
+        # mime_encoding = 'utf-8'
+        # mime_detected.split('; ')
+        mime_type, mime_encoding = mime_detected.split('; ')
+    except ValueError:
+        raise ValueError(mime_detected)
 
-#     return FileMagic(name=type_detected, mime_type=mime_type,
-#                      encoding=mime_encoding.replace('charset=', ''))
+    return FileMagic(name=type_detected, mime_type=mime_type,
+                     encoding=mime_encoding.replace('charset=', ''))
 
 
-# magic._create_filemagic = mp_magic_create_filemagic
+magic._create_filemagic = mp_magic_create_filemagic
 
 def wtf(f):
     '''
@@ -97,11 +98,30 @@ def fix_binary(path, libpath):
     os.chmod(patched_elf, orig_perm)         
     return patched_elf
 
+def rmdir(oldpath):
+    if os.path.exists(oldpath):
+        shutil.rmtree(oldpath, ignore_errors=True)
+    if os.path.exists(oldpath):
+        os.system('sudo rm -rf "%s"' % oldpath)
+    #     elevate(graphical=False)
+    #     shutil.rmtree(oldpath)
+    pass
+
 def git2dir(git_url, git_branch, path_to_dir):
+    oldpath = path_to_dir + '.old'
+    newpath = path_to_dir + '.new'
+    rmdir(oldpath)
     pdir = os.path.split(path_to_dir)[0]
     os.chdir(pdir)
-    scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(path_to_dir)s ' % vars()
+    scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
+    rmdir(newpath)
     os.system(scmd)
+    if os.path.exists(newpath):
+        if os.path.exists(path_to_dir):
+            rmdir(oldpath)
+            shutil.move(path_to_dir, oldpath)
+        print(newpath, "->", path_to_dir)    
+        shutil.move(newpath, path_to_dir)
     pass
 
 def make_setup_if_not_exists():
@@ -126,3 +146,7 @@ def giturl2folder(git_url):
     _, fld_ = os.path.split(git_url)
     fld_, _ = os.path.splitext(fld_)
     return fld_
+
+
+def expandpath(path):
+    return os.path.abspath(os.path.expanduser(os.path.expandvars(path)))

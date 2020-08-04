@@ -22,7 +22,7 @@ class NuitkaFlags:
         '''
         flags = ("""
             %s --output-dir="%s"    
-        """ % (" --".join(self.std_flags), out_dir)).strip().split("\n")        
+        """ % (" --".join([''] + self.std_flags), out_dir)).strip().split("\n")        
         for it_ in self.force_packages:
             flags.append('--include-package=' + it_)
         for it_ in self.force_modules:
