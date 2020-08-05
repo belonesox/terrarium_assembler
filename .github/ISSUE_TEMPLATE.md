@@ -1,4 +1,4 @@
-* casket-assembler version:
+* terrarium-assembler version:
 * Python version:
 * Operating System:
 

@@ -1,6 +1,5 @@
 """
-    All nuitka associated for
-    Casket Assembler
+    All nuitka functions associated for TA
 """
 
 import dataclasses as dc

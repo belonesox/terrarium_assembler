@@ -1,6 +1,5 @@
 """
-    Different (geeky) utils for 
-    Casket Assembler
+    Different (geeky) utils for TA
 """
 import os
 import magic

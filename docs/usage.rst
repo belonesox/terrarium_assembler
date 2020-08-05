@@ -2,6 +2,6 @@
 Usage
 =====
 
-To use casket-assembler in a project::
+To use terrarium-assembler in a project::
 
-    import casket_assembler
+    import terrarium_assembler

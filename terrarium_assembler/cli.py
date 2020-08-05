@@ -1,4 +1,4 @@
-"""Console script for casket_assembler."""
+"""Console script for terrarium_assembler."""
 import argparse
 import sys
 from   .ta import TerrariumAssembler

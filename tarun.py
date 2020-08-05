@@ -1,4 +1,4 @@
 #!/usr/bin/env python
 
-from casket_assembler.cli import main
+from terrarium_assembler.cli import main
 main()

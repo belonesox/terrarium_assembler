@@ -9,7 +9,7 @@ if "%SPHINXBUILD%" == "" (
 )
 set SOURCEDIR=.
 set BUILDDIR=_build
-set SPHINXPROJ=casket_assembler
+set SPHINXPROJ=terrarium_assembler
 
 if "%1" == "" goto help
 

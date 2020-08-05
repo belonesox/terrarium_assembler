@@ -1,16 +1,16 @@
 ================
-casket-assembler
+terrarium-assembler
 ================
 
 
-.. image:: https://img.shields.io/pypi/v/casket_assembler.svg
-        :target: https://pypi.python.org/pypi/casket_assembler
+.. image:: https://img.shields.io/pypi/v/terrarium_assembler.svg
+        :target: https://pypi.python.org/pypi/terrarium_assembler
 
-.. image:: https://img.shields.io/travis/belonesox/casket_assembler.svg
-        :target: https://travis-ci.com/belonesox/casket_assembler
+.. image:: https://img.shields.io/travis/belonesox/terrarium_assembler.svg
+        :target: https://travis-ci.com/belonesox/terrarium_assembler
 
-.. image:: https://readthedocs.org/projects/casket-assembler/badge/?version=latest
-        :target: https://casket-assembler.readthedocs.io/en/latest/?badge=latest
+.. image:: https://readthedocs.org/projects/terrarium-assembler/badge/?version=latest
+        :target: https://terrarium-assembler.readthedocs.io/en/latest/?badge=latest
         :alt: Documentation Status
 
 
@@ -23,7 +23,7 @@ Just portable folder.
 
 
 * Free software: MIT license
-* Documentation: https://casket-assembler.readthedocs.io.
+* Documentation: https://terrarium-assembler.readthedocs.io.
 
 
 Features

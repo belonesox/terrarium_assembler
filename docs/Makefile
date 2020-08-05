@@ -4,7 +4,7 @@
 # You can set these variables from the command line.
 SPHINXOPTS    =
 SPHINXBUILD   = python -msphinx
-SPHINXPROJ    = casket_assembler
+SPHINXPROJ    = terrarium_assembler
 SOURCEDIR     = .
 BUILDDIR      = _build
 

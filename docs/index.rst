@@ -1,4 +1,4 @@
-Welcome to casket-assembler's documentation!
+Welcome to terrarium-assembler's documentation!
 ======================================
 
 .. toctree::

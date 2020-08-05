@@ -25,5 +25,5 @@ deploy:
     secure: PLEASE_REPLACE_ME
   on:
     tags: true
-    repo: belonesox/casket_assembler
+    repo: belonesox/terrarium_assembler
     python: 3.8

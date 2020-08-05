@@ -1,4 +1,4 @@
-"""Top-level package for casket-assembler."""
+"""Top-level package for terrarium-assembler."""
 
 __author__ = """Stas Fomin"""
 __email__ = 'stas-fomin@yandex.ru'

@@ -1,1 +1,1 @@
-"""Unit test package for casket_assembler."""
+"""Unit test package for terrarium_assembler."""

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-"""Tests for `casket_assembler` package."""
+"""Tests for `terrarium_assembler` package."""
 
 import pytest
 
 
-from casket_assembler import casket_assembler
+from terrarium_assembler import terrarium_assembler
 
 
 @pytest.fixture
