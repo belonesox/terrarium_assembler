@@ -4,7 +4,7 @@ import sys
 from   .ta import TerrariumAssembler
 
 def main():
-    ta = Terrarium()
+    ta = TerrariumAssembler()
     ta.process()
     pass
 

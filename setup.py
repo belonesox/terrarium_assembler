@@ -15,7 +15,8 @@ requirements = [
     'pytictoc',
 #    'nuitka',
     'file-magic',
-    'jinja2',
+    'jinja2', 
+    'wheel_filename',
 ]
 
 setup_requirements = []
