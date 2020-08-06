@@ -1,0 +1,129 @@
+---
+src_dir: in/src
+
+python_packages: 
+  pip: 
+    - opencv-contrib-python-headless==4.3.0.36
+    - wand==0.6.1
+    - easydict==1.9
+
+  build:
+    - url: https://github.com/belonesox/pytesseract 
+      branch: v0.3.4 
+    - url: https://github.com/belonesox/Nuitka
+      branch: hack-master-for-networkx-and-skimage
+    - url: git@gitlab.ispras.ru:watermarking/linux-deploy-template.git
+      branch: master
+
+  terra:
+    - url: https://github.com/belonesox/terrarium-assembler
+      branch: master
+
+templates_dirs: 
+    - url:    linux-deploy-template
+      subdir: template
+
+packages: 
+  build:
+    - tesseract
+    - tesseract-osd
+    
+  terra:  
+    - python3-gobject-base 
+    - python3-shapely   
+    - ImageMagick7
+    - ImageMagick7-libs
+    - tesseract
+    - bash
+
+  exclude_prefix: 
+    - colord # cups
+    - bash
+    - filesystem
+    - tzdata
+    - chkconfig
+    - basesystem
+    - coreutils
+    - curl-minimal
+    - libcurl-minimal
+    - fedora-release
+    - fedora-repos
+    - fedora-gpg-keys
+    - glibc-minimal-langpack
+    - glibc-all-langpacks
+    - rpm
+    - redhat-rpm-config
+    - bc #CUPS fucnking   
+    - systemd
+    - which
+    - sed 
+    - dbus
+    - adwaita
+    - alternatives
+    - gcc
+    - nss    
+    - qt5
+    - rust
+    - sqlite-libs
+    - shadow-utils
+    - xorg-x11-font-utils
+    - xorg-x11-server-utils
+    - xkeyboard-config
+    - python3-matplotlib
+    - python3-qt5
+    - python3-pyqt5
+    - texlive
+    - qt-settings
+    - libmysofa
+    - vtk   
+    - qt 
+
+  exclude_suffix: 
+    - i686
+
+nuitka:
+  std_flags:  
+    - show-progress 
+    - show-scons 
+    - standalone 
+    - plugin-enable=numpy 
+    - include-scipy 
+  force_packages:
+    - wand 
+    - scipy.special
+  force_modules:
+    - PIL._imaging 
+    - scipy.special.cython_special 
+    - Xlib.support.unix_connect 
+    - Xlib.ext
+  block_packages:
+    - astropy 
+    - sympy
+    - dask 
+    - ipywidgets 
+    - ipython_genutils
+    - ipykernel 
+    - IPython
+    - pexpect
+    - nbformat
+    - numpydoc
+    - matplotlib 
+    - pandas 
+    - pytest 
+    - nose
+  builds:
+    - folder: terrarium_assembler/demo/utility
+      utility: technodemo
+      flags: --jobs=4
+
+bin_regexps:
+  need_patch:
+    - /usr/bin/python3.\d
+    - /usr/bin/bash
+    - /usr/bin/tesseract
+    - .*technodemo
+
+  just_copy:  
+    - /usr/bin/gs
+
+

@@ -187,14 +187,18 @@ class TerrariumAssembler:
         os.chdir(self.curdir)
         fname = name + '.sh'
         with open(os.path.join(fname), 'w', encoding="utf-8") as lf:
-            lf.write("#!/bin/sh\n#Generated %s \n#Authomatically called when terrarium_assembler --stage-%s \n " % (name, stage))
+            lf.write("#!/bin/sh\n#Generated %s \n " % name)
+            if stage:
+                stage_  = stage.replace('_', '-')
+                lf.write("#Automatically called when terrarium_assembler --stage-%s \n " % (stage_))
             lf.write("\n".join(lines))
 
         st = os.stat(fname)
         os.chmod(fname, st.st_mode | stat.S_IEXEC)
 
         if stage:
-            option = "stage_" + stage
+            param = stage.replace('-', '_')
+            option = "stage_" + param
             dict_ = vars(self.args)
             if option in dict_:
                 if dict_[option]:
@@ -653,7 +657,7 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
             lines.append(scmd)
             lines.append('popd')
             pass
-        self.lines2sh("04-build-wheels", lines, "build_wheels")
+        self.lines2sh("09-build-wheels", lines, "build_wheels")
         # os.chdir(self.curdir)
         # os.chdir(self.output_dir)
         pass
@@ -665,11 +669,17 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
-        our_wheels = [os.path.join(in_bin, "ourwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "ourwheel")) if whl.endswith('.whl')]
-        our_wheels_set = set([parse_wheel_filename(whl).project for whl in our_wheels])
+        our_whl_path = os.path.join(self.in_bin, "ourwheel")
+        our_wheels = []
+        our_wheels_set = set()
+        if os.path.exists(our_whl_path):
+            our_wheels = [os.path.join(our_whl_path, whl) for whl in os.listdir(our_whl_path) if whl.endswith('.whl')]
+            our_wheels_set = set([parse_wheel_filename(whl).project for whl in our_wheels])
 
-        ext_wheels = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('.whl') and parse_wheel_filename(whl).project not in our_wheels_set]
-        ext_src = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('tar.gz') or whl.endswith('tar.bz2')]
+        ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        if os.path.exists(ext_whl_path):
+            ext_wheels = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('.whl') and parse_wheel_filename(whl).project not in our_wheels_set]
+            ext_src = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('tar.gz') or whl.endswith('tar.bz2')]
         scmd = 'python3 -m pip install  %s ' % (" ".join(ext_wheels + our_wheels + ext_src))
         lines.append(scmd)
         self.lines2sh("05-install-wheels", lines, "install_wheels")
@@ -696,14 +706,14 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.terra]:
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
-            os.chdir(setup_path)
-            scmd = "python3 -m pip download %s --dest %s/extwheel " % (
-                os.path.relpath(setup_path, start=self.curdir), os.path.relpath(self.in_bin, start=self.curdir))
-            lines.append(scmd)                
+            if os.path.exists(setup_path):
+                os.chdir(setup_path)
+                scmd = "python3 -m pip download %s --dest %s/extwheel " % (
+                    os.path.relpath(setup_path, start=self.curdir), os.path.relpath(self.in_bin, start=self.curdir))
+                lines.append(scmd)                
             pass
 
-        # cmd_name = "02-download-wheels"
-        self.lines2sh("02-download-wheels", lines, "download-wheels")
+        self.lines2sh("07-download-wheels", lines, "download-wheels")
         pass    
 
 
