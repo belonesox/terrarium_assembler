@@ -1,0 +1,13 @@
+#!/bin/bash
+x="$(readlink -f "$0")"
+b="bash"
+d="$(dirname "$x")/.."
+ldso="$d/pbin/ld.so"
+realexe="$d/pbin/$b"
+ulimit -S -c unlimited 
+export GI_TYPELIB_PATH="$d/lib64/girepository-1.0"
+export GDK_PIXBUF_MODULE_FILE="$d/lib64/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+export GDK_PIXBUF_MODULEDIR="$d/lib64/gdk-pixbuf-2.0/2.10.0/loaders"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$d/lib64"
+LANG=C LC_ALL=C PYTHONPATH="$d/local/lib/python{{ python_version_1 }}.{{ python_version_2 }}/site-packages:$d/local/lib64/python{{ python_version_1 }}.{{ python_version_2 }}/site-packages:$PYTHONPATH" exec -a "$0" "$ldso" "$realexe" -s "$@"
+        

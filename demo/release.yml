@@ -16,7 +16,7 @@ python_packages:
       branch: master
 
   terra:
-    - url: https://github.com/belonesox/terrarium-assembler
+    - url: https://github.com/belonesox/terrarium_assembler
       branch: master
 
 templates_dirs: 

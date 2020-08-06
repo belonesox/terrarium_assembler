@@ -113,11 +113,25 @@ class TerrariumAssembler:
         # ap.add_argument('--output', required=True, help='Destination directory')
         ap.add_argument('--debug', default=False, action='store_true', help='Debug version of release')
         ap.add_argument('--docs', default=False, action='store_true', help='Output documentation version')
-        ap.add_argument('--stage-checkout', default=False, action='store_true', help='Stage for checkout sources')
-        ap.add_argument('--stage-download', default=False, action='store_true', help='Stage for download binary artifacts')
-        ap.add_argument('--stage-build-wheels', default=False, action='store_true', help='Build Wheels for source packages')
-        ap.add_argument('--stage-setupsystem', default=False, action='store_true', help='Stage for setup local OS')
-        ap.add_argument('--stage-build-nuitka', default=False, action='store_true', help='Compile Nuitka packages')
+
+        self.stages = {
+            'download-rpms' : 'download RPMs',
+            'download-sources-for-rpms': 'download SRPMs — sources packages for RPMS',
+            'install-rpms': 'install downloaded RPMS',
+            'checkout' : 'checkout sources',
+            'download-wheels': 'download needed WHL-python packages',
+            'build-wheels': 'compile wheels for our python sources',
+            'install-wheels': 'Install our and external Python wheels',
+            'build-nuitka': 'Compile Python packages to executable',
+        }
+
+        for stage, desc in self.stages.items():
+            ap.add_argument('--stage-%s' % stage, default=False, action='store_true', help='Stage for %s ' % desc)
+
+        # ap.add_argument('--stage-download', default=False, action='store_true', help='Stage for download binary artifacts')
+        # ap.add_argument('--stage-build-wheels', default=False, action='store_true', help='Build Wheels for source packages')
+        # ap.add_argument('--stage-setupsystem', default=False, action='store_true', help='Stage for setup local OS')
+        # ap.add_argument('--stage-build-nuitka', default=False, action='store_true', help='Compile Nuitka packages')
         ap.add_argument('--stage-pack', default='', type=str, help='Stage pack to given destination directory')
         ap.add_argument('specfile', type=str, help='Specification File')
         
@@ -186,11 +200,16 @@ class TerrariumAssembler:
         import stat
         os.chdir(self.curdir)
         fname = name + '.sh'
+
         with open(os.path.join(fname), 'w', encoding="utf-8") as lf:
             lf.write("#!/bin/sh\n#Generated %s \n " % name)
             if stage:
+                desc = self.stages[stage]
                 stage_  = stage.replace('_', '-')
-                lf.write("#Automatically called when terrarium_assembler --stage-%s \n " % (stage_))
+                lf.write('''
+# Stage "%s"
+# Automatically called when terrarium_assembler --stage-%s "%s" 
+''' % (desc, stage_, self.args.specfile))
             lf.write("\n".join(lines))
 
         st = os.stat(fname)
@@ -222,13 +241,16 @@ class TerrariumAssembler:
             target_dir = os.path.join(tmpdir, target_.utility+'.dist')
             src_dir = os.path.relpath(self.src_dir, start=self.curdir)
             src = os.path.join(src_dir, target_.folder, target_.utility) + '.py'
+            flags_ = ''
+            if 'flags' in target_:
+                flags_ = target_.flags
             lines = []
             lines.append("""
 export PATH="/usr/lib64/ccache:$PATH"
 """ % vars(self))
             lines.append(R"""
-python3 -m nuitka --jobs=2 %s %s 
-""" % (nflags, src))
+python3 -m nuitka  %s %s %s 
+""" % (nflags, flags_, src))
             self.fs.folders.append(target_dir)
             build_name = 'build_' + target_.utility
             self.lines2sh(build_name, lines, None)
@@ -237,14 +259,14 @@ python3 -m nuitka --jobs=2 %s %s
         lines = []
         for b_ in bfiles:
             lines.append("./" + b_ + '.sh')
-        self.lines2sh("40-build-nuitkas", lines, "build_nuitka")
+        self.lines2sh("40-build-nuitkas", lines, "build-nuitka")
         pass
 
 
     def mycopy(self, src, dst):
         '''
-            Адаптивная процедура копирования в подкаталоги окружения — симлинки релятивизируются 
-            и остаются симлинками.
+        Адаптивная процедура копирования в подкаталоги окружения — симлинки релятивизируются 
+        и остаются симлинками.
         '''
         if os.path.exists(dst):
             return
@@ -323,20 +345,30 @@ python3 -m nuitka --jobs=2 %s %s
         return True
 
 
-    def dependencies(self, package_list):
+
+    def dependencies(self, package_list, local=True):
         '''
         Генерируем список RPM-зависимостей для заданного списка пакетов.
         '''
+        repoch = re.compile("\d+\:")
+        def remove_epoch(package):
+            package_ = repoch.sub('', package)    
+            return package_
+
         options_ = [
             # Фильтруем пакеты по 64битной архитектуре (ну или 32битной, если будем собирать там.),
             # хотя сейчас почти везде хардкодинг на 64битную архитектуру.
             '--archlist=noarch,{machine}'.format(machine=os.uname().machine),
-                    # '--cacheonly', 
-                    # '--installed',
                     '--resolve',
                     '--requires',
                     '--recursive'
             ]
+        if local:
+            options_ += [
+                '--cacheonly', 
+                '--installed',
+            ]    
+    
     
         if 1:
             # res = subprocess.check_output(['repoquery'] + options_  + ['--tree', '--whatrequires'] + package_list,  universal_newlines=True)
@@ -348,7 +380,7 @@ python3 -m nuitka --jobs=2 %s %s
                 lf.write(res)
     
         output  = subprocess.check_output(['repoquery'] + options_ + package_list,  universal_newlines=True).splitlines()
-        output = [x for x in output if self.ps.is_package_needed(x)]
+        output = [remove_epoch(x) for x in output if self.ps.is_package_needed(x)]
         packages_ = output + package_list
         with open(os.path.join(self.start_dir, 'selected-packages.txt'), 'w', encoding='utf-8') as lf:
             lf.write('\n- '.join(packages_))
@@ -496,10 +528,25 @@ python3 -m nuitka --jobs=2 %s %s
             return
 
         args = self.args
+        lines = []
+        in_src = os.path.relpath(self.src_dir, start=self.curdir)
+        # lines.add("rm -rf %s " % in_src)
+        lines.append("mkdir -p %s " % in_src)
+        for td_ in self.pp.build + self.pp.terra + self.spec.templates_dirs:
+            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+            path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
+            newpath = path_to_dir + '.new'
+            scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
+            lines.append(scmd)
+            lines.append("""
+if [ -d "%(newpath)s" ]; then
+  rm -rf "%(path_to_dir)s"  
+  mv "%(newpath)s" "%(path_to_dir)s"
+fi            
+""" % vars())
+            # git2dir(git_url, git_branch, path_to_dir)        
 
-        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.terra]:
-            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
-            git2dir(git_url, git_branch, path_to_dir)        
+        self.lines2sh("03-checkout", lines, 'checkout')    
         pass
 
     def explode_pp_node(self, td_):
@@ -567,7 +614,7 @@ python3 -m nuitka --jobs=2 %s %s
         pls_ = [p for p in self.need_packages + self.ps.build + self.ps.terra if isinstance(p, str)]
         purls_ = [p.url for p in self.need_packages + self.ps.build + self.ps.terra if not isinstance(p, str)]
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
-        for package in self.dependencies(pls_) + purls_:
+        for package in self.dependencies(pls_, local=False) + purls_:
             # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
             scmd = 'dnf download --downloaddir "%(in_bin)s/rpms" --arch=x86_64 "%(package)s" -y ' % vars()
             lines.append(scmd)
@@ -586,7 +633,7 @@ python3 -m nuitka --jobs=2 %s %s
             #     # lines.append(scmd)
             #     pass
         shfilename = "01-download-rpms"    
-        self.lines2sh("01-download-rpms", lines, "download_rpms")    
+        self.lines2sh("01-download-rpms", lines, "download-rpms")    
         self.lines2sh("90-download-sources-for-rpms", lines_src, "download-sources-for-rpms")    
 
         shfilename = "02-install-rpms"    
@@ -595,7 +642,7 @@ python3 -m nuitka --jobs=2 %s %s
 sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
 """ % vars()
         ]
-        self.lines2sh("02-install-rpms", lines, "install_rpms")    
+        self.lines2sh("02-install-rpms", lines, "install-rpms")    
         # if self.args.stage_download_rpms:
         #     self.system(shfilename + '.sh')    
         pass
@@ -648,16 +695,20 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
         bindir_ = os.path.abspath(self.in_bin)
         lines = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
-        lines.append(R"rm -rf %(in_bin)s/ourwheel/*.*" % vars())
+        wheelpath = os.path.join(self.in_bin, "ourwheel")
+        relwheelpath = os.path.relpath(wheelpath, start=self.curdir)
+        lines.append(R"rm -rf %(relwheelpath)s/*.*" % vars())
         for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.terra]:
-            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+            git_url, git_branch, path_to_dir_, setup_path = self.explode_pp_node(td_)
+            path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
+            relwheelpath = os.path.relpath(wheelpath, start=path_to_dir_)
             scmd = "pushd %s" % (path_to_dir)
             lines.append(scmd)
-            scmd = "python3 setup.py bdist_wheel -d %(in_bin)s/ourwheel " % vars()
+            scmd = "python3 setup.py bdist_wheel -d %(relwheelpath)s " % vars()
             lines.append(scmd)
             lines.append('popd')
             pass
-        self.lines2sh("09-build-wheels", lines, "build_wheels")
+        self.lines2sh("09-build-wheels", lines, "build-wheels")
         # os.chdir(self.curdir)
         # os.chdir(self.output_dir)
         pass
@@ -677,15 +728,15 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
             our_wheels_set = set([parse_wheel_filename(whl).project for whl in our_wheels])
 
         ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        ext_wheels = []
+        ext_src = []
         if os.path.exists(ext_whl_path):
             ext_wheels = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('.whl') and parse_wheel_filename(whl).project not in our_wheels_set]
             ext_src = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('tar.gz') or whl.endswith('tar.bz2')]
-        scmd = 'python3 -m pip install  %s ' % (" ".join(ext_wheels + our_wheels + ext_src))
+        scmd = 'sudo python3 -m pip install  %s ' % (" ".join(ext_wheels + our_wheels + ext_src))
         lines.append(scmd)
-        self.lines2sh("05-install-wheels", lines, "install_wheels")
+        self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
-
-
 
 
     def download_pip(self):
@@ -713,7 +764,7 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
                 lines.append(scmd)                
             pass
 
-        self.lines2sh("07-download-wheels", lines, "download-wheels")
+        self.lines2sh("05-download-wheels", lines, "download-wheels")
         pass    
 
 
@@ -796,8 +847,8 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
             pass
     
     
-        if self.args.stage_checkout:
-            self.checkout_sources()
+        # if self.args.stage_checkout:
+        self.checkout_sources()
         #install_templates(root_dir, args)
 
         self.download_packages()
@@ -814,7 +865,7 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         self.lines2sh("50-pack", ['terrarium_assembler --stage-pack=./out "%s" ' % self.args.specfile] )
         if self.args.stage_pack:
-            self.root_dir = expandpath(args.stage_pack)
+            root_dir = self.root_dir = expandpath(args.stage_pack)
             file_list = self.generate_file_list(self.dependencies(self.ps.terra))
 
             if os.path.exists(root_dir + ".old"):
