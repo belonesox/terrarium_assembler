@@ -656,9 +656,9 @@ fi
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
         packages = " ".join(self.dependencies(pls_, local=False) + purls_)    
-        scmd = 'dnf download --downloaddir "%(in_bin)s/rpms" --arch=x86_64 %(packages)s -y ' % vars()
+        scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/rpms" --arch=x86_64  --arch=x86_64 --arch=noarch  %(packages)s -y ' % vars()
         lines.append(scmd)
-        scmd = 'dnf download --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --source %(packages)s -y ' % vars()
+        scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --arch=noarch  --source %(packages)s -y ' % vars()
         lines_src.append(scmd)
 
         # for package in self.dependencies(pls_, local=False) + purls_:
@@ -675,7 +675,7 @@ fi
         shfilename = "02-install-rpms"    
         lines = [
 """
-sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
+sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 """ % vars()
         ]
         self.lines2sh("02-install-rpms", lines, "install-rpms")    
@@ -962,6 +962,7 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
 
                 filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
                 isodir = os.path.join(self.root_dir, 'iso')
+                os.mkdir(isodir)
                 filepath = os.path.join(isodir, filename)
                 scmd = ('''
             mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s 
