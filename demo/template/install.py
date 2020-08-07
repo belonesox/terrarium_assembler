@@ -29,6 +29,20 @@ def main():
     """  + root_disk_serial)
 
 
+    dir_ = os.getcwd()
+
+    instdir = '/opt/tech'
+    backup_dir = instdir + '.old'
+    if os.path.exists(backup_dir):
+        shutil.rmtree(backup_dir)
+
+    if os.path.exists(instdir):
+        os.rename(instdir, backup_dir)
+
+    print(dir_, '->', instdir)
+    shutil.copytree(dir_, instdir, symlinks=True)
+
+
     exepath = "%(instdir)s/ebin/technodemo" % vars()
 
     desktopfile = """
