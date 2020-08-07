@@ -136,13 +136,13 @@ class TerrariumAssembler:
         # ap.add_argument('--stage-build-nuitka', default=False, action='store_true', help='Compile Nuitka packages')
         ap.add_argument('--stage-build-and-pack', default='', type=str, help='Install, build and pack')
         ap.add_argument('--stage-download-all', default=False, action='store_true', help='Download all — sources, packages')
-        ap.add_argument('--stage-all', default=False, action='store_true', help='Make all the things')
+        ap.add_argument('--stage-all', default='', type=str, help='Install, build and pack')
         ap.add_argument('--stage-pack', default='', type=str, help='Stage pack to given destination directory')
         ap.add_argument('specfile', type=str, help='Specification File')
         
         self.args = args = ap.parse_args()
         if self.args.stage_all:
-            self.args.stage_build_and_pack = True
+            self.args.stage_build_and_pack = self.args.stage_all
             self.args.stage_download_all = True
 
         if self.args.stage_build_and_pack:
@@ -961,7 +961,8 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
                 os.system(scmd)
 
                 filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
-                filepath = os.path.join("/tmp", filename)
+                isodir = os.path.join(self.root_dir, 'iso')
+                filepath = os.path.join(isodir, filename)
                 scmd = ('''
             mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s 
             ''' % vars()).replace('\n', ' ').strip()
