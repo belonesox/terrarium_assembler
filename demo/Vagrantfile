@@ -1,0 +1,104 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+require 'digest'
+DOMAIN = "local.com"
+WIN10_BOX  = "gusztavvargadr/windows-10"
+FEDORA_BOX = "bento/fedora-32"
+OLDSUSE_BOX = 'suse/sles11sp3'
+
+Vagrant.configure(2) do |config|
+  config.vm.provider "virtualbox" do |conf|
+    conf.gui = false
+    conf.memory = "2048" 
+    conf.cpus = 2
+  end
+
+  config.vm.box_check_update = false
+  #config.ssh.username = 'vagrant'
+  #config.ssh.password = 'vagrant'
+
+  config.vm.synced_folder '..', '/vagrant', disabled: true
+ 
+  config.vm.define "ta-win10" do |conf|
+    vmname = "ta-win10"
+    conf.vm.box = WIN10_BOX
+    
+    conf.vm.provision :hostsupdate, run: 'always' do |host|
+        conf.vm.synced_folder '.', '/vagrant', disabled: false
+        # host.hostname = conf.vm.hostname 
+        host.manage_guest = true
+        host.manage_host = true
+    end
+
+    conf.vm.provider "virtualbox" do |v|
+      v.gui = true
+      v.memory = 3000
+      v.cpus = 4
+    end
+  end
+
+  config.vm.define "ta-builder" do |conf|
+    vmname = "ta-builder"
+    # conf.vm.hostname = vmname  + "." + DOMAIN
+    conf.vm.box = FEDORA_BOX
+    # conf.vm.box_version = "1.0.0"
+    conf.ssh.extra_args = ["-R", "9000:0:9000"]
+    # set_std_provision(conf)
+    
+    conf.vm.provision :hostsupdate, run: 'always' do |host|
+        conf.vm.synced_folder '..', '/vagrant', disabled: false
+        # host.hostname = conf.vm.hostname 
+        host.manage_guest = true
+        host.manage_host = true
+    end
+
+    conf.vm.provider "virtualbox" do |v|
+      v.gui = false
+      v.cpus = 4
+      v.memory = 10000
+    end
+    conf.vm.provision "shell", inline: "sudo dnf install python3-pip python3-yaml python3-jinja2 dnf-utils -y; cd /vagrant;sudo python3 setup.py develop"
+    # sudo python3 -m pip install terrarium-assembler    
+  end
+
+  config.vm.define "ta-client-ubuntu" do |conf|
+    vmname = "ta-client-ubuntu"
+    conf.vm.hostname = vmname  + "." + DOMAIN
+    conf.vm.box = "ubuntu/xenial64"
+    conf.ssh.extra_args = ["-R", "9000:0:9000"]
+
+    conf.vm.provider "virtualbox" do |v|
+      v.gui = true
+      # v.memory = 3000
+    end
+
+    conf.vm.provision :hostsupdate, run: 'always' do |host|
+        conf.vm.synced_folder '.', '/vagrant', disabled: false, type: "virtualbox"
+        host.hostname = conf.vm.hostname 
+        host.manage_guest = true
+        host.manage_host = true
+    end
+  end
+
+
+  config.vm.define "ta-test-ubuntu12" do |conf|
+    vmname = "ta-test-ubuntu12"
+    conf.vm.hostname = vmname  + "." + DOMAIN
+    conf.vm.box = "dhoppe/ubuntu-12.04.5-amd64"
+#    conf.vm.box = "suse/sles11sp3"
+    conf.ssh.extra_args = ["-R", "9000:0:9000"]
+
+    conf.vm.provider "virtualbox" do |v|
+      v.gui = true
+      # v.memory = 3000
+    end
+
+    conf.vm.provision :hostsupdate, run: 'always' do |host|
+        conf.vm.synced_folder '.', '/vagrant', disabled: false, type: "virtualbox"
+        host.hostname = conf.vm.hostname 
+        host.manage_guest = true
+        host.manage_host = true
+    end
+  end
+
+end

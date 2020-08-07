@@ -1,6 +1,6 @@
-================
+===================
 terrarium-assembler
-================
+===================
 
 
 .. image:: https://img.shields.io/pypi/v/terrarium_assembler.svg

@@ -12,21 +12,23 @@ python_packages:
       branch: v0.3.4 
     - url: https://github.com/belonesox/Nuitka
       branch: hack-master-for-networkx-and-skimage
-    - url: git@gitlab.ispras.ru:watermarking/linux-deploy-template.git
-      branch: master
 
   terra:
     - url: https://github.com/belonesox/terrarium_assembler
       branch: master
 
 templates_dirs: 
-    - url:    linux-deploy-template
-      subdir: template
+    - url:    https://github.com/belonesox/terrarium_assembler
+      subdir: demo/template
 
 packages: 
   build:
     - tesseract
     - tesseract-osd
+    - git
+    - gcc
+    - gcc-gfortran
+    - gcc-c++
     
   terra:  
     - python3-gobject-base 
@@ -39,6 +41,8 @@ packages:
   exclude_prefix: 
     - colord # cups
     - bash
+    - crypto-policies
+    - generic-release
     - filesystem
     - tzdata
     - chkconfig
@@ -51,6 +55,7 @@ packages:
     - fedora-gpg-keys
     - glibc-minimal-langpack
     - glibc-all-langpacks
+    - glibc-langpack 
     - rpm
     - redhat-rpm-config
     - bc #CUPS fucnking   
@@ -60,7 +65,6 @@ packages:
     - dbus
     - adwaita
     - alternatives
-    - gcc
     - nss    
     - qt5
     - rust
@@ -90,12 +94,8 @@ nuitka:
     - include-scipy 
   force_packages:
     - wand 
-    - scipy.special
   force_modules:
     - PIL._imaging 
-    - scipy.special.cython_special 
-    - Xlib.support.unix_connect 
-    - Xlib.ext
   block_packages:
     - astropy 
     - sympy
@@ -125,5 +125,3 @@ bin_regexps:
 
   just_copy:  
     - /usr/bin/gs
-
-

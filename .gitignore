@@ -105,3 +105,9 @@ ENV/
 .vscode/
 in
 selected-packages.* 
+deps.txt
+demo/*.sh
+*.old
+e
+demo/out*
+.vagrant

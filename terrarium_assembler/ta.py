@@ -14,6 +14,7 @@ import re
 import yaml
 import dataclasses as dc
 import dnf
+import datetime
 from wheel_filename import parse_wheel_filename
 
 from .utils import *
@@ -117,12 +118,13 @@ class TerrariumAssembler:
         self.stages = {
             'download-rpms' : 'download RPMs',
             'download-sources-for-rpms': 'download SRPMs — sources packages for RPMS',
-            'install-rpms': 'install downloaded RPMS',
             'checkout' : 'checkout sources',
+            'install-rpms': 'install downloaded RPMS',
             'download-wheels': 'download needed WHL-python packages',
             'build-wheels': 'compile wheels for our python sources',
             'install-wheels': 'Install our and external Python wheels',
             'build-nuitka': 'Compile Python packages to executable',
+            'make-isoexe': 'Also make self-executable install archive and ISO disk'
         }
 
         for stage, desc in self.stages.items():
@@ -132,10 +134,27 @@ class TerrariumAssembler:
         # ap.add_argument('--stage-build-wheels', default=False, action='store_true', help='Build Wheels for source packages')
         # ap.add_argument('--stage-setupsystem', default=False, action='store_true', help='Stage for setup local OS')
         # ap.add_argument('--stage-build-nuitka', default=False, action='store_true', help='Compile Nuitka packages')
+        ap.add_argument('--stage-build-and-pack', default='', type=str, help='Install, build and pack')
+        ap.add_argument('--stage-download-all', default=False, action='store_true', help='Download all — sources, packages')
+        ap.add_argument('--stage-all', default=False, action='store_true', help='Make all the things')
         ap.add_argument('--stage-pack', default='', type=str, help='Stage pack to given destination directory')
         ap.add_argument('specfile', type=str, help='Specification File')
         
         self.args = args = ap.parse_args()
+        if self.args.stage_all:
+            self.args.stage_build_and_pack = True
+            self.args.stage_download_all = True
+
+        if self.args.stage_build_and_pack:
+            self.args.stage_install_rpms = True
+            self.args.stage_install_wheels = True
+            self.args.stage_build_nuitka = True
+            self.args.stage_pack = self.args.stage_build_and_pack
+
+        if self.args.stage_download_all:
+            self.args.stage_download_rpms = True
+            self.args.stage_checkout = True
+            self.args.stage_download_wheels = True
 
         specfile_  = expandpath(args.specfile)
         os.environ['TERRA_SPECDIR'] = os.path.split(specfile_)[0]
@@ -163,7 +182,9 @@ class TerrariumAssembler:
             just_copy=just_copy
         )
 
-        self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath']
+        self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 
+                                'python3-wheel', 'python3-pip', 'python3-devel', 
+                                'genisoimage', 'makeself']
 
         nflags_ = {}
         if 'nuitka' in spec:
@@ -209,6 +230,7 @@ class TerrariumAssembler:
                 lf.write('''
 # Stage "%s"
 # Automatically called when terrarium_assembler --stage-%s "%s" 
+set -x
 ''' % (desc, stage_, self.args.specfile))
             lf.write("\n".join(lines))
 
@@ -221,7 +243,10 @@ class TerrariumAssembler:
             dict_ = vars(self.args)
             if option in dict_:
                 if dict_[option]:
-                    os.system(fname)
+                    print("*"*20)
+                    print("Executing ", fname)
+                    print("*"*20)
+                    os.system("./" + fname)
         pass  
 
 
@@ -372,7 +397,14 @@ python3 -m nuitka  %s %s %s
     
         if 1:
             # res = subprocess.check_output(['repoquery'] + options_  + ['--tree', '--whatrequires'] + package_list,  universal_newlines=True)
-            res = subprocess.check_output(['repoquery'] + options_  + package_list,  universal_newlines=True)
+            res = ''
+            for try_ in range(3):
+                try:
+                    res = subprocess.check_output(['repoquery'] + options_  + package_list,  universal_newlines=True)
+                    break
+                except subprocess.CalledProcessError:
+                    #  died with <Signals.SIGSEGV: 11>.
+                    time.sleep(2)                    
             # res = subprocess.check_output(['repoquery'] + options_  + ['--output', 'dot-tree'] + package_list,  universal_newlines=True)
             with open(os.path.join(self.start_dir, 'deps.txt'), 'w', encoding='utf-8') as lf:
                 lf.write('\n -'.join(package_list))
@@ -532,19 +564,27 @@ python3 -m nuitka  %s %s %s
         in_src = os.path.relpath(self.src_dir, start=self.curdir)
         # lines.add("rm -rf %s " % in_src)
         lines.append("mkdir -p %s " % in_src)
+        already_checkouted = set()
         for td_ in self.pp.build + self.pp.terra + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
-            path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
-            newpath = path_to_dir + '.new'
-            scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
-            lines.append(scmd)
-            lines.append("""
+            if path_to_dir_ not in already_checkouted:
+                already_checkouted.add(path_to_dir_)
+                path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
+                newpath = path_to_dir + '.new'
+                lines.append('rm -rf "%(newpath)s"' % vars())
+                scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
+                lines.append(scmd)
+                # Fucking https://www.virtualbox.org/ticket/19086 + https://www.virtualbox.org/ticket/8761
+                lines.append("""
 if [ -d "%(newpath)s" ]; then
+  echo 2 > /proc/sys/vm/drop_caches 
+  find  "%(path_to_dir)s" -type f -delete;
+  find  "%(path_to_dir)s" -type f -exec rm -rf {} \;
   rm -rf "%(path_to_dir)s"  
   mv "%(newpath)s" "%(path_to_dir)s"
+  rm -rf "%(newpath)s"  
 fi            
 """ % vars())
-            # git2dir(git_url, git_branch, path_to_dir)        
 
         self.lines2sh("03-checkout", lines, 'checkout')    
         pass
@@ -614,25 +654,21 @@ fi
         pls_ = [p for p in self.need_packages + self.ps.build + self.ps.terra if isinstance(p, str)]
         purls_ = [p.url for p in self.need_packages + self.ps.build + self.ps.terra if not isinstance(p, str)]
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
-        for package in self.dependencies(pls_, local=False) + purls_:
-            # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
-            scmd = 'dnf download --downloaddir "%(in_bin)s/rpms" --arch=x86_64 "%(package)s" -y ' % vars()
-            lines.append(scmd)
-            scmd = 'dnf download --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --source "%(package)s" -y ' % vars()
-            lines_src.append(scmd)
-            #     # scmd = 'dnf download --downloaddir "%(in_bin)s/src-rpms" --resolve --source "%(package_name)s" -y ' % vars()
-            #     # lines.append(scmd)
-            # else:
-            #     package_name = package.name
-            #     package_url = package.url
-            #     # ok_ = list(self.installed_packages.filter(name=package_name))
-            #     # if not ok_:
-            #     scmd = 'dnf download --downloaddir "%(in_bin)s/rpms"  "%(package_url)s" -y ' % vars()
-            #     lines.append(scmd)
-            #     # scmd = 'dnf download --downloaddir "%(in_bin)s/src-rpms" --resolve --source "%(package_url)s" -y ' % vars()
-            #     # lines.append(scmd)
-            #     pass
-        shfilename = "01-download-rpms"    
+
+        packages = " ".join(self.dependencies(pls_, local=False) + purls_)    
+        scmd = 'dnf download --downloaddir "%(in_bin)s/rpms" --arch=x86_64 %(packages)s -y ' % vars()
+        lines.append(scmd)
+        scmd = 'dnf download --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --source %(packages)s -y ' % vars()
+        lines_src.append(scmd)
+
+        # for package in self.dependencies(pls_, local=False) + purls_:
+        #     # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
+        #     scmd = 'dnf download --downloaddir "%(in_bin)s/rpms" --arch=x86_64 "%(package)s" -y ' % vars()
+        #     lines.append(scmd)
+        #     scmd = 'dnf download --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --source "%(package)s" -y ' % vars()
+        #     lines_src.append(scmd)
+
+
         self.lines2sh("01-download-rpms", lines, "download-rpms")    
         self.lines2sh("90-download-sources-for-rpms", lines_src, "download-sources-for-rpms")    
 
@@ -643,52 +679,8 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
 """ % vars()
         ]
         self.lines2sh("02-install-rpms", lines, "install-rpms")    
-        # if self.args.stage_download_rpms:
-        #     self.system(shfilename + '.sh')    
         pass
 
-
-    # def install_packages(self):
-    #     root_dir = self.root_dir
-    #     args = self.args
-    #     packages = []
-        
-    #     base = dnf.Base()
-    #     base.fill_sack()
-    #     q_ = base.sack.query()
-    #     self.installed_packages = q_.installed()
-    
-    #     lines = []
-
-    #     t.tic() 
-    #     scmd = "sudo yum-config-manager --enable remi"
-    #     os.system(scmd)
-    #     for package in self.need_packages + self.ps.build + self.ps.terra:
-    #         # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
-    #         package_name = None
-    #         if isinstance(package, str):
-    #             package_name = package
-    
-    #             ok_ = list(self.installed_packages.filter(name=package_name))
-    #             if not ok_:
-    #                 scmd = 'sudo dnf install -y "%(package_name)s" ' % vars()
-    #                 os.system(scmd)
-    #             else:
-    #                 print('Package ' + package_name + ' already installed!')    
-    #                 pass
-    #         else:
-    #             package_name = package.name
-    #             package_url = package.url
-    #             ok_ = list(self.installed_packages.filter(name=package_name))
-    #             if not ok_:
-    #                 scmd = 'sudo dnf install -y "%(package_url)s" ' % vars()
-    #                 os.system(scmd)
-    #             pass
-    #         if package_name:
-    #             packages.append(package_name)
-    #     print("Install packages takes")
-    #     t.toc()
-    #     pass
 
     def build_wheels(self):
         os.chdir(self.curdir)
@@ -782,27 +774,10 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
             t.tic()
     
             for td_ in spec.templates_dirs:
-                git_url = None
-                subdir = ""
-                if type(td_) == type(""):
-                    git_url = td_
-                else:
-                    git_url = td_.url
-                    subdir = td_.subdir
-    
-                path_to_dir = os.path.join(expandpath(git_url), subdir)
-                print("*"*20 + path_to_dir)
-                if not os.path.exists(path_to_dir):
-                    import tempfile
-                    tmpdir_ = tempfile.mkdtemp('pypg')
-                    path_to_dir = os.path.join(tmpdir_, 'adir')
-        
-                    os.chdir(tmpdir_)
-                    #todo: выяснить, почему --git-dir не работает.
-                    scmd = 'git --git-dir=/dev/null clone --depth=1 %(git_url)s %(path_to_dir)s ' % vars()
-                    os.system(scmd)
-                    path_to_dir = os.path.join(tmpdir_, 'adir', subdir)
-                
+                git_url, git_branch, path_to_dir, _ = self.explode_pp_node(td_)
+                if 'subdir' in td_:
+                    path_to_dir = os.path.join(path_to_dir, td_.subdir)
+            
                 file_loader = FileSystemLoader(path_to_dir)
                 env = Environment(loader=file_loader)
                 env.trim_blocks = True
@@ -812,6 +787,8 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
                 print(path_to_dir)
                 os.chdir(path_to_dir)
                 for dirpath, dirnames, filenames in os.walk('.'):
+                    if dirpath.startswith('.git'):
+                        continue
                     for dir_ in dirnames:
                         out_dir = os.path.join(root_dir, dirpath, dir_)
                         print(out_dir)
@@ -846,12 +823,11 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
             t.toc()
             pass
     
-    
-        # if self.args.stage_checkout:
-        self.checkout_sources()
-        #install_templates(root_dir, args)
 
+        # if self.args.stage_checkout:
+        #install_templates(root_dir, args)
         self.download_packages()
+        self.checkout_sources()
         self.download_pip()
         self.build_wheels()
         self.install_wheels()
@@ -966,10 +942,32 @@ sudo dnf install %(in_bin)s/rpms/*.rpm -y --allowerasing
                 print(scmd)
                 os.system(scmd)
                 pass
-            
+
             # size_ = sum(file.stat().st_size for file in pathlib.Path(self.root_dir).rglob('*'))
             size_  = folder_size(self.root_dir, follow_symlinks=False)
             print("Size ", size_/1024/1024, 'Mb')
+
+            if self.args.stage_make_isoexe:
+                label = 'disk'
+                if 'label' in self.spec:
+                    label = self.spec.label
+                time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
+                installscript = "install-me.sh" % vars()
+                installscriptpath = os.path.join("/tmp", installscript)
+                scmd = ('''
+                makeself.sh --needroot %(root_dir)s  %(installscriptpath)s "Installation" ./install-me             
+            ''' % vars()).replace('\n', ' ').strip()
+                print(scmd)
+                os.system(scmd)
+
+                filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
+                filepath = os.path.join("/tmp", filename)
+                scmd = ('''
+            mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s 
+            ''' % vars()).replace('\n', ' ').strip()
+                print(scmd)
+                os.system(scmd)
+                print(filepath)
     
         pass
 
