@@ -31,7 +31,7 @@ def main():
 
     dir_ = os.getcwd()
 
-    instdir = '/opt/tech'
+    instdir = '/opt/technodemo'
     backup_dir = instdir + '.old'
     if os.path.exists(backup_dir):
         shutil.rmtree(backup_dir)
@@ -57,11 +57,11 @@ def main():
     Categories=System;TerminalEmulator;Utility;
     """ % vars()
 
-    desktopfile = "/usr/share/applications/technodemo.desktop"
-    with open(desktopfile, "w", encoding="utf-8") as lf:
+    deskfilename = "/usr/share/applications/technodemo.desktop"
+    with open(deskfilename, "w", encoding="utf-8") as lf:
         lf.write(desktopfile)
 
-    st = os.stat(desktopfile)
+    st = os.stat(deskfilename)
     os.chmod(desktopfile, st.st_mode | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)   
 
 

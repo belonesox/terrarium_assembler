@@ -1,5 +1,6 @@
 ---
 src_dir: in/src
+label: TechnoDemo
 
 python_packages: 
   pip: 
@@ -25,6 +26,8 @@ packages:
   build:
     - tesseract
     - tesseract-osd
+    - python3-wheel
+    - python3-scipy
     - git
     - gcc
     - gcc-gfortran
@@ -94,6 +97,7 @@ nuitka:
     - include-scipy 
   force_packages:
     - wand 
+    - scipy.special
   force_modules:
     - PIL._imaging 
   block_packages:
