@@ -62,7 +62,7 @@ def main():
         lf.write(desktopfile)
 
     st = os.stat(deskfilename)
-    os.chmod(desktopfile, st.st_mode | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)   
+    os.chmod(deskfilename, st.st_mode | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)   
 
 
     print("""
