@@ -147,6 +147,7 @@ class TerrariumAssembler:
 
         if self.args.stage_build_and_pack:
             self.args.stage_install_rpms = True
+            self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
             self.args.stage_pack = self.args.stage_build_and_pack
@@ -961,7 +962,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
                 os.system(scmd)
 
                 filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
-                isodir = os.path.join(self.root_dir, 'iso')
+                isodir = self.root_dir + '.iso'
                 os.mkdir(isodir)
                 filepath = os.path.join(isodir, filename)
                 scmd = ('''
