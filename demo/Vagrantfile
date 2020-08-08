@@ -23,12 +23,12 @@ Vagrant.configure(2) do |config|
     vmname = "ta-win10"
     conf.vm.box = WIN10_BOX
     
-    conf.vm.provision :hostsupdate, run: 'always' do |host|
-        conf.vm.synced_folder '.', '/vagrant', disabled: false
-        # host.hostname = conf.vm.hostname 
-        host.manage_guest = true
-        host.manage_host = true
-    end
+    conf.vm.synced_folder '.', '/vagrant', disabled: false
+    # conf.vm.provision :hostsupdate, run: 'always' do |host|
+    #     # host.hostname = conf.vm.hostname 
+    #     host.manage_guest = true
+    #     host.manage_host = true
+    # end
 
     conf.vm.provider "virtualbox" do |v|
       v.gui = true
@@ -45,12 +45,12 @@ Vagrant.configure(2) do |config|
     conf.ssh.extra_args = ["-R", "9000:0:9000"]
     # set_std_provision(conf)
     
-    conf.vm.provision :hostsupdate, run: 'always' do |host|
-        conf.vm.synced_folder '..', '/vagrant', disabled: false
-        # host.hostname = conf.vm.hostname 
-        host.manage_guest = true
-        host.manage_host = true
-    end
+    conf.vm.synced_folder '..', '/vagrant', disabled: false
+    # conf.vm.provision :hostsupdate, run: 'always' do |host|
+    #     # host.hostname = conf.vm.hostname 
+    #     host.manage_guest = true
+    #     host.manage_host = true
+    # end
 
     conf.vm.provider "virtualbox" do |v|
       v.gui = false
@@ -72,12 +72,11 @@ Vagrant.configure(2) do |config|
       # v.memory = 3000
     end
 
-    conf.vm.provision :hostsupdate, run: 'always' do |host|
-        conf.vm.synced_folder '.', '/vagrant', disabled: false, type: "virtualbox"
-        host.hostname = conf.vm.hostname 
-        host.manage_guest = true
-        host.manage_host = true
-    end
+    conf.vm.synced_folder '.', '/vagrant', disabled: false, type: "virtualbox"
+    # conf.vm.provision :hostsupdate, run: 'always' do |host|
+    #     host.manage_guest = true
+    #     host.manage_host = true
+    # end
   end
 
 
@@ -93,12 +92,11 @@ Vagrant.configure(2) do |config|
       # v.memory = 3000
     end
 
-    conf.vm.provision :hostsupdate, run: 'always' do |host|
-        conf.vm.synced_folder '.', '/vagrant', disabled: false, type: "virtualbox"
-        host.hostname = conf.vm.hostname 
-        host.manage_guest = true
-        host.manage_host = true
-    end
+    conf.vm.synced_folder '.', '/vagrant', disabled: false, type: "virtualbox"
+    # conf.vm.provision :hostsupdate, run: 'always' do |host|
+    #     host.manage_guest = true
+    #     host.manage_host = true
+    # end
   end
 
 end
