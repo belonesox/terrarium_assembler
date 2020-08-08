@@ -24,6 +24,8 @@ templates_dirs:
 
 packages: 
   build:
+    - name: remi-release
+      url:  https://www.rpmfind.net/linux/remi/fedora/32/remi/x86_64/remi-release-32-1.fc32.remi.noarch.rpm      
     - tesseract
     - tesseract-osd
     - python3-wheel
