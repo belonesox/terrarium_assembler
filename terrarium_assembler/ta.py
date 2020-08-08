@@ -587,7 +587,7 @@ if [ -d "%(newpath)s" ]; then
 fi            
 """ % vars())
 
-        self.lines2sh("03-checkout", lines, 'checkout')    
+        self.lines2sh("06-checkout", lines, 'checkout')    
         pass
 
     def explode_pp_node(self, td_):
@@ -674,12 +674,15 @@ fi
         self.lines2sh("90-download-sources-for-rpms", lines_src, "download-sources-for-rpms")    
 
         shfilename = "02-install-rpms"    
-        lines = [
+        ilines = [
 """
 sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 """ % vars()
         ]
-        self.lines2sh("02-install-rpms", lines, "install-rpms")    
+        self.lines2sh("02-install-rpms", ilines, "install-rpms")    
+
+        self.lines2sh("03-download-rpms", lines, "download-rpms")    
+        self.lines2sh("04-install-rpms", ilines, "install-rpms")    
         pass
 
 
@@ -757,7 +760,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
                 lines.append(scmd)                
             pass
 
-        self.lines2sh("05-download-wheels", lines, "download-wheels")
+        self.lines2sh("07-download-wheels", lines, "download-wheels")
         pass    
 
 
