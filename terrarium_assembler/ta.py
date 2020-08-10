@@ -791,7 +791,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
                 print(path_to_dir)
                 os.chdir(path_to_dir)
                 for dirpath, dirnames, filenames in os.walk('.'):
-                    if dirpath.startswith('.git'):
+                    if '.git' in dirpath:
                         continue
                     for dir_ in dirnames:
                         out_dir = os.path.join(root_dir, dirpath, dir_)
@@ -843,11 +843,18 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         # self.build_nuitkas()
             # return
 
-        self.lines2sh("50-pack", ['terrarium_assembler --stage-pack=./out "%s" ' % self.args.specfile] )
+        specfile_ = self.args.specfile
+        self.lines2sh("50-pack", [
+            '''
+#terrarium_assembler --stage-pack=./out "%(specfile_)s" --stage-make-isoexe
+terrarium_assembler --stage-pack=./out "%(specfile_)s" 
+            ''' % vars()])
+
         if self.args.stage_pack:
             root_dir = self.root_dir = expandpath(args.stage_pack)
             file_list = self.generate_file_list(self.dependencies(self.ps.terra))
 
+            os.system('echo 2 > /proc/sys/vm/drop_caches ')
             if os.path.exists(root_dir + ".old"):
                 shutil.rmtree(root_dir + ".old", ignore_errors=True)
             if os.path.exists(root_dir + ".old"):
