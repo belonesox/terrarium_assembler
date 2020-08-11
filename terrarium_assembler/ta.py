@@ -60,6 +60,19 @@ class BinRegexps:
     
     pass
 
+def fucking_magic(f):
+    # m = magic.detect_from_filename(f)
+    if not os.path.exists(f):
+        return ''
+
+    if not os.path.isfile(f):
+        return ''
+
+    m = magic.from_file(f)
+    # if m.mime_type in ['inode/symlink', 'text/plain']:
+    #     return
+    return m
+
 
 @dc.dataclass
 class PythonPackages:
@@ -257,7 +270,7 @@ set -x
         # if not "builds" in self.nuitkas:
         #     return
         # out_dir = os.path.join(self.out_dir)
-        tmpdir = "/tmp/ta"
+        tmpdir = os.path.join(self.curdir, "tmp/ta")
         bfiles = []
         for target_ in self.nuitkas.builds:
             # outputname = target_.utility
@@ -515,19 +528,20 @@ python3 -m nuitka  %s %s %s
             if wtf_ in binpath:
                 return
         
-        m = magic.detect_from_filename(binpath)
-        if m.mime_type in ['inode/symlink', 'text/plain']:
+        # m = magic.detect_from_filename(binpath)
+        m = fucking_magic(binpath)
+        if m in ['inode/symlink', 'text/plain']:
             return
         
         # if m.mime_type not in ['application/x-sharedlib', 'application/x-executable']
-        if not 'application' in m.mime_type:
+        if not 'application' in m:
             return
     
         pyname = os.path.basename(binpath)
         try:
             patched_binary = fix_binary(binpath, '$ORIGIN/../lib64/')
         except Exception as ex_:
-            print("Mime type ", m.mime_type)
+            print("Mime type ", m)
             print("Cannot fix", binpath)
             raise ex_
     
@@ -809,8 +823,8 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
                         
                         plain = False
                         try:
-                            m = magic.detect_from_filename(fname_)
-                            if 'text' in m.mime_type:
+                            m = fucking_magic(fname_)
+                            if 'text' in m:
                                 plain = True
                         except Exception:
                             pass
@@ -906,11 +920,11 @@ terrarium_assembler --stage-pack=./out "%(specfile_)s"
                             return
                             # # assert(False)
                         try:    
-                            m = magic.detect_from_filename(f)
+                            m = fucking_magic(f)
                         except Exception as ex_:
                             print("Cannot detect Magic for ", f)    
                             raise ex_
-                        if m and (m.mime_type.startswith('application/x-sharedlib') or m.mime_type.startswith('application/x-pie-executable')):
+                        if m.startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
                             self.fix_sharedlib(f, libfile)
                         else:
                             # in case this is a directory that is listed, we don't want to include everything that is in that directory
@@ -964,7 +978,7 @@ terrarium_assembler --stage-pack=./out "%(specfile_)s"
                     label = self.spec.label
                 time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
                 installscript = "install-me.sh" % vars()
-                installscriptpath = os.path.join("/tmp", installscript)
+                installscriptpath = os.path.join("tmp/", installscript)
                 scmd = ('''
                 makeself.sh --needroot %(root_dir)s  %(installscriptpath)s "Installation" ./install-me             
             ''' % vars()).replace('\n', ' ').strip()
