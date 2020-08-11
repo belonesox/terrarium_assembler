@@ -15,6 +15,8 @@ import yaml
 import dataclasses as dc
 import dnf
 import datetime
+import tarfile
+
 from wheel_filename import parse_wheel_filename
 
 from .utils import *
@@ -137,7 +139,8 @@ class TerrariumAssembler:
             'build-wheels': 'compile wheels for our python sources',
             'install-wheels': 'Install our and external Python wheels',
             'build-nuitka': 'Compile Python packages to executable',
-            'make-isoexe': 'Also make self-executable install archive and ISO disk'
+            'make-isoexe': 'Also make self-executable install archive and ISO disk',
+            'pack-me' :  'Pack current dir to time prefixed tar.bz2'
         }
 
         for stage, desc in self.stages.items():
@@ -778,6 +781,40 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         pass    
 
 
+    def pack_me(self):    
+        time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
+        parentdir, curname = os.path.split(self.curdir)
+        disabled_suffix = curname + '.tar.bz2'
+
+        def filter_(tarinfo):
+            if tarinfo.name.endswith('.old'):
+                print(tarinfo.name)
+                return None
+
+            if tarinfo.name.endswith('.iso'):
+                print(tarinfo.name)
+                return None
+
+            if tarinfo.name.startswith('tmp'):
+                print(tarinfo.name)
+                return None
+
+            if tarinfo.name.endswith(disabled_suffix):
+                print(tarinfo.name)
+                return None
+
+            if tarinfo.name in ['.vagrant', '.git']:
+                return None
+            return tarinfo          
+
+
+        tbzname = os.path.join(self.curdir, 
+                "%(time_prefix)s-%(curname)s.tar.bz2" % vars())
+        tar = tarfile.open(tbzname, "w:bz2")
+        tar.add(self.curdir, recursive=True, filter=filter_)
+        tar.close()    
+
+
     def process(self):
         '''
         Основная процедура генерации переносимого питон окружения.
@@ -841,6 +878,9 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
             t.toc()
             pass
     
+        if self.args.stage_pack_me:
+            self.pack_me()
+            return
 
         # if self.args.stage_checkout:
         #install_templates(root_dir, args)
@@ -864,6 +904,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 terrarium_assembler --stage-pack=./out "%(specfile_)s" 
             ''' % vars()])
 
+        root_dir = 'out'
         if self.args.stage_pack:
             root_dir = self.root_dir = expandpath(args.stage_pack)
             file_list = self.generate_file_list(self.dependencies(self.ps.terra))
@@ -972,29 +1013,54 @@ terrarium_assembler --stage-pack=./out "%(specfile_)s"
             size_  = folder_size(self.root_dir, follow_symlinks=False)
             print("Size ", size_/1024/1024, 'Mb')
 
-            if self.args.stage_make_isoexe:
-                label = 'disk'
-                if 'label' in self.spec:
-                    label = self.spec.label
-                time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
-                installscript = "install-me.sh" % vars()
-                installscriptpath = os.path.join("tmp/", installscript)
-                scmd = ('''
-                makeself.sh --needroot %(root_dir)s  %(installscriptpath)s "Installation" ./install-me             
-            ''' % vars()).replace('\n', ' ').strip()
-                print(scmd)
-                os.system(scmd)
+        if self.args.stage_make_isoexe:
+            os.chdir(self.curdir)
+            time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
+            label = 'disk'
+            if 'label' in self.spec:
+                label = self.spec.label
+            installscript = "install-me.sh" % vars()
+            installscriptpath = os.path.abspath(os.path.join("tmp/", installscript))
+            print("*"*10)
+            print(self.curdir)
+            print("*"*10)
+            os.chdir(self.curdir)
+            scmd = ('''
+            makeself.sh --needroot %(root_dir)s  %(installscriptpath)s "Installation" ./install-me             
+        ''' % vars()).replace('\n', ' ').strip()
+            print(scmd)
+            os.system(scmd)
 
-                filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
-                isodir = self.root_dir + '.iso'
-                os.mkdir(isodir)
-                filepath = os.path.join(isodir, filename)
-                scmd = ('''
-            mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s 
-            ''' % vars()).replace('\n', ' ').strip()
-                print(scmd)
-                os.system(scmd)
-                print(filepath)
+            filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
+            isodir = root_dir + '.iso'
+            mkdir_p(isodir)
+            filepath = os.path.join(isodir, filename)
+            scmd = ('''
+        mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s 
+        ''' % vars()).replace('\n', ' ').strip()
+            print(scmd)
+            os.system(scmd)
+            print(filepath)
     
-        pass
+        #     exclude_dirs = ['.git', '.vagrant', 'tmp']
 
+        #     for root, dirnames, filenames in os.walk(self.curdir):
+        #         ok = True
+        #         for ex_ in exclude_dirs:
+        #             if os.path.sep + ex_ + os.path.sep in root:
+        #                 ok = False
+        #                 break
+
+        #         if not ok:
+        #             continue        
+
+        #         for file_ in filenames:
+        #             file = '' + file_
+        #             print(os.path.join(root, file))
+        #             iso.add_file(
+        #                 os.path.join(root, file),
+        #                 f'/{file};3',
+        #                 #joliet_path=f'/{file}',
+        #                 #rr_name=file
+        #                 )
+        # # current_total_size += path.getsize(path.join(root, file))
