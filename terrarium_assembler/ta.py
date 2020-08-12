@@ -64,6 +64,10 @@ class BinRegexps:
 
 def fucking_magic(f):
     # m = magic.detect_from_filename(f)
+    if "ld.so" in f:
+        wtf = 1 
+        pass
+
     if not os.path.exists(f):
         return ''
 
@@ -519,7 +523,8 @@ python3 -m nuitka  %s %s %s
             pass
         except Exception as ex_:
             print("Troubles on adding", to_ , "<-", what)
-            raise ex_
+            pass
+            #raise ex_
             pass
 
 
@@ -537,7 +542,7 @@ python3 -m nuitka  %s %s %s
             return
         
         # if m.mime_type not in ['application/x-sharedlib', 'application/x-executable']
-        if not 'application' in m:
+        if not 'ELF' in m:
             return
     
         pyname = os.path.basename(binpath)
@@ -786,25 +791,26 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         parentdir, curname = os.path.split(self.curdir)
         disabled_suffix = curname + '.tar.bz2'
 
+        banned_ext = ['.old', '.iso', disabled_suffix]
+        banned_start = ['tmp']
+        banned_mid = ['/out/', '/wtf/', '/.vagrant/', '/.git/']
+
         def filter_(tarinfo):
-            if tarinfo.name.endswith('.old'):
-                print(tarinfo.name)
-                return None
+            for s in banned_ext:
+                if tarinfo.name.endswith(s):
+                    print(tarinfo.name)
+                    return None
 
-            if tarinfo.name.endswith('.iso'):
-                print(tarinfo.name)
-                return None
+            for s in banned_start:
+                if tarinfo.name.startswith(s):
+                    print(tarinfo.name)
+                    return None
 
-            if tarinfo.name.startswith('tmp'):
-                print(tarinfo.name)
-                return None
+            for s in banned_mid:
+                if s in tarinfo.name:
+                    print(tarinfo.name)
+                    return None
 
-            if tarinfo.name.endswith(disabled_suffix):
-                print(tarinfo.name)
-                return None
-
-            if tarinfo.name in ['.vagrant', '.git']:
-                return None
             return tarinfo          
 
 
@@ -965,7 +971,8 @@ terrarium_assembler --stage-pack=./out "%(specfile_)s"
                         except Exception as ex_:
                             print("Cannot detect Magic for ", f)    
                             raise ex_
-                        if m.startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
+                        if m.startswith('ELF') and 'shared' in m:
+                        # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
                             self.fix_sharedlib(f, libfile)
                         else:
                             # in case this is a directory that is listed, we don't want to include everything that is in that directory
