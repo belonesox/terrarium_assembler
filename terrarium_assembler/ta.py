@@ -204,8 +204,8 @@ class TerrariumAssembler:
         )
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 
-                                'python3-wheel', 'python3-pip', 'python3-devel', 
-                                'genisoimage', 'makeself']
+                                'python3-wheel', 'python3-pip', 'python3-devel', 'python3-yaml',
+                                'genisoimage', 'makeself', 'dnf-utils']
 
         nflags_ = {}
         if 'nuitka' in spec:
@@ -484,6 +484,7 @@ python3 -m nuitka  %s %s %s
     
         for package_ in packages:
             files = subprocess.check_output(['repoquery',
+                                         '-y',
                                          '--installed',
                                          '--cacheonly',
                                          '--list' ] + [package_], universal_newlines=True).splitlines()
@@ -493,6 +494,7 @@ python3 -m nuitka  %s %s %s
             
         
         candidates = subprocess.check_output(['repoquery',
+                                     '-y',
                                      '--installed',
                                      '--cacheonly',
                                      '--list' ] + packages, universal_newlines=True).splitlines()
