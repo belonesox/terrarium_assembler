@@ -421,7 +421,7 @@ python3 -m nuitka  %s %s %s
             res = ''
             for try_ in range(3):
                 try:
-                    res = subprocess.check_output(['repoquery'] + options_  + package_list,  universal_newlines=True)
+                    res = subprocess.check_output(['repoquery', '-y'] + options_  + package_list,  universal_newlines=True)
                     break
                 except subprocess.CalledProcessError:
                     #  died with <Signals.SIGSEGV: 11>.
