@@ -794,7 +794,8 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         lines = []
 
         pl_ = self.get_wheel_list_to_install()
-        scmd = 'sudo python3 -m pip --use-feature=2020-resolver  install  %s ' % (" ".join(pl_))
+        #--use-feature=2020-resolver
+        scmd = 'sudo python3 -m pip   install  %s ' % (" ".join(pl_))
         lines.append(scmd)
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
