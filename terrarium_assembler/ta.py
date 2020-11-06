@@ -794,7 +794,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         lines = []
 
         pl_ = self.get_wheel_list_to_install()
-        scmd = 'sudo python3 -m pip install  %s ' % (" ".join(pl_))
+        scmd = 'sudo python3 -m pip --use-feature=2020-resolver  install  %s ' % (" ".join(pl_))
         lines.append(scmd)
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
@@ -810,14 +810,21 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         root_dir = self.root_dir
         args = self.args
 
+        bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
+
         lines = []
+        lines.append('''
+rm -f %s/extwheel/*        
+''' % bin_dir)
 
         for td_ in self.pp.pip:
-            scmd = "python3 -m pip download %s --dest %s/extwheel " % (td_, os.path.relpath(self.in_bin, start=self.curdir))
+            scmd = "python3 -m pip download %s --dest %s/extwheel " % (td_, bin_dir)
             lines.append(scmd)                
 
         for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.terra]:
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+            scmd = 'echo "\n\n** Downloading external wheels for %s" **\n' % path_to_dir
+            lines.append(scmd)                
             if os.path.exists(setup_path):
                 os.chdir(setup_path)
                 scmd = "python3 -m pip download %s --dest %s/extwheel " % (
