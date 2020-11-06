@@ -156,6 +156,7 @@ class TerrariumAssembler:
         # ap.add_argument('--stage-build-nuitka', default=False, action='store_true', help='Compile Nuitka packages')
         ap.add_argument('--stage-build-and-pack', default='', type=str, help='Install, build and pack')
         ap.add_argument('--stage-download-all', default=False, action='store_true', help='Download all — sources, packages')
+        ap.add_argument('--stage-my-source-changed', default='', type=str, help='Fast rebuild/repack if only pythonsourcechanged')
         ap.add_argument('--stage-all', default='', type=str, help='Install, build and pack')
         ap.add_argument('--stage-pack', default='', type=str, help='Stage pack to given destination directory')
         ap.add_argument('specfile', type=str, help='Specification File')
@@ -167,6 +168,13 @@ class TerrariumAssembler:
 
         if self.args.stage_build_and_pack:
             self.args.stage_install_rpms = True
+            self.args.stage_build_wheels = True
+            self.args.stage_install_wheels = True
+            self.args.stage_build_nuitka = True
+            self.args.stage_pack = self.args.stage_build_and_pack
+
+        if self.args.stage_my_source_changed:
+            self.args.stage_download_wheels = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
