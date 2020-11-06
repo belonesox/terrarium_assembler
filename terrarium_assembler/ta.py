@@ -238,6 +238,19 @@ class TerrariumAssembler:
 
         pass
 
+
+    def packages2list(self, pl):
+        pl_ = []
+        for node in pl:
+            if isinstance(node, str):
+                pl_.append(node)
+            if isinstance(node, dict):
+                if 'name' in node:
+                    pl_.append(node['name'])
+        return pl_            
+
+
+
     def lines2sh(self, name, lines, stage=None):
         import stat
         os.chdir(self.curdir)
@@ -280,11 +293,11 @@ set -x
         tmpdir = os.path.join(self.curdir, "tmp/ta")
         bfiles = []
         for target_ in self.nuitkas.builds:
-            # outputname = target_.utility
-            # if "outputname" in target_:
-            #     outputname = target_.outputname
+            outputname = target_.utility
+            if "outputname" in target_:
+                outputname = target_.outputname
             nflags = self.nuitkas.get_flags(tmpdir)
-            target_dir = os.path.join(tmpdir, target_.utility+'.dist')
+            target_dir = os.path.join(tmpdir, outputname + '.dist')
             src_dir = os.path.relpath(self.src_dir, start=self.curdir)
             src = os.path.join(src_dir, target_.folder, target_.utility) + '.py'
             flags_ = ''
@@ -298,7 +311,7 @@ export PATH="/usr/lib64/ccache:$PATH"
 python3 -m nuitka  %s %s %s 
 """ % (nflags, flags_, src))
             self.fs.folders.append(target_dir)
-            build_name = 'build_' + target_.utility
+            build_name = 'build_' + outputname
             self.lines2sh(build_name, lines, None)
             bfiles.append(build_name)
 
@@ -396,6 +409,7 @@ python3 -m nuitka  %s %s %s
         '''
         Генерируем список RPM-зависимостей для заданного списка пакетов.
         '''
+        pl_ = self.packages2list(package_list)
         repoch = re.compile("\d+\:")
         def remove_epoch(package):
             package_ = repoch.sub('', package)    
@@ -421,20 +435,20 @@ python3 -m nuitka  %s %s %s
             res = ''
             for try_ in range(3):
                 try:
-                    res = subprocess.check_output(['repoquery', '-y'] + options_  + package_list,  universal_newlines=True)
+                    res = subprocess.check_output(['repoquery', '-y'] + options_  + pl_,  universal_newlines=True)
                     break
                 except subprocess.CalledProcessError:
                     #  died with <Signals.SIGSEGV: 11>.
                     time.sleep(2)                    
             # res = subprocess.check_output(['repoquery'] + options_  + ['--output', 'dot-tree'] + package_list,  universal_newlines=True)
             with open(os.path.join(self.start_dir, 'deps.txt'), 'w', encoding='utf-8') as lf:
-                lf.write('\n -'.join(package_list))
+                lf.write('\n -'.join(pl_))
                 lf.write('\n----------------\n')
                 lf.write(res)
     
-        output  = subprocess.check_output(['repoquery'] + options_ + package_list,  universal_newlines=True).splitlines()
+        output  = subprocess.check_output(['repoquery'] + options_ + pl_,  universal_newlines=True).splitlines()
         output = [remove_epoch(x) for x in output if self.ps.is_package_needed(x)]
-        packages_ = output + package_list
+        packages_ = output + pl_
         with open(os.path.join(self.start_dir, 'selected-packages.txt'), 'w', encoding='utf-8') as lf:
             lf.write('\n- '.join(packages_))
 
@@ -483,11 +497,17 @@ python3 -m nuitka  %s %s %s
         # So we need a separate step in which all packages are added together.
     
         for package_ in packages:
-            files = subprocess.check_output(['repoquery',
-                                         '-y',
-                                         '--installed',
-                                         '--cacheonly',
-                                         '--list' ] + [package_], universal_newlines=True).splitlines()
+            for try_ in range(3):
+                try:
+                    files = subprocess.check_output(['repoquery',
+                                                '-y',
+                                                '--installed',
+                                                '--cacheonly',
+                                                '--list' ] + [package_], universal_newlines=True).splitlines()
+                    break                                
+                except:
+                    pass                                            
+
             for file in files:
                 if 'i686' in file:
                     assert(True)
@@ -647,14 +667,27 @@ fi
 
         root_dir = self.root_dir
         args = self.args
-        for td_ in self.pp.terra:
+
+        if self.args.debug:
+            pl_ = self.get_wheel_list_to_install()
+            # pls_ = " ".join(pl_)
+            for pls_ in pl_:
+                scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s ' % vars()
+                print(scmd)
+                os.system(scmd)
+
+        nodes_ = self.pp.terra
+        if self.args.debug:
+            nodes_ += self.pp.build
+        for td_ in nodes_:
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
     
             os.chdir(setup_path)
             make_setup_if_not_exists()
-            # release_mod = ''
+            release_mod = ''
             # if self.args.release:
-            release_mod = ' --exclude-source-files '
+            if not self.args.debug:
+                release_mod = ' --exclude-source-files '
             scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root /   " % vars()
             print(scmd)
             os.system(scmd)
@@ -733,10 +766,8 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         # os.chdir(self.output_dir)
         pass
 
-    def install_wheels(self):
+    def get_wheel_list_to_install(self):
         os.chdir(self.curdir)
-
-        lines = []
 
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
@@ -753,7 +784,17 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         if os.path.exists(ext_whl_path):
             ext_wheels = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('.whl') and parse_wheel_filename(whl).project not in our_wheels_set]
             ext_src = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('tar.gz') or whl.endswith('tar.bz2')]
-        scmd = 'sudo python3 -m pip install  %s ' % (" ".join(ext_wheels + our_wheels + ext_src))
+
+        return ext_wheels + our_wheels + ext_src
+
+
+    def install_wheels(self):
+        os.chdir(self.curdir)
+
+        lines = []
+
+        pl_ = self.get_wheel_list_to_install()
+        scmd = 'sudo python3 -m pip install  %s ' % (" ".join(pl_))
         lines.append(scmd)
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
@@ -912,10 +953,19 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 terrarium_assembler --stage-pack=./out "%(specfile_)s" 
             ''' % vars()])
 
+        self.lines2sh("91-pack-debug", [
+            '''
+terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" 
+            ''' % vars()])
+
         root_dir = 'out'
         if self.args.stage_pack:
             root_dir = self.root_dir = expandpath(args.stage_pack)
-            file_list = self.generate_file_list(self.dependencies(self.ps.terra))
+            packages_to_deploy = self.ps.terra
+            if self.args.debug:
+                packages_to_deploy += self.ps.terra + self.ps.build
+
+            file_list = self.generate_file_list(self.dependencies(packages_to_deploy))
 
             os.system('echo 2 > /proc/sys/vm/drop_caches ')
             if os.path.exists(root_dir + ".old"):
