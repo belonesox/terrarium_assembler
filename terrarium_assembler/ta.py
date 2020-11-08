@@ -174,6 +174,7 @@ class TerrariumAssembler:
             self.args.stage_pack = self.args.stage_build_and_pack
 
         if self.args.stage_my_source_changed:
+            self.args.stage_checkout = True
             self.args.stage_download_wheels = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
