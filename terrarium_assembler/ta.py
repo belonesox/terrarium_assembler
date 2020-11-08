@@ -178,7 +178,7 @@ class TerrariumAssembler:
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
-            self.args.stage_pack = self.args.stage_build_and_pack
+            self.args.stage_pack = self.args.stage_my_source_changed
 
         if self.args.stage_download_all:
             self.args.stage_download_rpms = True
@@ -301,11 +301,11 @@ set -x
         tmpdir = os.path.join(self.curdir, "tmp/ta")
         bfiles = []
         for target_ in self.nuitkas.builds:
+            srcname = target_.utility
             outputname = target_.utility
-            if "outputname" in target_:
-                outputname = target_.outputname
             nflags = self.nuitkas.get_flags(tmpdir)
             target_dir = os.path.join(tmpdir, outputname + '.dist')
+            target_dir_ = os.path.relpath(target_dir, start=self.curdir)
             src_dir = os.path.relpath(self.src_dir, start=self.curdir)
             src = os.path.join(src_dir, target_.folder, target_.utility) + '.py'
             flags_ = ''
@@ -319,7 +319,12 @@ export PATH="/usr/lib64/ccache:$PATH"
 python3 -m nuitka  %s %s %s 
 """ % (nflags, flags_, src))
             self.fs.folders.append(target_dir)
-            build_name = 'build_' + outputname
+            if "outputname" in target_:
+                srcname = target_.outputname
+                lines.append(R"""
+mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
+""" % vars())
+            build_name = 'build_' + srcname
             self.lines2sh(build_name, lines, None)
             bfiles.append(build_name)
 
@@ -779,7 +784,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
-        our_whl_path = os.path.join(self.in_bin, "ourwheel")
+        our_whl_path = os.path.join(in_bin, "ourwheel")
         our_wheels = []
         our_wheels_set = set()
         if os.path.exists(our_whl_path):
@@ -803,8 +808,13 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         pl_ = self.get_wheel_list_to_install()
         #--use-feature=2020-resolver
-        scmd = 'sudo python3 -m pip   install  %s ' % (" ".join(pl_))
+        scmd = 'sudo python3 -m pip install --force-reinstall  %s ' % (" ".join(pl_))
         lines.append(scmd)
+
+        for p_ in pl_:
+            scmd = 'sudo python3 -m pip install --force-reinstall  %s ' % p_
+            lines.append(scmd)
+
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
 
