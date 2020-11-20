@@ -107,6 +107,7 @@ in
 selected-packages.* 
 deps.txt
 demo/*.sh
+demo/*.iso
 *.old
 e
 demo/out*

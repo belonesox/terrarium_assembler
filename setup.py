@@ -16,6 +16,7 @@ requirements = [
 #    'nuitka',
     'file-magic',
     'jinja2', 
+    'dnf',
     'wheel_filename',
 ]
 

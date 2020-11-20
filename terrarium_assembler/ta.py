@@ -118,6 +118,10 @@ class FoldersSpec:
     folders:   list
 
 
+@dc.dataclass
+class ModulesSpec:
+    modules:   list
+
 
 
 class TerrariumAssembler:
@@ -301,10 +305,65 @@ set -x
         # out_dir = os.path.join(self.out_dir)
         tmpdir = os.path.join(self.curdir, "tmp/ta")
         bfiles = []
+
+        #First pass
+        module2build = {}
+        standalone2build = []
+        referenced_modules = set()
+
         for target_ in self.nuitkas.builds:
+            if 'module' in target_:
+                module2build[target_.module] = target_
+            else:
+                standalone2build.append(target_)
+                if 'modules' in target_:
+                    referenced_modules |= set(target_.modules)
+                    for it_ in target_.modules:
+                        if it_ not in module2build:
+                            module2build[it_] = edict({'module':it_})
+
+        #processing modules only 
+
+        for outputname, target_ in module2build.items():
+            block_modules = None
+            if 'block_modules' in target_:
+                block_modules = target_.block_modules
+
+            nflags = self.nuitkas.get_flags(os.path.join(tmpdir, 'modules', outputname), target_)
+            target_dir = os.path.join(tmpdir, outputname + '.dist')
+            target_dir_ = os.path.relpath(target_dir, start=self.curdir)
+            target_list = target_dir_.replace('.dist', '.list')
+            tmp_list = '/tmp/module.list'
+            source_dir = dir4mnode(target_)
+            flags_ = ''
+            if 'flags' in target_:
+                flags_ = target_.flags
+            lines = []
+            build_name = 'build_module_' + outputname
+            lines.append("""
+export PATH="/usr/lib64/ccache:$PATH"
+find %(source_dir)s -name "*.py" | xargs -i{}  cksum {} > %(tmp_list)s
+if cmp -s %(tmp_list)s %(target_list)s
+then
+    echo "Module '%(outputname)s' looks unchanged" 
+""" % vars())
+            lines.append(R"""
+else
+    python3 -m nuitka  %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
+    RESULT=$?
+    if [ $RESULT == 0 ]; then
+        cp %(tmp_list)s %(target_list)s
+    fi
+fi
+""" % vars())
+            self.fs.folders.append(target_dir)
+            self.lines2sh(build_name, lines, None)
+            bfiles.append(build_name)
+
+        for target_ in standalone2build:
             srcname = target_.utility
             outputname = target_.utility
-            nflags = self.nuitkas.get_flags(tmpdir)
+            nflags = self.nuitkas.get_flags(tmpdir, target_)
             target_dir = os.path.join(tmpdir, outputname + '.dist')
             target_dir_ = os.path.relpath(target_dir, start=self.curdir)
             src_dir = os.path.relpath(self.src_dir, start=self.curdir)
@@ -316,18 +375,47 @@ set -x
             lines.append("""
 export PATH="/usr/lib64/ccache:$PATH"
 """ % vars(self))
+            build_name = 'build_' + srcname
             lines.append(R"""
-python3 -m nuitka  %s %s %s 
-""" % (nflags, flags_, src))
+time python3 -m nuitka  %(nflags)s %(flags_)s %(src)s 2>&1 >%(build_name)s.log
+""" % vars())
             self.fs.folders.append(target_dir)
             if "outputname" in target_:
                 srcname = target_.outputname
-                lines.append(R"""
-mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
+            lines.append(R"""
+mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s 
 """ % vars())
-            build_name = 'build_' + srcname
+
+            if "modules" in target_:
+                force_modules = []
+                if 'force_modules' in target_:
+                    force_modules = target_.force_modules
+
+                for it in target_.modules + force_modules:
+                    mdir_ = None
+                    try:
+                        mdir_ = dir4module(it) 
+                    except:
+                        pass                
+
+                    try:
+                        mdir_ = module2build[it].folder 
+                    except:
+                        pass                
+
+                    if mdir_:        
+                        lines.append(R"""
+rsync -rav --exclude=*.py --exclude=*.pyc --exclude=__pycache__ --prune-empty-dirs %(mdir_)s %(target_dir)s/                
+""" % vars())
+
+                force_modules = []
+                for it in target_.modules:
+                    lines.append(R"""
+rsync -av --include=*.so --include=*.bin --exclude=*  %(tmpdir)s/modules/%(it)s/ %(target_dir)s/.                
+""" % vars())
             self.lines2sh(build_name, lines, None)
             bfiles.append(build_name)
+
 
         lines = []
         for b_ in bfiles:
@@ -992,6 +1080,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s"
             if self.args.debug:
                 packages_to_deploy += self.ps.terra + self.ps.build
 
+        
             file_list = self.generate_file_list(self.dependencies(packages_to_deploy))
 
             os.system('echo 2 > /proc/sys/vm/drop_caches ')
