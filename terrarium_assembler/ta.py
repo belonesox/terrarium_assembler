@@ -330,6 +330,8 @@ set -x
                 block_modules = target_.block_modules
 
             nflags = self.nuitkas.get_flags(os.path.join(tmpdir, 'modules', outputname), target_)
+            if not nflags:
+                continue
             target_dir = os.path.join(tmpdir, outputname + '.dist')
             target_dir_ = os.path.relpath(target_dir, start=self.curdir)
             target_list = target_dir_.replace('.dist', '.list')
@@ -412,6 +414,7 @@ rsync -rav --exclude=*.py --exclude=*.pyc --exclude=__pycache__ --prune-empty-di
                 for it in target_.modules:
                     lines.append(R"""
 rsync -av --include=*.so --include=*.bin --exclude=*  %(tmpdir)s/modules/%(it)s/ %(target_dir)s/.                
+rsync -rav --include=*.so --include=*.bin --exclude=*  %(tmpdir)s/modules/%(it)s/%(it)s.dist/ %(target_dir)s/.                
 """ % vars())
             self.lines2sh(build_name, lines, None)
             bfiles.append(build_name)
@@ -1080,7 +1083,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s"
             if self.args.debug:
                 packages_to_deploy += self.ps.terra + self.ps.build
 
-        
+
             file_list = self.generate_file_list(self.dependencies(packages_to_deploy))
 
             os.system('echo 2 > /proc/sys/vm/drop_caches ')

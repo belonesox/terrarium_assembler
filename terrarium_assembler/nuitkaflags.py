@@ -22,6 +22,9 @@ os.getcwd(),
 
 
 def find_modules(path):
+    if not path:
+        return None
+        
     modules = set()
     rootdir, base_package_name = os.path.split(path)
 
@@ -49,7 +52,16 @@ def find_modules(path):
 
 
 def dir4module(modname):
-    mod = importlib.__import__(modname)
+    try:
+        mod = importlib.__import__(modname)
+    except:    
+        return None
+    finally:
+        if modname in sys.modules:
+            del sys.modules[modname]
+        import gc
+        gc.collect()    
+
     return str(pathlib.Path(mod.__file__).resolve().parent)
 
 
@@ -126,6 +138,8 @@ class NuitkaFlags:
                 flags.append('--recurse-not-to=' + it_)
         if "module" in target_:
             module_dir = dir4mnode(target_)
+            if not module_dir:
+                return ''
             flags += flags4module(target_.module, module_dir, block_modules)
         else:
             flags.append('--standalone') 
