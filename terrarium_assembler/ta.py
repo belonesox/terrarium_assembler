@@ -304,6 +304,7 @@ set -x
         #     return
         # out_dir = os.path.join(self.out_dir)
         tmpdir = os.path.join(self.curdir, "tmp/ta")
+        tmpdir_ = os.path.relpath(tmpdir)
         bfiles = []
 
         #First pass
@@ -397,6 +398,9 @@ mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
                     mdir_ = None
                     try:
                         mdir_ = dir4module(it) 
+                        mdir__ = os.path.relpath(mdir_)
+                        if len(mdir__)<len(mdir_):
+                            mdir_ = mdir__
                     except:
                         pass                
 
@@ -407,14 +411,14 @@ mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
 
                     if mdir_:        
                         lines.append(R"""
-rsync -rav --exclude=*.py --exclude=*.pyc --exclude=__pycache__ --prune-empty-dirs %(mdir_)s %(target_dir)s/                
+rsync -rav --exclude=*.py --exclude=*.pyc --exclude=__pycache__ --prune-empty-dirs %(mdir_)s %(target_dir_)s/                
 """ % vars())
 
                 force_modules = []
                 for it in target_.modules:
                     lines.append(R"""
-rsync -av --include=*.so --include=*.bin --exclude=*  %(tmpdir)s/modules/%(it)s/ %(target_dir)s/.                
-rsync -rav --include=*.so --include=*.bin --exclude=*  %(tmpdir)s/modules/%(it)s/%(it)s.dist/ %(target_dir)s/.                
+rsync -av --include=*.so --include=*.bin --exclude=*  %(tmpdir_)s/modules/%(it)s/ %(target_dir_)s/.                
+rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.                
 """ % vars())
             self.lines2sh(build_name, lines, None)
             bfiles.append(build_name)
