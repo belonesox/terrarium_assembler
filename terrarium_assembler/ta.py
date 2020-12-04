@@ -785,12 +785,20 @@ fi
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
     
             os.chdir(setup_path)
-            make_setup_if_not_exists()
+            # make_setup_if_not_exists()
             release_mod = ''
+
+            #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
+            # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
+            probably_package_name = os.path.split(setup_path)[-1]
+            scmd = "%(root_dir)s/ebin/python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
+            print(scmd)
+            os.system(scmd)
+
             # if self.args.release:
             if not self.args.debug:
                 release_mod = ' --exclude-source-files '
-            scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root /   " % vars()
+            scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
             print(scmd)
             os.system(scmd)
         pass
@@ -897,11 +905,11 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         pl_ = self.get_wheel_list_to_install()
         #--use-feature=2020-resolver
-        scmd = 'sudo python3 -m pip install --force-reinstall  %s ' % (" ".join(pl_))
+        scmd = 'sudo python3 -m pip install --force-reinstall --ignore-installed  %s ' % (" ".join(pl_))
         lines.append(scmd)
 
         for p_ in pl_:
-            scmd = 'sudo python3 -m pip install --force-reinstall  %s ' % p_
+            scmd = 'sudo python3 -m pip install --force-reinstall --ignore-installed  %s ' % p_
             lines.append(scmd)
 
         self.lines2sh("15-install-wheels", lines, "install-wheels")
