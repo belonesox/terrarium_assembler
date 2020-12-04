@@ -498,6 +498,8 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
     
         if len(parts) > 0 and parts[0] == "usr":
             parts.pop(0)
+            if len(parts) > 0 and parts[0] == "local":
+                parts.pop(0)
     
         if not parts:
             return False
@@ -590,7 +592,28 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
 
         return packages_ 
 
-    def generate_file_list(self, packages):
+    def generate_file_list_from_pips(self, pips):
+        '''
+        Для заданного списка PIP-пакетов, возвращаем список файлов в этих пакетах, которые нужны нам.
+        '''
+        file_list = []
+        pips_ = [p.split('==')[0] for p in pips]
+        import pkg_resources
+        for dist in pkg_resources.working_set:
+            if dist.key in pips_:
+                if dist.has_metadata('RECORD'):
+                    lines = dist.get_metadata_lines('RECORD')
+                    paths = [line.split(',')[0] for line in lines]
+                    paths = [os.path.join(dist.location, p) for p in paths]
+                    file_list.extend(paths)
+
+        pass
+        res_ = [x for x in file_list if self.should_copy(x)]
+        return res_
+        pass
+
+
+    def generate_file_list_from_packages(self, packages):
         '''
         Для заданного списка RPM-файлов, возвращаем список файлов в этих пакетах, которые нужны нам.
         '''
@@ -1088,7 +1111,9 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s"
                 packages_to_deploy += self.ps.terra + self.ps.build
 
 
-            file_list = self.generate_file_list(self.dependencies(packages_to_deploy))
+            fs_ = self.generate_file_list_from_pips(self.pp.pip)
+            file_list = self.generate_file_list_from_packages(self.dependencies(packages_to_deploy))
+            file_list.extend(fs_)
 
             os.system('echo 2 > /proc/sys/vm/drop_caches ')
             if os.path.exists(root_dir + ".old"):
