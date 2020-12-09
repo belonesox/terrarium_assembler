@@ -16,6 +16,7 @@ import dataclasses as dc
 import dnf
 import datetime
 import tarfile
+import hashlib 
 
 from wheel_filename import parse_wheel_filename
 
@@ -520,7 +521,16 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         '''
         Генерируем список RPM-зависимостей для заданного списка пакетов.
         '''
+
         pl_ = self.packages2list(package_list)
+        package_list_md5 = hashlib.md5('\n'.join(pl_).encode('utf-8')).hexdigest()
+        cache_filename = 'cache_' + package_list_md5 + '.list' 
+        if os.path.exists(cache_filename):
+            with open(cache_filename, 'r', encoding='utf-8') as lf:
+                ls_ = lf.read()
+                list_ = ls_.split(',')
+                return list_
+
         repoch = re.compile("\d+\:")
         def remove_epoch(package):
             package_ = repoch.sub('', package)    
@@ -589,6 +599,8 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
 +-------------------------------+-----------------+""" % vars())            
                 pass
 
+        with open(cache_filename, 'w', encoding='utf-8') as lf:
+            lf.write(','.join(packages_))
 
         return packages_ 
 
@@ -618,6 +630,16 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         Для заданного списка RPM-файлов, возвращаем список файлов в этих пакетах, которые нужны нам.
         '''
     
+        package_list_md5 = hashlib.md5('\n'.join(packages).encode('utf-8')).hexdigest()
+        cache_filename = 'cachefilelist_' + package_list_md5 + '.list' 
+        if os.path.exists(cache_filename):
+            with open(cache_filename, 'r', encoding='utf-8') as lf:
+                ls_ = lf.read()
+                list_ = ls_.split('\n')
+                return list_
+
+
+
         exclusions = []
         for package_ in packages:
             exclusions += subprocess.check_output(['rpm', '-qd', package_], universal_newlines=True).splitlines()
@@ -655,6 +677,10 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
     
         pass
         res_ = [x for x in set(candidates) - set(exclusions) if self.should_copy(x)]
+
+        with open(cache_filename, 'w', encoding='utf-8') as lf:
+            lf.write('\n'.join(res_))
+
         return res_
 
     def add(self, what, to_=None, recursive=True):
@@ -738,6 +764,7 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
 
         args = self.args
         lines = []
+        lines2 = []
         in_src = os.path.relpath(self.src_dir, start=self.curdir)
         # lines.add("rm -rf %s " % in_src)
         lines.append("mkdir -p %s " % in_src)
@@ -751,6 +778,15 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
                 lines.append('rm -rf "%(newpath)s"' % vars())
                 scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
                 lines.append(scmd)
+
+                lines2.append('''
+pushd "%(path_to_dir)s"
+git pull
+sudo python setup.py develop
+popd
+''' % vars())
+
+
                 # Fucking https://www.virtualbox.org/ticket/19086 + https://www.virtualbox.org/ticket/8761
                 lines.append("""
 if [ -d "%(newpath)s" ]; then
@@ -764,6 +800,7 @@ fi
 """ % vars())
 
         self.lines2sh("06-checkout", lines, 'checkout')    
+        self.lines2sh("96-pullall", lines2, 'checkout')    
         pass
 
     def explode_pp_node(self, td_):
