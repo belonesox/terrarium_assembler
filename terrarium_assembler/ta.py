@@ -250,6 +250,8 @@ class TerrariumAssembler:
         q_ = base.sack.query()
         self.installed_packages = q_.installed()
 
+        self.nuitka_plugins_dir = os.path.realpath(os.path.join(os.path.split(__file__)[0], '..', 'nuitka_plugins'))
+
         pass
 
 
@@ -344,6 +346,7 @@ set -x
                 flags_ = target_.flags
             lines = []
             build_name = 'build_module_' + outputname
+            nuitka_plugins_dir = self.nuitka_plugins_dir
             lines.append("""
 export PATH="/usr/lib64/ccache:$PATH"
 find %(source_dir)s -name "*.py" | xargs -i{}  cksum {} > %(tmp_list)s
@@ -353,7 +356,7 @@ then
 """ % vars())
             lines.append(R"""
 else
-    python3 -m nuitka  %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
+    nice +19 python3 -m nuitka --include-plugin-directory=%(nuitka_plugins_dir)s %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
     RESULT=$?
     if [ $RESULT == 0 ]; then
         cp %(tmp_list)s %(target_list)s
@@ -381,7 +384,7 @@ export PATH="/usr/lib64/ccache:$PATH"
 """ % vars(self))
             build_name = 'build_' + srcname
             lines.append(R"""
-time python3 -m nuitka  %(nflags)s %(flags_)s %(src)s 2>&1 >%(build_name)s.log
+time nice +19 python3 -m nuitka  %(nflags)s %(flags_)s %(src)s 2>&1 >%(build_name)s.log
 """ % vars())
             self.fs.folders.append(target_dir)
             if "outputname" in target_:
