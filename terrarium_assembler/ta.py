@@ -356,7 +356,7 @@ then
 """ % vars())
             lines.append(R"""
 else
-    nice +19 python3 -m nuitka --include-plugin-directory=%(nuitka_plugins_dir)s %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
+    nice -19 python3 -m nuitka --include-plugin-directory=%(nuitka_plugins_dir)s %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
     RESULT=$?
     if [ $RESULT == 0 ]; then
         cp %(tmp_list)s %(target_list)s
@@ -384,7 +384,7 @@ export PATH="/usr/lib64/ccache:$PATH"
 """ % vars(self))
             build_name = 'build_' + srcname
             lines.append(R"""
-time nice +19 python3 -m nuitka  %(nflags)s %(flags_)s %(src)s 2>&1 >%(build_name)s.log
+time nice -19 python3 -m nuitka  %(nflags)s %(flags_)s %(src)s 2>&1 >%(build_name)s.log
 """ % vars())
             self.fs.folders.append(target_dir)
             if "outputname" in target_:
