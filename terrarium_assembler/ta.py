@@ -1142,12 +1142,14 @@ rm -f %s/extwheel/*
         specfile_ = self.args.specfile
         self.lines2sh("50-pack", [
             '''
+sudo chmod a+rx /usr/lib/cups -R           
 #terrarium_assembler --stage-pack=./out "%(specfile_)s" --stage-make-isoexe
 terrarium_assembler --stage-pack=./out "%(specfile_)s" 
             ''' % vars()])
 
         self.lines2sh("91-pack-debug", [
             '''
+sudo chmod a+rx /usr/lib/cups -R           
 terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" 
             ''' % vars()])
 
