@@ -281,6 +281,7 @@ class TerrariumAssembler:
 # Stage "%s"
 # Automatically called when terrarium_assembler --stage-%s "%s" 
 set -x
+sudo chmod a+rwx in/src  -R
 ''' % (desc, stage_, self.args.specfile))
             lf.write("\n".join(lines))
 
@@ -520,13 +521,17 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
 
 
 
+    def rpm_update_time(self):
+        import time
+        return str(time.ctime(os.path.getmtime("/var/lib/rpm/Packages")))        
+
     def dependencies(self, package_list, local=True):
         '''
         Генерируем список RPM-зависимостей для заданного списка пакетов.
         '''
 
         pl_ = self.packages2list(package_list)
-        package_list_md5 = hashlib.md5('\n'.join(pl_).encode('utf-8')).hexdigest()
+        package_list_md5 = hashlib.md5((self.rpm_update_time() + '\n' + '\n'.join(pl_)).encode('utf-8')).hexdigest()
         cache_filename = 'cache_' + package_list_md5 + '.list' 
         if os.path.exists(cache_filename):
             with open(cache_filename, 'r', encoding='utf-8') as lf:
@@ -633,7 +638,7 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         Для заданного списка RPM-файлов, возвращаем список файлов в этих пакетах, которые нужны нам.
         '''
     
-        package_list_md5 = hashlib.md5('\n'.join(packages).encode('utf-8')).hexdigest()
+        package_list_md5 = hashlib.md5((self.rpm_update_time() + '\n' + '\n'.join(packages)).encode('utf-8')).hexdigest()
         cache_filename = 'cachefilelist_' + package_list_md5 + '.list' 
         if os.path.exists(cache_filename):
             with open(cache_filename, 'r', encoding='utf-8') as lf:
@@ -775,16 +780,24 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         for td_ in self.pp.build + self.pp.terra + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
             if path_to_dir_ not in already_checkouted:
+                probably_package_name = os.path.split(path_to_dir_)[-1]
                 already_checkouted.add(path_to_dir_)
                 path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
                 newpath = path_to_dir + '.new'
                 lines.append('rm -rf "%(newpath)s"' % vars())
-                scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
+                # scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
+                scmd = '''
+git --git-dir=/dev/null clone  %(git_url)s %(newpath)s 
+pushd %(newpath)s 
+git checkout %(git_branch)s
+popd
+''' % vars()
                 lines.append(scmd)
 
                 lines2.append('''
 pushd "%(path_to_dir)s"
 git pull
+sudo python -m pip uninstall  %(probably_package_name)s -y
 sudo python setup.py develop
 popd
 ''' % vars())
