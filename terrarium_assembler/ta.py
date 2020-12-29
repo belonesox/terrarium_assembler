@@ -802,6 +802,7 @@ popd
 
                 lines2.append('''
 pushd "%(path_to_dir)s"
+git config core.fileMode false
 git pull
 sudo python -m pip uninstall  %(probably_package_name)s -y
 sudo python setup.py develop
