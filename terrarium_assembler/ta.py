@@ -17,7 +17,7 @@ import dnf
 import datetime
 import tarfile
 import hashlib 
-
+import time
 from wheel_filename import parse_wheel_filename
 
 from .utils import *
@@ -486,6 +486,9 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
 
         if "__pycache__" in f:
             return False
+
+        if 'nginx' in f and 'sbin' in f:
+            w_ = 1
         
         if f == "": 
             return False
@@ -509,7 +512,7 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         if not parts:
             return False
     
-        if (parts[0] not in ["lib", "lib64"]) and (parts != ['bin', 'bash']):
+        if (parts[0] not in ["lib", "lib64"]) and (parts != ['bin', 'bash', 'sbin']):
             return False
         parts.pop(0)
     
@@ -659,6 +662,9 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         # So we need a separate step in which all packages are added together.
     
         for package_ in packages:
+            if 'postgresql12-server' == package_:
+                wttt=1
+
             for try_ in range(3):
                 try:
                     files = subprocess.check_output(['repoquery',
@@ -857,9 +863,15 @@ fi
             pl_ = self.get_wheel_list_to_install()
             # pls_ = " ".join(pl_)
             for pls_ in pl_:
-                scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s ' % vars()
+                if 'urllib3' in pls_:
+                    wt_ = 1
+                scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s --force ' % vars()
                 print(scmd)
                 os.system(scmd)
+                wtf_path = f'{root_dir}/local/lib/python3.8/site-packages/enum'
+                if os.path.exists(wtf_path):
+                    print('Fucking enum34 here')
+                    sys.exit(0)
 
         nodes_ = self.pp.terra
         if self.args.debug:
@@ -1189,9 +1201,12 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s"
             mkdir_p(root_dir)    
         
             def copy_file_to_environment(f):
+                if '/usr/pgsql-12/bin/' in f:
+                    wtff = 1
+                if 'initdb' in f:
+                    wtff = 1
                 if not self.should_copy(f):
                     return
-                
                 if self.br.is_need_patch(f):  
                     self.process_binary(f)
                     self.add(f)

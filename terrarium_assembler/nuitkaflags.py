@@ -96,7 +96,7 @@ def flags4module(modname, module_dir, block_modules=None):
                 if modname  != firstname:
                     modname_ = modname  + '.' + mod
                 if disabled_re and disabled_re.match(modname_):
-                    flags.append(' --recurse-not-to ' + modname_  )
+                    flags.append(' --nofollow-import-to ' + modname_  )
                 else:
                     flags.append(' --include-module ' + modname_  )
 
@@ -135,7 +135,7 @@ class NuitkaFlags:
                 flags.append('--include-module=' + it_)
         if self.block_packages:
             for it_ in self.block_packages:
-                flags.append('--recurse-not-to=' + it_)
+                flags.append('--nofollow-import-to=' + it_)
         if "module" in target_:
             module_dir = dir4mnode(target_)
             if not module_dir:
