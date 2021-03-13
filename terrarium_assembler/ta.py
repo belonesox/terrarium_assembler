@@ -526,7 +526,11 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
 
     def rpm_update_time(self):
         import time
-        return str(time.ctime(os.path.getmtime("/var/lib/rpm/Packages")))        
+        for rpmdbpath in ["/var/lib/rpm/Packages", "/var/lib/rpm/rpmdb.sqlite"]:
+            if os.path.exists(rpmdbpath):
+                return str(time.ctime(os.path.getmtime(rpmdbpath)))        
+        return None        
+
 
     def dependencies(self, package_list, local=True):
         '''
