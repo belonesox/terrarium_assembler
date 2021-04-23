@@ -37,9 +37,10 @@ class BinRegexps:
 
     def __post_init__(self):
         self.just_copy_re = []
-        for res_ in self.just_copy:
-            re_ = re.compile(res_ + '$')
-            self.just_copy_re.append(re_) 
+        if self.just_copy:
+            for res_ in self.just_copy:
+                re_ = re.compile(res_ + '$')
+                self.just_copy_re.append(re_) 
 
         self.need_patch_re = []
         for res_ in self.need_patch:
@@ -85,7 +86,7 @@ def fucking_magic(f):
 class PythonPackages:
     pip: list
     build: list
-    terra: list
+    terra: list = None
 
 @dc.dataclass
 class PackagesSpec:
@@ -783,7 +784,7 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         # lines.add("rm -rf %s " % in_src)
         lines.append("mkdir -p %s " % in_src)
         already_checkouted = set()
-        for td_ in self.pp.build + self.pp.terra + self.spec.templates_dirs:
+        for td_ in self.pp.build + (self.pp.terra if self.pp.terra else []) + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
             if path_to_dir_ not in already_checkouted:
                 probably_package_name = os.path.split(path_to_dir_)[-1]
@@ -874,29 +875,30 @@ fi
                     print('Fucking enum34 here')
                     sys.exit(0)
 
-        nodes_ = self.pp.terra
-        if self.args.debug:
-            nodes_ += self.pp.build
-        for td_ in nodes_:
-            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
-    
-            os.chdir(setup_path)
-            # make_setup_if_not_exists()
-            release_mod = ''
+        if self.pp.terra:
+            nodes_ = self.pp.terra
+            if self.args.debug:
+                nodes_ += self.pp.build
+            for td_ in nodes_:
+                git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+        
+                os.chdir(setup_path)
+                # make_setup_if_not_exists()
+                release_mod = ''
 
-            #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
-            # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
-            probably_package_name = os.path.split(setup_path)[-1]
-            scmd = "%(root_dir)s/ebin/python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
-            print(scmd)
-            os.system(scmd)
+                #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
+                # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
+                probably_package_name = os.path.split(setup_path)[-1]
+                scmd = "%(root_dir)s/ebin/python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
+                print(scmd)
+                os.system(scmd)
 
-            # if self.args.release:
-            if not self.args.debug:
-                release_mod = ' --exclude-source-files '
-            scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
-            print(scmd)
-            os.system(scmd)
+                # if self.args.release:
+                if not self.args.debug:
+                    release_mod = ' --exclude-source-files '
+                scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
+                print(scmd)
+                os.system(scmd)
         pass
 
     def download_packages(self):
@@ -957,7 +959,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         wheelpath = os.path.join(self.in_bin, "ourwheel")
         relwheelpath = os.path.relpath(wheelpath, start=self.curdir)
         lines.append(R"rm -rf %(relwheelpath)s/*.*" % vars())
-        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.terra]:
+        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else [])]:
             git_url, git_branch, path_to_dir_, setup_path = self.explode_pp_node(td_)
             path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
             relwheelpath = os.path.relpath(wheelpath, start=path_to_dir_)
@@ -1033,7 +1035,7 @@ rm -f %s/extwheel/*
             scmd = "python3 -m pip download %s --dest %s/extwheel " % (td_, bin_dir)
             lines.append(scmd)                
 
-        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in self.pp.terra]:
+        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else []) ]:
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
             scmd = 'echo "\n\n** Downloading external wheels for %s" **\n' % path_to_dir
             lines.append(scmd)                
@@ -1093,6 +1095,17 @@ rm -f %s/extwheel/*
         root_dir = self.root_dir 
         
         def install_templates(root_dir, args):
+            if 'copy_folders' in self.spec:
+                for it_ in self.spec.copy_folders:
+                    pass
+                from_ = os.path.join(self.src_dir, it_['from'])
+                to_ = os.path.join(root_dir, it_['to'])
+                mkdir_p(to_)
+
+                from distutils.dir_util import copy_tree
+                copy_tree(from_, to_)                        
+
+
             from jinja2 import Environment, FileSystemLoader, Template
             t.tic()
     
