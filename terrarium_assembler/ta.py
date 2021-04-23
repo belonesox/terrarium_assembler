@@ -1007,12 +1007,15 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         pl_ = self.get_wheel_list_to_install()
         #--use-feature=2020-resolver
-        scmd = 'sudo python3 -m pip install --force-reinstall --ignore-installed  %s ' % (" ".join(pl_))
+        scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % (" ".join(pl_))
         lines.append(scmd)
 
         for p_ in pl_:
-            scmd = 'sudo python3 -m pip install --force-reinstall --ignore-installed  %s ' % p_
+            scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % p_
             lines.append(scmd)
+
+        scmd = 'sudo python3 -m pip uninstall -y enum34 ' 
+        lines.append(scmd)
 
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
@@ -1049,6 +1052,9 @@ rm -f %s/extwheel/*
                     os.path.relpath(setup_path, start=self.curdir), os.path.relpath(self.in_bin, start=self.curdir))
                 lines.append(scmd)                
             pass
+
+        scmd = "rm -f %s/extwheel/enum34* " % (os.path.relpath(setup_path, start=self.curdir))
+        lines.append(scmd)                
 
         self.lines2sh("07-download-wheels", lines, "download-wheels")
         pass    
