@@ -50,6 +50,7 @@ setup(
     packages=find_packages(include=['terrarium_assembler', 'terrarium_assembler.*']),
     version_config={
         "dev_template": "{tag}.dev{ccount}",
+        "dirty_template": "{tag}.dev{ccount}",
     },
     setup_requires=['setuptools-git-versioning'],
     test_suite='tests',
