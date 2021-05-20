@@ -20,8 +20,6 @@ requirements = [
     'wheel_filename',
 ]
 
-setup_requirements = []
-
 test_requirements = ['pytest>=3', ]
 
 setup(
@@ -50,7 +48,8 @@ setup(
     keywords='terrarium_assembler',
     name='terrarium_assembler',
     packages=find_packages(include=['terrarium_assembler', 'terrarium_assembler.*']),
-    setup_requires=setup_requirements,
+    version_config=True,
+    setup_requires=['setuptools-git-versioning'],
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/belonesox/terrarium_assembler',
