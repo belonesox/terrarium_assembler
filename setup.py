@@ -48,7 +48,9 @@ setup(
     keywords='terrarium_assembler',
     name='terrarium_assembler',
     packages=find_packages(include=['terrarium_assembler', 'terrarium_assembler.*']),
-    version_config=True,
+    version_config={
+        "dev_template": "{tag}.dev{ccount}",
+    },
     setup_requires=['setuptools-git-versioning'],
     test_suite='tests',
     tests_require=test_requirements,
