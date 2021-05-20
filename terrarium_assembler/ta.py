@@ -1196,10 +1196,22 @@ sudo chmod a+rx /usr/lib/cups -R
 terrarium_assembler --stage-pack=./out "%(specfile_)s" 
             ''' % vars()])
 
+        self.lines2sh("51-pack-iso", [
+            '''
+sudo chmod a+rx /usr/lib/cups -R           
+terrarium_assembler --stage-pack=./out "%(specfile_)s" --stage-make-isoexe
+            ''' % vars()])
+
         self.lines2sh("91-pack-debug", [
             '''
 sudo chmod a+rx /usr/lib/cups -R           
 terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" 
+            ''' % vars()])
+
+        self.lines2sh("92-pack-debug-iso", [
+            '''
+sudo chmod a+rx /usr/lib/cups -R           
+terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-make-isoexe
             ''' % vars()])
 
         root_dir = 'out'
