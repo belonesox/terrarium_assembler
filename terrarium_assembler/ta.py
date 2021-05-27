@@ -385,9 +385,10 @@ fi
 export PATH="/usr/lib64/ccache:$PATH"
 """ % vars(self))
             build_name = 'build_' + srcname
-            lines.append(R"""
-time nice -19 python3 -m nuitka  %(nflags)s %(flags_)s %(src)s 2>&1 >%(build_name)s.log
-""" % vars())
+            lines.append(fR"""
+time nice -19 python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
+python -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt 
+""" )
             self.fs.folders.append(target_dir)
             if "outputname" in target_:
                 srcname = target_.outputname
