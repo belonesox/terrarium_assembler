@@ -671,6 +671,7 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
             if 'postgresql12-server' == package_:
                 wttt=1
 
+            # TODO: Somehow parallelize repoquery running
             for try_ in range(3):
                 try:
                     files = subprocess.check_output(['repoquery',
@@ -872,7 +873,7 @@ fi
             for pls_ in pl_:
                 if 'urllib3' in pls_:
                     wt_ = 1
-                scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s --force ' % vars()
+                scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s --no-deps --force-reinstall --no-dependencies --ignore-installed ' % vars()
                 print(scmd)
                 os.system(scmd)
                 wtf_path = f'{root_dir}/local/lib/python3.8/site-packages/enum'
