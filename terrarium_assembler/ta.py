@@ -32,20 +32,27 @@ class BinRegexps:
     '''
     Binary regexps. 
     '''
-    need_patch: list #bins that neeed to be patched.   
+    need_patch: list #bins that need to be patched.   
     just_copy:  list #bins that just need to be copied.
+    need_exclude:    list #bins that just need to be copied.
 
     def __post_init__(self):
         self.just_copy_re = []
         if self.just_copy:
-            for res_ in self.just_copy:
+            for res_ in self.just_copy or []:
                 re_ = re.compile(res_ + '$')
                 self.just_copy_re.append(re_) 
 
         self.need_patch_re = []
-        for res_ in self.need_patch:
+        for res_ in self.need_patch or []:
             re_ = re.compile(res_ + '$')
             self.need_patch_re.append(re_) 
+
+        self.need_exclude_re = []
+        for res_ in self.need_exclude or []:
+            re_ = re.compile(res_ + '$')
+            self.need_exclude_re.append(re_) 
+
 
     def is_just_copy(self, f):
         for re_ in self.just_copy_re:
@@ -59,8 +66,14 @@ class BinRegexps:
                 return True
         return False    
 
+    def is_need_exclude(self, f):
+        for re_ in self.need_exclude_re:
+            if re_.match(f):
+                return True
+        return False    
+
     def is_needed(self, f):
-        return self.is_just_copy(f) or self.is_need_patch(f)
+        return (self.is_just_copy(f) or self.is_need_patch(f)) and not self.is_need_exclude(f)
     
     pass
 
@@ -165,6 +178,8 @@ class TerrariumAssembler:
         ap.add_argument('--stage-my-source-changed', default='', type=str, help='Fast rebuild/repack if only pythonsourcechanged')
         ap.add_argument('--stage-all', default='', type=str, help='Install, build and pack')
         ap.add_argument('--stage-pack', default='', type=str, help='Stage pack to given destination directory')
+        ap.add_argument('--analyse', default='', type=str, help='Analyse resulting pack')
+        ap.add_argument('--folder-command', default='', type=str, help='Perform some shell command for all projects')
         ap.add_argument('specfile', type=str, help='Specification File')
         
         self.args = args = ap.parse_args()
@@ -205,17 +220,21 @@ class TerrariumAssembler:
             self.tvars.py_ext = ".py"
         self.tvars.release = not self.args.debug
 
-        need_patch = just_copy = None    
+        need_patch = just_copy = need_exclude = None    
         if 'bin_regexps' in spec:
             br_ = spec.bin_regexps
             if "need_patch" in br_:
                 need_patch = br_.need_patch
             if "just_copy" in br_:
                 just_copy = br_.just_copy
+            if "need_exclude" in br_:
+                need_exclude = br_.need_exclude
+
 
         self.br = BinRegexps(
             need_patch=need_patch,
-            just_copy=just_copy
+            just_copy=just_copy,
+            need_exclude=need_exclude
         )
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 
@@ -392,7 +411,8 @@ python -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
             self.fs.folders.append(target_dir)
             if "outputname" in target_:
                 srcname = target_.outputname
-            lines.append(R"""
+                if srcname != outputname:
+                    lines.append(R"""
 mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s 
 """ % vars())
 
@@ -494,10 +514,17 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         
         if f == "": 
             return False
-    
+
+        if 'Python.h' in f:
+            wtf333 = 1
+
+
+        if self.br.is_need_exclude(f):
+            return False
+
         if self.br.is_needed(f):
             return True
-    
+
         if f.startswith("/lib64/ld-linux"): # Этот файл надо специально готовить, чтобы сделать перемещаемым.
             return False
     
@@ -514,8 +541,9 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         if not parts:
             return False
     
-        if (parts[0] not in ["lib", "lib64"]) and (parts != ['bin', 'bash', 'sbin']):
-            return False
+        if not self.args.debug:
+            if (parts[0] not in ["lib", "lib64"]) and (parts != ['bin', 'bash', 'sbin']):
+                return False
         parts.pop(0)
     
         if len(parts) > 0 and (parts[0] == "locale" or parts[0] == ".build-id"):
@@ -773,6 +801,28 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         patched_binary = fix_binary(binpath, '$ORIGIN/' + relpath)
         self.add(patched_binary, targetpath)
         os.remove(patched_binary)
+        pass
+
+    def folder_command(self):
+        '''
+            Just checking out sources.
+            This stage should be done when we have authorization to check them out.
+        '''
+        if not self.pp:
+            return
+
+        curdir = os.getcwd()
+        args = self.args
+        in_src = os.path.relpath(self.src_dir, start=self.curdir)
+        already_checkouted = set()
+        for td_ in self.pp.build + (self.pp.terra if self.pp.terra else []) + self.spec.templates_dirs:
+            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+            if path_to_dir_ not in already_checkouted:
+                os.chdir(curdir)
+                os.chdir(path_to_dir_)
+                print('*'*10 + f' Git «{args.folder_command}» for {git_url} ')
+                scmd = f'''git {args.folder_command}'''
+                os.system(scmd)
         pass
 
     def checkout_sources(self):
@@ -1062,6 +1112,49 @@ rm -f %s/extwheel/*
         pass    
 
 
+    def analyse(self):    
+        args = self.args
+        spec = self.spec
+        root_dir = self.root_dir 
+
+        trace_file = None
+        try:
+            trace_file = spec.tests.tracefile
+        except:
+            print('You should specify tests→tracefile')    
+            return
+
+        abs_path_to_out_dir = os.path.abspath(args.analyse)
+        used_files = set()
+
+        re_file = re.compile(r'''.*\(.*"(?P<filename>[^"]+)".*''')
+        for line in open(trace_file, 'r', encoding='utf-8').readlines():
+            m_ = re_file.match(line)
+            if m_:
+                fname = m_.group('filename')
+                if os.path.isabs(fname):
+                    if fname.startswith(abs_path_to_out_dir):
+                        used_files.add(os.path.abspath(fname))
+        # print("\n".join(sorted(used_files)))
+        existing_files = {}
+        for dirpath, dirnames, filenames in os.walk(abs_path_to_out_dir):
+            for filename in filenames:
+                fname_ = os.path.join(abs_path_to_out_dir, dirpath, filename)
+                fname_ = os.path.abspath(fname_)
+                if 'cv2.cpython-38-x86_64-linux-gnu.so' in filename:
+                    wtff = 1
+                if fname_ not in used_files:
+                    if not os.path.islink(fname_):
+                        size_ = os.stat(fname_).st_size
+                        existing_files[fname_] = size_
+
+        top10 = sorted(existing_files.items(), key=lambda x: -x[1])[:1000]
+        print("Analyse first:") 
+        print("\n".join([f'{f}: \t {s}' for f,s in top10]))
+
+        pass
+
+
     def pack_me(self):    
         time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
         parentdir, curname = os.path.split(self.curdir)
@@ -1170,7 +1263,15 @@ rm -f %s/extwheel/*
             print("Install templates takes")
             t.toc()
             pass
-    
+
+        if self.args.folder_command:
+            self.folder_command()
+            return
+
+        if self.args.analyse:
+            self.analyse()
+            return
+
         if self.args.stage_pack_me:
             self.pack_me()
             return
@@ -1241,14 +1342,16 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             def copy_file_to_environment(f):
                 if '/usr/pgsql-12/bin/' in f:
                     wtff = 1
-                if 'initdb' in f:
-                    wtff = 1
                 if not self.should_copy(f):
                     return
+                if 'Python.h' in f:
+                    wtff = 1
                 if self.br.is_need_patch(f):  
                     self.process_binary(f)
                     self.add(f)
                 elif self.br.is_just_copy(f):
+                    self.add(f)
+                elif self.args.debug and f.startswith("/usr/include"):
                     self.add(f)
                 else:
                     libfile = f
@@ -1307,10 +1410,16 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                     for dirpath, dirnames, filenames in os.walk(folder_):
                         for filename in filenames:
                             f = os.path.join(dirpath, filename)
+                            if self.br.is_need_exclude(f):
+                                continue
+                            # if not self.should_copy(f):
+                            #     continue
                             if self.br.is_need_patch(f):  
                                 self.process_binary(f)
                                 continue
                             libfile = os.path.join(self.root_dir, f.replace(folder_, 'pbin'))
+                            if self.br.is_need_exclude(libfile):
+                                continue
                             self.add(f, libfile, recursive=False)
                     pass
 
