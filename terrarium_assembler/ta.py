@@ -21,7 +21,12 @@ import time
 from wheel_filename import parse_wheel_filename
 
 from .utils import *
+
+#будет отключено
 from .nuitkaflags import *
+
+#новая ветка
+from .nuitkaprofiles import *
 
 from pytictoc import TicToc
 t = TicToc()
@@ -245,7 +250,12 @@ class TerrariumAssembler:
         if 'nuitka' in spec:
             nflags_ = spec.nuitka
 
-        self.nuitkas = NuitkaFlags(**nflags_)
+        # self.nuitkas = NuitkaFlags(**nflags_)
+
+        self.nuitka_profiles = {}
+        if 'nuitka_profiles' in spec:
+            self.nuitka_profiles = NuitkaProfiles(spec.nuitka_profiles)
+
         self.ps = PackagesSpec(**spec.packages)
         self.pp = PythonPackages(**spec.python_packages)
         fs_ = []
@@ -322,8 +332,12 @@ sudo chmod a+rwx in/src  -R
 
 
     def build_nuitkas(self):
-        if not self.nuitkas:
+        # if not self.nuitkas:
+        #     return
+
+        if not self.nuitka_profiles:
             return
+
         # if not "builds" in self.nuitkas:
         #     return
         # out_dir = os.path.join(self.out_dir)
@@ -336,119 +350,119 @@ sudo chmod a+rwx in/src  -R
         standalone2build = []
         referenced_modules = set()
 
-        for target_ in self.nuitkas.builds:
-            if 'module' in target_:
-                module2build[target_.module] = target_
-            else:
-                standalone2build.append(target_)
-                if 'modules' in target_:
-                    referenced_modules |= set(target_.modules)
-                    for it_ in target_.modules:
-                        if it_ not in module2build:
-                            module2build[it_] = edict({'module':it_})
+        # for target_ in self.nuitkas.builds:
+        #     if 'module' in target_:
+        #         module2build[target_.module] = target_
+        #     else:
+        #         standalone2build.append(target_)
+        #         if 'modules' in target_:
+        #             referenced_modules |= set(target_.modules)
+        #             for it_ in target_.modules:
+        #                 if it_ not in module2build:
+        #                     module2build[it_] = edict({'module':it_})
 
-        #processing modules only 
+#         #processing modules only 
+#         for outputname, target_ in module2build.items():
+#             block_modules = None
+#             if 'block_modules' in target_:
+#                 block_modules = target_.block_modules
 
-        for outputname, target_ in module2build.items():
-            block_modules = None
-            if 'block_modules' in target_:
-                block_modules = target_.block_modules
+#             nflags = self.nuitkas.get_flags(os.path.join(tmpdir, 'modules', outputname), target_)
+#             if not nflags:
+#                 continue
+#             target_dir = os.path.join(tmpdir, outputname + '.dist')
+#             target_dir_ = os.path.relpath(target_dir, start=self.curdir)
+#             target_list = target_dir_.replace('.dist', '.list')
+#             tmp_list = '/tmp/module.list'
+#             source_dir = dir4mnode(target_)
+#             flags_ = ''
+#             if 'flags' in target_:
+#                 flags_ = target_.flags
+#             lines = []
+#             build_name = 'build_module_' + outputname
+#             nuitka_plugins_dir = self.nuitka_plugins_dir
+#             lines.append("""
+# export PATH="/usr/lib64/ccache:$PATH"
+# find %(source_dir)s -name "*.py" | xargs -i{}  cksum {} > %(tmp_list)s
+# if cmp -s %(tmp_list)s %(target_list)s
+# then
+#     echo "Module '%(outputname)s' looks unchanged" 
+# """ % vars())
+#             lines.append(R"""
+# else
+#     nice -19 python3 -m nuitka --include-plugin-directory=%(nuitka_plugins_dir)s %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
+#     RESULT=$?
+#     if [ $RESULT == 0 ]; then
+#         cp %(tmp_list)s %(target_list)s
+#     fi
+# fi
+# """ % vars())
+#             self.fs.folders.append(target_dir)
+#             self.lines2sh(build_name, lines, None)
+#             bfiles.append(build_name)
 
-            nflags = self.nuitkas.get_flags(os.path.join(tmpdir, 'modules', outputname), target_)
-            if not nflags:
-                continue
-            target_dir = os.path.join(tmpdir, outputname + '.dist')
-            target_dir_ = os.path.relpath(target_dir, start=self.curdir)
-            target_list = target_dir_.replace('.dist', '.list')
-            tmp_list = '/tmp/module.list'
-            source_dir = dir4mnode(target_)
-            flags_ = ''
-            if 'flags' in target_:
-                flags_ = target_.flags
-            lines = []
-            build_name = 'build_module_' + outputname
-            nuitka_plugins_dir = self.nuitka_plugins_dir
-            lines.append("""
-export PATH="/usr/lib64/ccache:$PATH"
-find %(source_dir)s -name "*.py" | xargs -i{}  cksum {} > %(tmp_list)s
-if cmp -s %(tmp_list)s %(target_list)s
-then
-    echo "Module '%(outputname)s' looks unchanged" 
-""" % vars())
-            lines.append(R"""
-else
-    nice -19 python3 -m nuitka --include-plugin-directory=%(nuitka_plugins_dir)s %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
-    RESULT=$?
-    if [ $RESULT == 0 ]; then
-        cp %(tmp_list)s %(target_list)s
-    fi
-fi
-""" % vars())
-            self.fs.folders.append(target_dir)
-            self.lines2sh(build_name, lines, None)
-            bfiles.append(build_name)
-
-        for target_ in standalone2build:
-            srcname = target_.utility
-            outputname = target_.utility
-            nflags = self.nuitkas.get_flags(tmpdir, target_)
-            target_dir = os.path.join(tmpdir, outputname + '.dist')
-            target_dir_ = os.path.relpath(target_dir, start=self.curdir)
-            src_dir = os.path.relpath(self.src_dir, start=self.curdir)
-            src = os.path.join(src_dir, target_.folder, target_.utility) + '.py'
-            flags_ = ''
-            if 'flags' in target_:
-                flags_ = target_.flags
-            lines = []
-            lines.append("""
-export PATH="/usr/lib64/ccache:$PATH"
-""" % vars(self))
-            build_name = 'build_' + srcname
-            lines.append(fR"""
-time nice -19 python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
-python -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt 
-""" )
-            self.fs.folders.append(target_dir)
-            if "outputname" in target_:
-                srcname = target_.outputname
-                if srcname != outputname:
-                    lines.append(R"""
-mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s 
-""" % vars())
-
-            if "modules" in target_:
-                force_modules = []
-                if 'force_modules' in target_:
-                    force_modules = target_.force_modules
-
-                for it in target_.modules + force_modules:
-                    mdir_ = None
-                    try:
-                        mdir_ = dir4module(it) 
-                        mdir__ = os.path.relpath(mdir_)
-                        if len(mdir__)<len(mdir_):
-                            mdir_ = mdir__
-                    except:
-                        pass                
-
-                    try:
-                        mdir_ = module2build[it].folder 
-                    except:
-                        pass                
-
-                    if mdir_:        
+        for np_name, np_ in self.nuitka_profiles.profiles.items():
+            for target_ in np_.builds or []:
+                srcname = target_.utility
+                outputname = target_.utility
+                nflags = np_.get_flags(tmpdir, target_)
+                target_dir = os.path.join(tmpdir, outputname + '.dist')
+                target_dir_ = os.path.relpath(target_dir, start=self.curdir)
+                src_dir = os.path.relpath(self.src_dir, start=self.curdir)
+                src = os.path.join(src_dir, target_.folder, target_.utility) + '.py'
+                flags_ = ''
+                if 'flags' in target_:
+                    flags_ = target_.flags
+                lines = []
+                lines.append("""
+    export PATH="/usr/lib64/ccache:$PATH"
+    """ % vars(self))
+                build_name = 'build_' + srcname
+                lines.append(fR"""
+    time nice -19 python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
+    python -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt 
+    """ )
+                self.fs.folders.append(target_dir)
+                if "outputname" in target_:
+                    srcname = target_.outputname
+                    if srcname != outputname:
                         lines.append(R"""
-rsync -rav --exclude=*.py --exclude=*.pyc --exclude=__pycache__ --prune-empty-dirs %(mdir_)s %(target_dir_)s/                
-""" % vars())
+    mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s 
+    """ % vars())
 
-                force_modules = []
-                for it in target_.modules:
-                    lines.append(R"""
-rsync -av --include=*.so --include=*.bin --exclude=*  %(tmpdir_)s/modules/%(it)s/ %(target_dir_)s/.                
-rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.                
-""" % vars())
-            self.lines2sh(build_name, lines, None)
-            bfiles.append(build_name)
+#             if "modules" in target_:
+#                 force_modules = []
+#                 if 'force_modules' in target_:
+#                     force_modules = target_.force_modules
+
+#                 for it in target_.modules + force_modules:
+#                     mdir_ = None
+#                     try:
+#                         mdir_ = dir4module(it) 
+#                         mdir__ = os.path.relpath(mdir_)
+#                         if len(mdir__)<len(mdir_):
+#                             mdir_ = mdir__
+#                     except:
+#                         pass                
+
+#                     try:
+#                         mdir_ = module2build[it].folder 
+#                     except:
+#                         pass                
+
+#                     if mdir_:        
+#                         lines.append(R"""
+# rsync -rav --exclude=*.py --exclude=*.pyc --exclude=__pycache__ --prune-empty-dirs %(mdir_)s %(target_dir_)s/                
+# """ % vars())
+
+#                 force_modules = []
+#                 for it in target_.modules:
+#                     lines.append(R"""
+# rsync -av --include=*.so --include=*.bin --exclude=*  %(tmpdir_)s/modules/%(it)s/ %(target_dir_)s/.                
+# rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.                
+# """ % vars())
+                self.lines2sh(build_name, lines, None)
+                bfiles.append(build_name)
 
 
         lines = []
@@ -515,7 +529,7 @@ rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
         if f == "": 
             return False
 
-        if 'Python.h' in f:
+        if 'libzbar.so' in f:
             wtf333 = 1
 
 
@@ -1344,7 +1358,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                     wtff = 1
                 if not self.should_copy(f):
                     return
-                if 'Python.h' in f:
+                if 'libzbar' in f:
                     wtff = 1
                 if self.br.is_need_patch(f):  
                     self.process_binary(f)
