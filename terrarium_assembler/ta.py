@@ -18,6 +18,7 @@ import datetime
 import tarfile
 import hashlib 
 import time
+import glob
 from wheel_filename import parse_wheel_filename
 
 from .utils import *
@@ -99,12 +100,48 @@ def fucking_magic(f):
     #     return
     return m
 
+from typing import List
+
+@dc.dataclass
+class PythonPackagesSpec:
+    '''
+    Specification of set of python packages,
+    by pip modules and by git-nodes of some python projects
+    '''
+    pip: list = None
+    projects: list = None
+
 
 @dc.dataclass
 class PythonPackages:
-    pip: list
-    build: list
-    terra: list = None
+    '''
+        We separate python projects to two classes:
+        build: only needed for building on builder host
+        terra: needed to be install into terrarium
+    '''
+    build: PythonPackagesSpec
+    terra: PythonPackagesSpec
+
+    def __post_init__(self):    
+        '''
+        Recode from easydicts to objects
+        '''
+        self.build = PythonPackagesSpec(**self.build)
+        self.terra = PythonPackagesSpec(**self.terra)
+        pass
+
+    def pip(self):
+        '''
+        Get full list of pip packages
+        ''' 
+        return (self.build.pip or []) + (self.terra.pip or [])
+
+    def projects(self):
+        '''
+        Get full list of python projects
+        ''' 
+        return (self.build.projects or []) + (self.terra.projects or [])
+
 
 @dc.dataclass
 class PackagesSpec:
@@ -829,13 +866,13 @@ sudo chmod a+rwx in/src  -R
         args = self.args
         in_src = os.path.relpath(self.src_dir, start=self.curdir)
         already_checkouted = set()
-        for td_ in self.pp.build + (self.pp.terra if self.pp.terra else []) + self.spec.templates_dirs:
+        for td_ in self.pp.projects() + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
             if path_to_dir_ not in already_checkouted:
                 os.chdir(curdir)
                 os.chdir(path_to_dir_)
                 print('*'*10 + f' Git «{args.folder_command}» for {git_url} ')
-                scmd = f'''git {args.folder_command}'''
+                scmd = f'''{args.folder_command}'''
                 os.system(scmd)
         pass
 
@@ -854,7 +891,7 @@ sudo chmod a+rwx in/src  -R
         # lines.add("rm -rf %s " % in_src)
         lines.append("mkdir -p %s " % in_src)
         already_checkouted = set()
-        for td_ in self.pp.build + (self.pp.terra if self.pp.terra else []) + self.spec.templates_dirs:
+        for td_ in self.pp.projects() + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
             if path_to_dir_ not in already_checkouted:
                 probably_package_name = os.path.split(path_to_dir_)[-1]
@@ -867,6 +904,8 @@ sudo chmod a+rwx in/src  -R
 git --git-dir=/dev/null clone  %(git_url)s %(newpath)s 
 pushd %(newpath)s 
 git checkout %(git_branch)s
+git config core.fileMode false
+git config core.autocrlf true
 popd
 ''' % vars()
                 lines.append(scmd)
@@ -874,6 +913,7 @@ popd
                 lines2.append('''
 pushd "%(path_to_dir)s"
 git config core.fileMode false
+git config core.autocrlf true
 git pull
 sudo python -m pip uninstall  %(probably_package_name)s -y
 sudo python setup.py develop
@@ -925,8 +965,10 @@ fi
 
 
     def install_terra_pythons(self):
-        if not self.pp:
+        if not self.pp.terra.pip and not self.pp.terra.projects:
             return
+
+        os.chdir(self.curdir)
 
         root_dir = self.root_dir
         args = self.args
@@ -945,10 +987,18 @@ fi
                     print('Fucking enum34 here')
                     sys.exit(0)
 
-        if self.pp.terra:
-            nodes_ = self.pp.terra
+
+        ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        if self.pp.terra.pip:
+            for pip_ in self.pp.terra.pip:
+                scmd = f'{root_dir}/ebin/python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed ' 
+                print(scmd)
+                os.system(scmd)
+
+        if self.pp.terra.projects:
+            nodes_ = self.pp.terra.projects
             if self.args.debug:
-                nodes_ += self.pp.build
+                nodes_ += (self.pp.build.projects or [])
             for td_ in nodes_:
                 git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
         
@@ -964,11 +1014,30 @@ fi
                 os.system(scmd)
 
                 # if self.args.release:
-                if not self.args.debug:
-                    release_mod = ' --exclude-source-files '
-                scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
+
+                # Todo: Разобраться! Куда делать опция --exclude-source-files
+                # if not self.args.debug:
+                #     release_mod = ' --exclude-source-files '
+
+                reqs_path = 'requirements.txt'
+                for reqs_ in glob.glob(f'**/{reqs_path}'):
+                    # --use-deprecated=legacy-resolver
+                    scmd = f'{root_dir}/ebin/python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                    print(scmd)
+                    os.system(scmd)
+
+                scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
                 print(scmd)
                 os.system(scmd)
+
+                scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
+                print(scmd)
+
+                os.system(scmd)
+
+        scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
+        print(scmd)
+        os.system(scmd)
         pass
 
     def download_packages(self):
@@ -1029,7 +1098,8 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         wheelpath = os.path.join(self.in_bin, "ourwheel")
         relwheelpath = os.path.relpath(wheelpath, start=self.curdir)
         lines.append(R"rm -rf %(relwheelpath)s/*.*" % vars())
-        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else [])]:
+        for td_ in self.pp.projects():
+        # , local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else [])]:
             git_url, git_branch, path_to_dir_, setup_path = self.explode_pp_node(td_)
             path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
             relwheelpath = os.path.relpath(wheelpath, start=path_to_dir_)
@@ -1071,17 +1141,51 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         lines = []
 
-        pl_ = self.get_wheel_list_to_install()
-        #--use-feature=2020-resolver
-        scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % (" ".join(pl_))
-        lines.append(scmd)
+        # pl_ = self.get_wheel_list_to_install()
+        # #--use-feature=2020-resolver
+        # scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % (" ".join(pl_))
+        # lines.append(scmd)
 
-        for p_ in pl_:
-            scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % p_
+        # for p_ in pl_:
+        #     scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % p_
+        #     lines.append(scmd)
+
+        # scmd = 'sudo python3 -m pip uninstall -y enum34 ' 
+        # lines.append(scmd)
+
+
+        root_dir = self.root_dir
+        args = self.args
+
+        ext_whl_path = os.path.join(self.in_bin, "extwheel")
+
+        for pip_ in self.pp.pip():
+            scmd = f'sudo python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed ' 
             lines.append(scmd)
 
-        scmd = 'sudo python3 -m pip uninstall -y enum34 ' 
-        lines.append(scmd)
+        for td_ in self.pp.projects():
+            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+    
+            os.chdir(setup_path)
+            lines.append(f'pushd {setup_path}')
+
+            #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
+            # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
+            probably_package_name = os.path.split(setup_path)[-1]
+            scmd = "sudo python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
+            lines.append(scmd)
+
+            reqs_path = 'requirements.txt'
+            for reqs_ in glob.glob(f'**/{reqs_path}'):
+                # --use-deprecated=legacy-resolver
+                scmd = f'sudo python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                lines.append(scmd)
+
+            scmd = f'sudo python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+            lines.append(scmd)
+            scmd = f"sudo python3 setup.py develop"
+            lines.append(scmd)
+            lines.append(f'popd')
 
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
@@ -1104,11 +1208,12 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 rm -f %s/extwheel/*        
 ''' % bin_dir)
 
-        for td_ in self.pp.pip:
+        for td_ in self.pp.pip():
             scmd = "python3 -m pip download %s --dest %s/extwheel " % (td_, bin_dir)
             lines.append(scmd)                
 
-        for td_, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else []) ]:
+        for td_ in self.pp.projects():
+        #, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else []) ]:
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
             scmd = 'echo "\n\n** Downloading external wheels for %s" **\n' % path_to_dir
             lines.append(scmd)                
@@ -1117,11 +1222,25 @@ rm -f %s/extwheel/*
                 scmd = "python3 -m pip download %s --dest %s/extwheel " % (
                     os.path.relpath(setup_path, start=self.curdir), os.path.relpath(self.in_bin, start=self.curdir))
                 lines.append(scmd)                
+            os.chdir(setup_path)
+            reqs_path = 'requirements.txt'
+            for reqs_ in glob.glob(f'**/{reqs_path}'):
+                scmd = "python3 -m pip download -r %s/%s --dest %s/extwheel " % (
+                   os.path.relpath(setup_path, start=self.curdir), reqs_,
+                   os.path.relpath(self.in_bin, start=self.curdir))
+
+                lines.append(scmd)                
             pass
 
-        scmd = "rm -f %s/extwheel/enum34* " % (os.path.relpath(setup_path, start=self.curdir))
+        sp_ = os.path.relpath(self.in_bin, start=self.curdir)        
+        scmd = f"rm -f {sp_}/extwheel/enum34* "
         lines.append(scmd)                
 
+        scmd = f"""
+pushd {sp_}/extwheel
+python -m pip wheel *.tar.*
+""" 
+        lines.append(scmd)                
         self.lines2sh("07-download-wheels", lines, "download-wheels")
         pass    
 
@@ -1265,7 +1384,7 @@ rm -f %s/extwheel/*
                                 plain = True
                         except Exception:
                             pass
-                        if plain:
+                        if plain or fname_.endswith('.nj2'):
                             template = env.get_template(fname_)
                             output = template.render(self.tvars)                    
                             with open(out_fname_, 'w', encoding='utf-8') as lf_:
@@ -1339,7 +1458,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 packages_to_deploy += self.ps.terra + self.ps.build
 
 
-            fs_ = self.generate_file_list_from_pips(self.pp.pip)
+            fs_ = self.generate_file_list_from_pips(self.pp.pip())
             file_list = self.generate_file_list_from_packages(self.dependencies(packages_to_deploy))
             file_list.extend(fs_)
 
@@ -1448,7 +1567,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             print(scmd)
             os.system(scmd)
     
-            if not self.args.debug:
+            if 0 and not self.args.debug:
                 # Remove source files.
                 scmd = "shopt -s globstar; rm  **/*.py; rm  -r **/__pycache__"
                 print(scmd)
