@@ -1236,6 +1236,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
                 reqs_path = 'requirements.txt'
                 for reqs_ in glob.glob(f'**/{reqs_path}'):
                     # --use-deprecated=legacy-resolver
+                    reqs_ = os.path.abspath(reqs_)
                     opts_ = self.pip_install_offline_cmd(reqs_)
                     scmd = f'sudo python3 {opts_} ' 
                     lines.append(scmd)
