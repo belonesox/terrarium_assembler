@@ -865,11 +865,10 @@ sudo chmod a+rwx in/src  -R
         curdir = os.getcwd()
         args = self.args
         in_src = os.path.relpath(self.src_dir, start=self.curdir)
-        already_checkouted = set()
         for td_ in self.pp.projects() + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
-            if path_to_dir_ not in already_checkouted:
-                os.chdir(curdir)
+            os.chdir(curdir)
+            if os.path.exists(path_to_dir_):
                 os.chdir(path_to_dir_)
                 print('*'*10 + f' Git «{args.folder_command}» for {git_url} ')
                 scmd = f'''{args.folder_command}'''
@@ -964,36 +963,57 @@ fi
         return git_url, git_branch, path_to_dir, setup_path
 
 
+    def pip_install_offline(self, target):
+        '''
+        Installing by pip only using offline downloaded wheel packages
+        '''
+        ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        our_whl_path = os.path.join(self.in_bin, "ourwheel")
+        scmd = f'{self.root_dir}/ebin/python3 -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed ' 
+        print(scmd)
+        os.system(scmd)
+        pass                        
+
+
     def install_terra_pythons(self):
         if not self.pp.terra.pip and not self.pp.terra.projects:
             return
 
+        # Пока хардкодим вставку нашего питон-пипа. потом конечно надо бы избавится.
+        root_dir = self.root_dir
+        os.chdir(self.curdir)
+        os.chdir(os.path.join('in', 'src', 'pip'))
+        os.system(f"{self.root_dir}/ebin/python3 setup.py install")
         os.chdir(self.curdir)
 
-        root_dir = self.root_dir
+        os.chdir(self.curdir)
+
         args = self.args
 
-        if self.args.debug:
-            pl_ = self.get_wheel_list_to_install()
-            # pls_ = " ".join(pl_)
-            for pls_ in pl_:
-                if 'urllib3' in pls_:
-                    wt_ = 1
-                scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s --no-deps --force-reinstall --no-dependencies --ignore-installed ' % vars()
-                print(scmd)
-                os.system(scmd)
-                wtf_path = f'{root_dir}/local/lib/python3.8/site-packages/enum'
-                if os.path.exists(wtf_path):
-                    print('Fucking enum34 here')
-                    sys.exit(0)
+        # if self.args.debug:
+        #     pl_ = self.get_wheel_list_to_install()
+        #     # pls_ = " ".join(pl_)
+        #     for pls_ in pl_:
+        #         if 'urllib3' in pls_:
+        #             wt_ = 1
+        #         scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s --no-deps --force-reinstall --no-dependencies --ignore-installed ' % vars()
+        #         print(scmd)
+        #         os.system(scmd)
+        #         wtf_path = f'{root_dir}/local/lib/python3.8/site-packages/enum'
+        #         if os.path.exists(wtf_path):
+        #             print('Fucking enum34 here')
+        #             sys.exit(0)
 
-
-        ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        # ext_whl_path = os.path.join(self.in_bin, "extwheel")
         if self.pp.terra.pip:
             for pip_ in self.pp.terra.pip:
-                scmd = f'{root_dir}/ebin/python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed ' 
-                print(scmd)
-                os.system(scmd)
+                self.pip_install_offline(pip_)
+                # scmd = f'{root_dir}/ebin/python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed ' 
+                # print(scmd)
+                # os.system(scmd)
+                os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
+
+
 
         if self.pp.terra.projects:
             nodes_ = self.pp.terra.projects
@@ -1004,14 +1024,23 @@ fi
         
                 os.chdir(setup_path)
                 # make_setup_if_not_exists()
+                if setup_path.endswith('pip'):
+                    continue
+                if 'dm-psi' in setup_path:
+                    wrrr = 1
+                if '18' in setup_path:
+                    wrrr = 1
+
                 release_mod = ''
 
                 #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
                 # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
-                probably_package_name = os.path.split(setup_path)[-1]
-                scmd = "%(root_dir)s/ebin/python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
-                print(scmd)
-                os.system(scmd)
+                # probably_package_name = os.path.split(setup_path)[-1]
+                # if probably_package_name == 'pip':
+                #     ddfff=1
+                # scmd = "%(root_dir)s/ebin/python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
+                # print(scmd)
+                # os.system(scmd)
 
                 # if self.args.release:
 
@@ -1022,17 +1051,24 @@ fi
                 reqs_path = 'requirements.txt'
                 for reqs_ in glob.glob(f'**/{reqs_path}'):
                     # --use-deprecated=legacy-resolver
-                    scmd = f'{root_dir}/ebin/python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
-                    print(scmd)
-                    os.system(scmd)
+                    self.pip_install_offline(f'-r {reqs_}')
 
-                scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
-                print(scmd)
-                os.system(scmd)
+                    # scmd = f'{root_dir}/ebin/python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                    # print(scmd)
+                    # os.system(scmd)
 
+                os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
+
+                # scmd = f'{root_dir}/ebin/python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --force --find-links="{ext_whl_path}" ' 
+                self.pip_install_offline('.')                
+                # print(scmd)
+                # os.system(scmd)
+
+                wrrr=1
+
+                # scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
                 scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
                 print(scmd)
-
                 os.system(scmd)
 
         scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
@@ -1114,26 +1150,26 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         # os.chdir(self.output_dir)
         pass
 
-    def get_wheel_list_to_install(self):
-        os.chdir(self.curdir)
+    # def get_wheel_list_to_install(self):
+    #     os.chdir(self.curdir)
 
-        in_bin = os.path.relpath(self.in_bin, start=self.curdir)
+    #     in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
-        our_whl_path = os.path.join(in_bin, "ourwheel")
-        our_wheels = []
-        our_wheels_set = set()
-        if os.path.exists(our_whl_path):
-            our_wheels = [os.path.join(our_whl_path, whl) for whl in os.listdir(our_whl_path) if whl.endswith('.whl')]
-            our_wheels_set = set([parse_wheel_filename(whl).project for whl in our_wheels])
+    #     our_whl_path = os.path.join(in_bin, "ourwheel")
+    #     our_wheels = []
+    #     our_wheels_set = set()
+    #     if os.path.exists(our_whl_path):
+    #         our_wheels = [os.path.join(our_whl_path, whl) for whl in os.listdir(our_whl_path) if whl.endswith('.whl')]
+    #         our_wheels_set = set([parse_wheel_filename(whl).project for whl in our_wheels])
 
-        ext_whl_path = os.path.join(self.in_bin, "extwheel")
-        ext_wheels = []
-        ext_src = []
-        if os.path.exists(ext_whl_path):
-            ext_wheels = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('.whl') and parse_wheel_filename(whl).project not in our_wheels_set]
-            ext_src = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('tar.gz') or whl.endswith('tar.bz2')]
+    #     ext_whl_path = os.path.join(self.in_bin, "extwheel")
+    #     ext_wheels = []
+    #     ext_src = []
+    #     if os.path.exists(ext_whl_path):
+    #         ext_wheels = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('.whl') and parse_wheel_filename(whl).project not in our_wheels_set]
+    #         ext_src = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('tar.gz') or whl.endswith('tar.bz2')]
 
-        return ext_wheels + our_wheels + ext_src
+    #     return ext_wheels + our_wheels + ext_src
 
 
     def install_wheels(self):
@@ -1165,27 +1201,28 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 
         for td_ in self.pp.projects():
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
-    
-            os.chdir(setup_path)
-            lines.append(f'pushd {setup_path}')
 
-            #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
-            # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
-            probably_package_name = os.path.split(setup_path)[-1]
-            scmd = "sudo python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
-            lines.append(scmd)
+            if os.path.exists(setup_path):
+                os.chdir(setup_path)
+                lines.append(f'pushd {setup_path}')
 
-            reqs_path = 'requirements.txt'
-            for reqs_ in glob.glob(f'**/{reqs_path}'):
-                # --use-deprecated=legacy-resolver
-                scmd = f'sudo python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
+                # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
+                probably_package_name = os.path.split(setup_path)[-1]
+                scmd = "sudo python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
                 lines.append(scmd)
 
-            scmd = f'sudo python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
-            lines.append(scmd)
-            scmd = f"sudo python3 setup.py develop"
-            lines.append(scmd)
-            lines.append(f'popd')
+                reqs_path = 'requirements.txt'
+                for reqs_ in glob.glob(f'**/{reqs_path}'):
+                    # --use-deprecated=legacy-resolver
+                    scmd = f'sudo python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                    lines.append(scmd)
+
+                scmd = f'sudo python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                lines.append(scmd)
+                scmd = f"sudo python3 setup.py develop"
+                lines.append(scmd)
+                lines.append(f'popd')
 
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
@@ -1215,6 +1252,8 @@ rm -f %s/extwheel/*
         for td_ in self.pp.projects():
         #, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else []) ]:
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+            if not os.path.exists(setup_path):
+                continue
             scmd = 'echo "\n\n** Downloading external wheels for %s" **\n' % path_to_dir
             lines.append(scmd)                
             if os.path.exists(setup_path):
@@ -1238,7 +1277,7 @@ rm -f %s/extwheel/*
 
         scmd = f"""
 pushd {sp_}/extwheel
-python -m pip wheel *.tar.*
+ls *.tar.* | xargs -i[] -t python3 -m pip wheel []
 """ 
         lines.append(scmd)                
         self.lines2sh("07-download-wheels", lines, "download-wheels")
