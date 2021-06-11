@@ -963,13 +963,24 @@ fi
         return git_url, git_branch, path_to_dir, setup_path
 
 
+    def pip_install_offline_cmd(self, target):
+        '''
+        Get options for installing by pip only using offline downloaded wheel packages
+        '''
+        ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        our_whl_path = os.path.join(self.in_bin, "ourwheel")
+        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed ' 
+        return scmd
+
+
     def pip_install_offline(self, target):
         '''
         Installing by pip only using offline downloaded wheel packages
         '''
         ext_whl_path = os.path.join(self.in_bin, "extwheel")
         our_whl_path = os.path.join(self.in_bin, "ourwheel")
-        scmd = f'{self.root_dir}/ebin/python3 -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed ' 
+        opts_ = self.pip_install_offline_cmd(target)
+        scmd = f'{self.root_dir}/ebin/python3 {opts_} ' 
         print(scmd)
         os.system(scmd)
         pass                        
@@ -1070,6 +1081,16 @@ fi
                 scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
                 print(scmd)
                 os.system(scmd)
+
+                os.chdir(setup_path)
+                for reqs_ in glob.glob(f'**/package.json'):
+                    os.chdir(setup_path)
+                    dir_ = os.path.split(reqs_)[0]
+                    os.chdir(dir_)
+                    os.system(f"yarn install ")
+                    os.system(f"yarn build ")
+
+
 
         scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
         print(scmd)
@@ -1215,8 +1236,10 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
                 reqs_path = 'requirements.txt'
                 for reqs_ in glob.glob(f'**/{reqs_path}'):
                     # --use-deprecated=legacy-resolver
-                    scmd = f'sudo python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                    opts_ = self.pip_install_offline_cmd(reqs_)
+                    scmd = f'sudo python3 {opts_} ' 
                     lines.append(scmd)
+
 
                 scmd = f'sudo python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
                 lines.append(scmd)
