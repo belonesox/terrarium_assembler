@@ -32,6 +32,32 @@ from .nuitkaprofiles import *
 from pytictoc import TicToc
 t = TicToc()
 
+
+# import contextlib
+# import os
+# import distutils.dir_util
+
+# @contextlib.contextmanager
+# def monkeypatch(object, name, patch):
+#     value_orig = getattr(object, name)
+#     setattr(object, name, patch)
+#     yield object
+#     setattr(object, name, value_orig)
+
+
+# def copy_tree(src, dst, **kwargs):
+#     stdlib_symlink = os.symlink
+
+#     def _symlink(src, dst, **kwargs):
+#         try:
+#             stdlib_symlink(src, dst, **kwargs)
+#         except FileExistsError as err:
+#             pass
+
+#     with monkeypatch(distutils.dir_util.os, 'symlink', _symlink):
+#         distutils.dir_util.copy_tree(src, dst, **kwargs)
+
+
 # import dataclasses as dc
 @dc.dataclass
 class BinRegexps:
@@ -321,6 +347,13 @@ class TerrariumAssembler:
 
         pass
 
+    def cmd(self, scmd):
+        '''
+        Print command and perform it.
+        May be here we will can catch output and hunt for heizenbugs
+        '''    
+        print(scmd)
+        os.system(scmd)
 
     def packages2list(self, pl):
         pl_ = []
@@ -904,7 +937,7 @@ git --git-dir=/dev/null clone  %(git_url)s %(newpath)s
 pushd %(newpath)s 
 git checkout %(git_branch)s
 git config core.fileMode false
-git config core.autocrlf true
+git config core.autocrlf input
 popd
 ''' % vars()
                 lines.append(scmd)
@@ -912,7 +945,7 @@ popd
                 lines2.append('''
 pushd "%(path_to_dir)s"
 git config core.fileMode false
-git config core.autocrlf true
+git config core.autocrlf input
 git pull
 sudo python -m pip uninstall  %(probably_package_name)s -y
 sudo python setup.py develop
@@ -981,8 +1014,7 @@ fi
         our_whl_path = os.path.join(self.in_bin, "ourwheel")
         opts_ = self.pip_install_offline_cmd(target)
         scmd = f'{self.root_dir}/ebin/python3 {opts_} ' 
-        print(scmd)
-        os.system(scmd)
+        self.cmd(scmd)
         pass                        
 
 
@@ -1078,9 +1110,7 @@ fi
                 wrrr=1
 
                 # scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
-                scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
-                print(scmd)
-                os.system(scmd)
+                self.cmd(f"{root_dir}/ebin/python3 setup.py install --single-version-externally-managed  {release_mod} --root / --force   ")
 
                 os.chdir(setup_path)
                 for reqs_ in glob.glob(f'**/package.json'):
@@ -1302,6 +1332,7 @@ rm -f %s/extwheel/*
         scmd = f"""
 pushd {sp_}/extwheel
 ls *.tar.* | xargs -i[] -t python3 -m pip wheel []
+rm -f *.tar.*
 """ 
         lines.append(scmd)                
         self.lines2sh("07-download-wheels", lines, "download-wheels")
@@ -1403,9 +1434,17 @@ ls *.tar.* | xargs -i[] -t python3 -m pip wheel []
                 to_ = os.path.join(root_dir, it_['to'])
                 mkdir_p(to_)
 
-                from distutils.dir_util import copy_tree
-                copy_tree(from_, to_)                        
+                # from distutils.dir_util import copy_tree
+                # # copy_tree(from_, to_)
+                # copy_tree(from_, to_, preserve_symlinks=True)
+                # All standard python copy_tree is broken
+                # https://bugs.python.org/issue41134
+                # https://stackoverflow.com/questions/53090360/python-distutils-copy-tree-fails-to-update-if-there-are-symlinks
+                scmd = f'rsync -rav {from_}/ {to_}'
+                print(scmd)
+                os.system(scmd)
 
+                wtfff=1
 
             from jinja2 import Environment, FileSystemLoader, Template
             t.tic()
@@ -1473,7 +1512,8 @@ ls *.tar.* | xargs -i[] -t python3 -m pip wheel []
             return
 
         # if self.args.stage_checkout:
-        #install_templates(root_dir, args)
+
+
         self.download_packages()
         self.checkout_sources()
         self.download_pip()
@@ -1516,6 +1556,9 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
         root_dir = 'out'
         if self.args.stage_pack:
             root_dir = self.root_dir = expandpath(args.stage_pack)
+
+            # install_templates(root_dir, args)
+
             packages_to_deploy = self.ps.terra
             if self.args.debug:
                 packages_to_deploy += self.ps.terra + self.ps.build
@@ -1653,11 +1696,11 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             print(self.curdir)
             print("*"*10)
             os.chdir(self.curdir)
+            self.cmd(f'chmod a+x {root_dir}/install-me')
             scmd = ('''
             makeself.sh --needroot %(root_dir)s  %(installscriptpath)s "Installation" ./install-me             
         ''' % vars()).replace('\n', ' ').strip()
-            print(scmd)
-            os.system(scmd)
+            self.cmd(scmd)
 
             filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
             isodir = root_dir + '.iso'
