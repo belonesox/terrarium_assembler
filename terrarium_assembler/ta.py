@@ -216,6 +216,9 @@ class TerrariumAssembler:
         self.curdir = os.getcwd()
         self.root_dir = None
 
+        # Потом сделать параметром функций.
+        self.overwrite_mode = False 
+
         ap = argparse.ArgumentParser(description='Create a portable linux folder-application')
         # ap.add_argument('--output', required=True, help='Destination directory')
         ap.add_argument('--debug', default=False, action='store_true', help='Debug version of release')
@@ -547,7 +550,7 @@ sudo chmod a+rwx in/src  -R
         Адаптивная процедура копирования в подкаталоги окружения — симлинки релятивизируются 
         и остаются симлинками.
         '''
-        if os.path.exists(dst):
+        if os.path.exists(dst) and not self.overwrite_mode:
             return
         if '__pycache__' in src:
             return
@@ -599,7 +602,7 @@ sudo chmod a+rwx in/src  -R
         if f == "": 
             return False
 
-        if 'libzbar.so' in f:
+        if f == '/lib/libpthread-2.31.so':
             wtf333 = 1
 
 
@@ -789,6 +792,7 @@ sudo chmod a+rwx in/src  -R
                     files = subprocess.check_output(['repoquery',
                                                 '-y',
                                                 '--installed',
+                                                '--archlist=x86_64,noarch'
                                                 '--cacheonly',
                                                 '--list' ] + [package_], universal_newlines=True).splitlines()
                     break                                
@@ -803,6 +807,7 @@ sudo chmod a+rwx in/src  -R
         candidates = subprocess.check_output(['repoquery',
                                      '-y',
                                      '--installed',
+                                     '--archlist=x86_64,noarch',                                     
                                      '--cacheonly',
                                      '--list' ] + packages, universal_newlines=True).splitlines()
     
@@ -1566,6 +1571,10 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
 
             fs_ = self.generate_file_list_from_pips(self.pp.pip())
             file_list = self.generate_file_list_from_packages(self.dependencies(packages_to_deploy))
+            if '/lib/libpthread-2.31.so' in fs_:
+                dfsfdf = 1
+            if '/lib/libpthread-2.31.so' in file_list:
+                dfsfdf = 1
             file_list.extend(fs_)
 
             os.system('echo 2 > /proc/sys/vm/drop_caches ')
@@ -1579,11 +1588,11 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             mkdir_p(root_dir)    
         
             def copy_file_to_environment(f):
-                if '/usr/pgsql-12/bin/' in f:
+                if 'libc-2.31.so' in f:
                     wtff = 1
                 if not self.should_copy(f):
                     return
-                if 'libzbar' in f:
+                if 'libpthread-2.31.so' in f:
                     wtff = 1
                 if self.br.is_need_patch(f):  
                     self.process_binary(f)
@@ -1665,9 +1674,15 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
     
             install_templates(root_dir, args)
             self.install_terra_pythons()
-            install_templates(root_dir, args)
-            self.install_terra_pythons()
-    
+            # install_templates(root_dir, args)
+            # self.install_terra_pythons()
+
+            # if self.args.debug:    
+            #     self.overwrite_mode = True
+            #     for f in file_list:
+            #         copy_file_to_environment(f)
+
+
             os.chdir(root_dir)
             scmd = "%(root_dir)s/ebin/python3 -m compileall -b . " % vars()
             print(scmd)
