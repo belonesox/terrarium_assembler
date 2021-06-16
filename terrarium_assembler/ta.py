@@ -1364,6 +1364,7 @@ rm -f *.tar.*
             m_ = re_file.match(line)
             if m_:
                 fname = m_.group('filename')
+                fname = fname.replace('/vagrant', self.curdir)
                 if os.path.isabs(fname):
                     if fname.startswith(abs_path_to_out_dir):
                         used_files.add(os.path.abspath(fname))
