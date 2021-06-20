@@ -1263,7 +1263,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
             relwheelpath = os.path.relpath(wheelpath, start=path_to_dir_)
             scmd = "pushd %s" % (path_to_dir)
             lines.append(scmd)
-            scmd = "python3 setup.py bdist_wheel -d %(relwheelpath)s " % vars()
+            scmd = "pipenv run python3 setup.py bdist_wheel -d %(relwheelpath)s " % vars()
             lines.append(scmd)
             lines.append('popd')
             pass
