@@ -17,7 +17,7 @@ requirements = [
     'file-magic',
     'jinja2', 
     'pyyaml',
-#    'dnf',
+    'pipenv',
     'wheel_filename',
 ]
 
