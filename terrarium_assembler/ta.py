@@ -58,7 +58,6 @@ t = TicToc()
 #         distutils.dir_util.copy_tree(src, dst, **kwargs)
 
 
-# import dataclasses as dc
 @dc.dataclass
 class BinRegexps:
     '''
@@ -81,9 +80,10 @@ class BinRegexps:
             self.need_patch_re.append(re_) 
 
         self.need_exclude_re = []
-        for res_ in self.need_exclude or []:
+        for res_ in self.need_exclude.common or []:
             re_ = re.compile(res_ + '$')
             self.need_exclude_re.append(re_) 
+
 
 
     def is_just_copy(self, f):
@@ -127,6 +127,63 @@ def fucking_magic(f):
     return m
 
 from typing import List
+
+@dc.dataclass
+class BinRegexps:
+    '''
+    Binary regexps. 
+    '''
+    need_patch: list #bins that need to be patched.   
+    just_copy:  list #bins that just need to be copied.
+    need_exclude: list #bins that just need to be copied.
+    debug: bool 
+
+    def __post_init__(self):
+        def add_rex2list(rex, alist):            
+            re_ = re.compile(rex + '$')
+            alist.append(re_) 
+
+        def add_listrex2list(listrex, alist):            
+            for rex in listrex or []:
+                add_rex2list(rex, alist)
+
+        self.just_copy_re = []
+        add_listrex2list(self.just_copy, self.just_copy_re)
+
+        self.need_patch_re = []
+        add_listrex2list(self.need_patch, self.need_patch_re)
+
+        self.need_exclude_re = []
+        add_listrex2list(self.need_exclude.common, self.need_exclude_re)
+        if self.debug:
+            add_listrex2list(self.need_exclude.debug, self.need_exclude_re)
+        else:
+            add_listrex2list(self.need_exclude.release, self.need_exclude_re)                       
+        pass
+
+    def is_just_copy(self, f):
+        for re_ in self.just_copy_re:
+            if re_.match(f):
+                return True
+        return False    
+
+    def is_need_patch(self, f):
+        for re_ in self.need_patch_re:
+            if re_.match(f):
+                return True
+        return False    
+
+    def is_need_exclude(self, f):
+        for re_ in self.need_exclude_re:
+            if re_.match(f):
+                return True
+        return False    
+
+    def is_needed(self, f):
+        return (self.is_just_copy(f) or self.is_need_patch(f)) and not self.is_need_exclude(f)
+    
+    pass
+
 
 @dc.dataclass
 class PythonPackagesSpec:
@@ -305,7 +362,8 @@ class TerrariumAssembler:
         self.br = BinRegexps(
             need_patch=need_patch,
             just_copy=just_copy,
-            need_exclude=need_exclude
+            need_exclude=need_exclude,
+            debug=self.args.debug,
         )
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 
@@ -488,12 +546,12 @@ sudo chmod a+rwx in/src  -R
                     flags_ = target_.flags
                 lines = []
                 lines.append("""
-    export PATH="/usr/lib64/ccache:$PATH"
+export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
                 lines.append(fR"""
-    time nice -19 python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
-    python -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt 
+time nice -19 pipenv run python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
+pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt 
     """ )
                 self.fs.folders.append(target_dir)
                 if "outputname" in target_:
@@ -952,8 +1010,8 @@ pushd "%(path_to_dir)s"
 git config core.fileMode false
 git config core.autocrlf input
 git pull
-sudo python -m pip uninstall  %(probably_package_name)s -y
-sudo python setup.py develop
+pipenv run python -m pip uninstall  %(probably_package_name)s -y
+pipenv run python setup.py develop
 popd
 ''' % vars())
 
@@ -1024,19 +1082,27 @@ fi
 
 
     def install_terra_pythons(self):
-        if not self.pp.terra.pip and not self.pp.terra.projects:
-            return
+        # if not self.pp.terra.pip and not self.pp.terra.projects:
+        #     return
 
         # Пока хардкодим вставку нашего питон-пипа. потом конечно надо бы избавится.
         root_dir = self.root_dir
         os.chdir(self.curdir)
         os.chdir(os.path.join('in', 'src', 'pip'))
-        os.system(f"{self.root_dir}/ebin/python3 setup.py install")
-        os.chdir(self.curdir)
+        our_whl_path = os.path.join(self.in_bin, "ourwheel")
+        ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        os.system(f'''{self.root_dir}/ebin/python3 setup.py install  ''')
 
         os.chdir(self.curdir)
-
         args = self.args
+
+        terra_ = True
+        if self.args.debug:
+            terra_ = False
+
+        pip_args_ = self.pip_args_from_sources(terra=terra_)
+        os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
+        os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
         # if self.args.debug:
         #     pl_ = self.get_wheel_list_to_install()
@@ -1052,14 +1118,14 @@ fi
         #             print('Fucking enum34 here')
         #             sys.exit(0)
 
-        # ext_whl_path = os.path.join(self.in_bin, "extwheel")
-        if self.pp.terra.pip:
-            for pip_ in self.pp.terra.pip:
-                self.pip_install_offline(pip_)
-                # scmd = f'{root_dir}/ebin/python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed ' 
-                # print(scmd)
-                # os.system(scmd)
-                os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
+        # # ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        # if self.pp.terra.pip:
+        #     for pip_ in self.pp.terra.pip:
+        #         self.pip_install_offline(pip_)
+        #         # scmd = f'{root_dir}/ebin/python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed ' 
+        #         # print(scmd)
+        #         # os.system(scmd)
+        #         os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
 
 
@@ -1074,10 +1140,10 @@ fi
                 # make_setup_if_not_exists()
                 if setup_path.endswith('pip'):
                     continue
-                if 'dm-psi' in setup_path:
-                    wrrr = 1
-                if '18' in setup_path:
-                    wrrr = 1
+                # if 'dm-psi' in setup_path:
+                #     wrrr = 1
+                # if '18' in setup_path:
+                #     wrrr = 1
 
                 release_mod = ''
 
@@ -1096,29 +1162,29 @@ fi
                 # if not self.args.debug:
                 #     release_mod = ' --exclude-source-files '
 
-                reqs_path = 'requirements.txt'
-                for reqs_ in glob.glob(f'**/{reqs_path}'):
-                    # --use-deprecated=legacy-resolver
-                    self.pip_install_offline(f'-r {reqs_}')
+                # reqs_path = 'requirements.txt'
+                # for reqs_ in glob.glob(f'**/{reqs_path}', recursive=True):
+                #     # --use-deprecated=legacy-resolver
+                #     self.pip_install_offline(f'-r {reqs_}')
 
-                    # scmd = f'{root_dir}/ebin/python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
-                    # print(scmd)
-                    # os.system(scmd)
+                #     # scmd = f'{root_dir}/ebin/python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
+                #     # print(scmd)
+                #     # os.system(scmd)
 
-                os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
+                # os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
                 # scmd = f'{root_dir}/ebin/python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --force --find-links="{ext_whl_path}" ' 
-                self.pip_install_offline('.')                
+                # self.pip_install_offline('.')                
                 # print(scmd)
                 # os.system(scmd)
 
                 wrrr=1
 
                 # scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
-                self.cmd(f"{root_dir}/ebin/python3 setup.py install --single-version-externally-managed  {release_mod} --root / --force   ")
+                self.cmd(f"{root_dir}/ebin/python3 setup.py install --single-version-externally-managed  {release_mod} --root / --force  ")  #--no-deps
 
                 os.chdir(setup_path)
-                for reqs_ in glob.glob(f'**/package.json'):
+                for reqs_ in glob.glob(f'**/package.json', recursive=True):
                     os.chdir(setup_path)
                     dir_ = os.path.split(reqs_)[0]
                     os.chdir(dir_)
@@ -1202,97 +1268,89 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
             lines.append('popd')
             pass
         self.lines2sh("09-build-wheels", lines, "build-wheels")
-        # os.chdir(self.curdir)
-        # os.chdir(self.output_dir)
-        pass
-
-    # def get_wheel_list_to_install(self):
-    #     os.chdir(self.curdir)
-
-    #     in_bin = os.path.relpath(self.in_bin, start=self.curdir)
-
-    #     our_whl_path = os.path.join(in_bin, "ourwheel")
-    #     our_wheels = []
-    #     our_wheels_set = set()
-    #     if os.path.exists(our_whl_path):
-    #         our_wheels = [os.path.join(our_whl_path, whl) for whl in os.listdir(our_whl_path) if whl.endswith('.whl')]
-    #         our_wheels_set = set([parse_wheel_filename(whl).project for whl in our_wheels])
-
-    #     ext_whl_path = os.path.join(self.in_bin, "extwheel")
-    #     ext_wheels = []
-    #     ext_src = []
-    #     if os.path.exists(ext_whl_path):
-    #         ext_wheels = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('.whl') and parse_wheel_filename(whl).project not in our_wheels_set]
-    #         ext_src = [os.path.join(in_bin, "extwheel", whl) for whl in os.listdir(os.path.join(self.in_bin, "extwheel")) if whl.endswith('tar.gz') or whl.endswith('tar.bz2')]
-
-    #     return ext_wheels + our_wheels + ext_src
-
 
     def install_wheels(self):
         os.chdir(self.curdir)
 
         lines = []
 
-        # pl_ = self.get_wheel_list_to_install()
-        # #--use-feature=2020-resolver
-        # scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % (" ".join(pl_))
-        # lines.append(scmd)
-
-        # for p_ in pl_:
-        #     scmd = 'sudo python3 -m pip install --no-dependencies --force-reinstall --ignore-installed  %s ' % p_
-        #     lines.append(scmd)
-
-        # scmd = 'sudo python3 -m pip uninstall -y enum34 ' 
-        # lines.append(scmd)
-
-
         root_dir = self.root_dir
         args = self.args
 
+        pip_args_ = self.pip_args_from_sources()
+
         ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        our_whl_path = os.path.join(self.in_bin, "ourwheel")
 
-        for pip_ in self.pp.pip():
-            scmd = f'sudo python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed ' 
-            lines.append(scmd)
-
-        for td_ in self.pp.projects():
-            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
-
-            if os.path.exists(setup_path):
-                os.chdir(setup_path)
-                lines.append(f'pushd {setup_path}')
-
-                #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
-                # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
-                probably_package_name = os.path.split(setup_path)[-1]
-                scmd = "sudo python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
-                lines.append(scmd)
-
-                reqs_path = 'requirements.txt'
-                for reqs_ in glob.glob(f'**/{reqs_path}'):
-                    # --use-deprecated=legacy-resolver
-                    # reqs_ = os.path.abspath(reqs_)
-                    opts_ = self.pip_install_offline_cmd(f' -r {reqs_} ')
-                    scmd = f'sudo python3 {opts_} ' 
-                    lines.append(scmd)
-
-
-                scmd = f'sudo python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
-                lines.append(scmd)
-                scmd = f"sudo python3 setup.py develop"
-                lines.append(scmd)
-                lines.append(f'popd')
+        scmd = f'pipenv run python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed --no-cache-dir --no-index ' 
+        lines.append(scmd)   # --no-cache-dir
 
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
 
-
-    def download_pip(self):
+    def get_pip_targets_and_reqs_from_sources(self, terra=False):
+        '''
+        Analyse sources and get list of targets, likely python packages, and "requirements.txt"
+        for python code without packaging
+        '''
         os.chdir(self.curdir)
         os.chdir(self.out_dir)
 
-        if not self.pp:
-            return
+        root_dir = self.root_dir
+        args = self.args
+
+        bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
+
+        pip_targets = []
+        pip_reqs = []
+        projects = []
+
+
+        if terra:
+            projects += self.pp.terra.projects()
+            pip_targets += self.pp.terra.pip()
+        else:
+            projects += self.pp.projects()
+            pip_targets += self.pp.pip()
+
+        for td_ in projects:
+            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
+            if not os.path.exists(setup_path):
+                continue
+            os.chdir(setup_path)
+            
+            is_python_package = False
+            for file_ in ['setup.py', 'pyproject.toml', 'requirements.txt']:
+                if os.path.exists(file_):
+                    is_python_package = True
+                    break
+
+            if is_python_package:
+                pip_targets.append(os.path.relpath(setup_path, start=self.curdir))
+
+            reqs_path = 'requirements.txt'
+            for reqs_ in glob.glob(f'**/{reqs_path}', recursive=True):
+                pip_reqs.append(os.path.join(os.path.relpath(setup_path, start=self.curdir), reqs_))
+            pass
+
+        return pip_targets, pip_reqs
+
+    def pip_args_from_sources(self, terra=False):
+        pip_targets, pip_reqs = self.get_pip_targets_and_reqs_from_sources()
+        pip_targets += self.pp.pip()
+
+        pip_targets_ = " ".join(pip_targets)
+        pip_reqs_ = " ".join([f" -r {r} " for r in pip_reqs])
+        return f" {pip_reqs_} {pip_targets_} "
+
+
+
+    def download_pip(self):
+        '''
+        Consistent downloading all needed pip wheel packages
+        '''
+        os.chdir(self.curdir)
+        os.chdir(self.out_dir)
 
         root_dir = self.root_dir
         args = self.args
@@ -1304,31 +1362,10 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 rm -f %s/extwheel/*        
 ''' % bin_dir)
 
-        for td_ in self.pp.pip():
-            scmd = "python3 -m pip download %s --dest %s/extwheel " % (td_, bin_dir)
-            lines.append(scmd)                
+        pip_args_ = self.pip_args_from_sources()
 
-        for td_ in self.pp.projects():
-        #, local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else []) ]:
-            git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(td_)
-            if not os.path.exists(setup_path):
-                continue
-            scmd = 'echo "\n\n** Downloading external wheels for %s" **\n' % path_to_dir
-            lines.append(scmd)                
-            if os.path.exists(setup_path):
-                os.chdir(setup_path)
-                scmd = "python3 -m pip download %s --dest %s/extwheel " % (
-                    os.path.relpath(setup_path, start=self.curdir), os.path.relpath(self.in_bin, start=self.curdir))
-                lines.append(scmd)                
-            os.chdir(setup_path)
-            reqs_path = 'requirements.txt'
-            for reqs_ in glob.glob(f'**/{reqs_path}'):
-                scmd = "python3 -m pip download -r %s/%s --dest %s/extwheel " % (
-                   os.path.relpath(setup_path, start=self.curdir), reqs_,
-                   os.path.relpath(self.in_bin, start=self.curdir))
-
-                lines.append(scmd)                
-            pass
+        scmd = f"python3 -m pip download {pip_args_} --dest {self.in_bin}/extwheel " 
+        lines.append(scmd)                
 
         sp_ = os.path.relpath(self.in_bin, start=self.curdir)        
         scmd = f"rm -f {sp_}/extwheel/enum34* "
@@ -1396,6 +1433,8 @@ rm -f *.tar.*
         banned_ext = ['.old', '.iso', disabled_suffix]
         banned_start = ['tmp']
         banned_mid = ['/out/', '/wtf/', '/.vagrant/', '/.git/']
+
+        self.cmd('systemd-tmpfiles --remove dnf.conf')
 
         def filter_(tarinfo):
             for s in banned_ext:
