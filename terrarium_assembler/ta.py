@@ -1384,7 +1384,9 @@ rm -f *.tar.*
     def analyse(self):    
         args = self.args
         spec = self.spec
+        abs_path_to_out_dir = os.path.abspath(args.analyse)
         root_dir = self.root_dir 
+        lastdirs = os.path.sep.join(abs_path_to_out_dir.split(os.path.sep)[-3:])
 
         trace_file = None
         try:
@@ -1393,7 +1395,6 @@ rm -f *.tar.*
             print('You should specify tests→tracefile')    
             return
 
-        abs_path_to_out_dir = os.path.abspath(args.analyse)
         used_files = set()
 
         re_file = re.compile(r'''.*\(.*"(?P<filename>[^"]+)".*''')
@@ -1402,6 +1403,9 @@ rm -f *.tar.*
             if m_:
                 fname = m_.group('filename')
                 fname = fname.replace('/vagrant', self.curdir)
+                if 'sshmnt' in fname:
+                   wtrr=1
+                fname = re.sub(fr'''/mnt/sshmnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
                 if os.path.isabs(fname):
                     if fname.startswith(abs_path_to_out_dir):
                         used_files.add(os.path.abspath(fname))
