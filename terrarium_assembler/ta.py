@@ -140,8 +140,15 @@ class BinRegexps:
 
     def __post_init__(self):
         def add_rex2list(rex, alist):            
-            re_ = re.compile(rex + '$')
-            alist.append(re_) 
+            try:
+                re_ = re.compile(rex + '$')
+                alist.append(re_) 
+            except Exception as ex_:
+                print("*"*20)
+                print("Cannot regx-compile", rex)
+                print("*"*20)
+                raise ex_
+
 
         def add_listrex2list(listrex, alist):            
             for rex in listrex or []:
@@ -1382,6 +1389,9 @@ rm -f *.tar.*
 
 
     def analyse(self):    
+        '''
+        Analyse strace file to calculate unused files.
+        '''
         args = self.args
         spec = self.spec
         abs_path_to_out_dir = os.path.abspath(args.analyse)
@@ -1402,12 +1412,17 @@ rm -f *.tar.*
             m_ = re_file.match(line)
             if m_:
                 fname = m_.group('filename')
+                # Heuristic to process strace files from Vagrant virtualboxes
                 fname = fname.replace('/vagrant', self.curdir)
+                # Heuristic to process strace files from remote VM, mounted by sshmnt
                 if 'sshmnt' in fname:
                    wtrr=1
                 fname = re.sub(fr'''/mnt/sshmnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
                 if os.path.isabs(fname):
                     if fname.startswith(abs_path_to_out_dir):
+                        if os.path.islink(fname):
+                            link_ = os.readlink(fname)
+                            fname = os.path.abspath(os.path.join(os.path.split(fname)[0], link_))
                         used_files.add(os.path.abspath(fname))
         # print("\n".join(sorted(used_files)))
         existing_files = {}
