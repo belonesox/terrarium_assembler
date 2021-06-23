@@ -1268,11 +1268,12 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
             git_url, git_branch, path_to_dir_, setup_path = self.explode_pp_node(td_)
             path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
             relwheelpath = os.path.relpath(wheelpath, start=path_to_dir_)
-            scmd = "pushd %s" % (path_to_dir)
+            # scmd = "pushd %s" % (path_to_dir)
+            # lines.append(scmd)
+            scmd = f"""
+pipenv run sh -c "pushd {path_to_dir};python3 setup.py bdist_wheel -d {relwheelpath};popd" 
+"""
             lines.append(scmd)
-            scmd = "pipenv run python3 setup.py bdist_wheel -d %(relwheelpath)s " % vars()
-            lines.append(scmd)
-            lines.append('popd')
             pass
         self.lines2sh("09-build-wheels", lines, "build-wheels")
 
@@ -1289,7 +1290,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         ext_whl_path = os.path.join(self.in_bin, "extwheel")
         our_whl_path = os.path.join(self.in_bin, "ourwheel")
 
-        scmd = f'pipenv run python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed --no-cache-dir --no-index ' 
+        scmd = f'pipenv run python3 -m pip install --find-links="{our_whl_path}" --find-links="{ext_whl_path}" wheel {pip_args_} --force-reinstall  --ignore-installed --no-cache-dir --no-index ' 
         lines.append(scmd)   # --no-cache-dir
 
         self.lines2sh("15-install-wheels", lines, "install-wheels")
@@ -1371,7 +1372,7 @@ rm -f %s/extwheel/*
 
         pip_args_ = self.pip_args_from_sources()
 
-        scmd = f"python3 -m pip download {pip_args_} --dest {self.in_bin}/extwheel " 
+        scmd = f"python3 -m pip download wheel {pip_args_} --dest {self.in_bin}/extwheel " 
         lines.append(scmd)                
 
         sp_ = os.path.relpath(self.in_bin, start=self.curdir)        
