@@ -476,9 +476,6 @@ sudo chmod a+rwx in/src  -R
         if not self.nuitka_profiles:
             return
 
-        # if not "builds" in self.nuitkas:
-        #     return
-        # out_dir = os.path.join(self.out_dir)
         tmpdir = os.path.join(self.curdir, "tmp/ta")
         tmpdir_ = os.path.relpath(tmpdir)
         bfiles = []
@@ -487,57 +484,6 @@ sudo chmod a+rwx in/src  -R
         module2build = {}
         standalone2build = []
         referenced_modules = set()
-
-        # for target_ in self.nuitkas.builds:
-        #     if 'module' in target_:
-        #         module2build[target_.module] = target_
-        #     else:
-        #         standalone2build.append(target_)
-        #         if 'modules' in target_:
-        #             referenced_modules |= set(target_.modules)
-        #             for it_ in target_.modules:
-        #                 if it_ not in module2build:
-        #                     module2build[it_] = edict({'module':it_})
-
-#         #processing modules only 
-#         for outputname, target_ in module2build.items():
-#             block_modules = None
-#             if 'block_modules' in target_:
-#                 block_modules = target_.block_modules
-
-#             nflags = self.nuitkas.get_flags(os.path.join(tmpdir, 'modules', outputname), target_)
-#             if not nflags:
-#                 continue
-#             target_dir = os.path.join(tmpdir, outputname + '.dist')
-#             target_dir_ = os.path.relpath(target_dir, start=self.curdir)
-#             target_list = target_dir_.replace('.dist', '.list')
-#             tmp_list = '/tmp/module.list'
-#             source_dir = dir4mnode(target_)
-#             flags_ = ''
-#             if 'flags' in target_:
-#                 flags_ = target_.flags
-#             lines = []
-#             build_name = 'build_module_' + outputname
-#             nuitka_plugins_dir = self.nuitka_plugins_dir
-#             lines.append("""
-# export PATH="/usr/lib64/ccache:$PATH"
-# find %(source_dir)s -name "*.py" | xargs -i{}  cksum {} > %(tmp_list)s
-# if cmp -s %(tmp_list)s %(target_list)s
-# then
-#     echo "Module '%(outputname)s' looks unchanged" 
-# """ % vars())
-#             lines.append(R"""
-# else
-#     nice -19 python3 -m nuitka --include-plugin-directory=%(nuitka_plugins_dir)s %(nflags)s %(flags_)s  2>&1 >%(build_name)s.log
-#     RESULT=$?
-#     if [ $RESULT == 0 ]; then
-#         cp %(tmp_list)s %(target_list)s
-#     fi
-# fi
-# """ % vars())
-#             self.fs.folders.append(target_dir)
-#             self.lines2sh(build_name, lines, None)
-#             bfiles.append(build_name)
 
         for np_name, np_ in self.nuitka_profiles.profiles.items():
             for target_ in np_.builds or []:
@@ -1108,7 +1054,12 @@ fi
             terra_ = False
 
         pip_args_ = self.pip_args_from_sources(terra=terra_)
-        os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
+        # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
+        smcd = f'''
+{self.root_dir}/ebin/python3 -m pip install {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+        '''
+
+        os.system(smcd)
         os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
         # if self.args.debug:
@@ -1153,39 +1104,6 @@ fi
                 #     wrrr = 1
 
                 release_mod = ''
-
-                #От отчаяния эвристика — пытаюсь выкинуть пакет перед инсталляцией из сорсов
-                # Вообще-то это не требуется и обычно работает без этого. Но иногда блядь, нет.
-                # probably_package_name = os.path.split(setup_path)[-1]
-                # if probably_package_name == 'pip':
-                #     ddfff=1
-                # scmd = "%(root_dir)s/ebin/python3 -m pip uninstall %(probably_package_name)s  -y " % vars()
-                # print(scmd)
-                # os.system(scmd)
-
-                # if self.args.release:
-
-                # Todo: Разобраться! Куда делать опция --exclude-source-files
-                # if not self.args.debug:
-                #     release_mod = ' --exclude-source-files '
-
-                # reqs_path = 'requirements.txt'
-                # for reqs_ in glob.glob(f'**/{reqs_path}', recursive=True):
-                #     # --use-deprecated=legacy-resolver
-                #     self.pip_install_offline(f'-r {reqs_}')
-
-                #     # scmd = f'{root_dir}/ebin/python3 -m pip install -r {reqs_}  --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}"  ' 
-                #     # print(scmd)
-                #     # os.system(scmd)
-
-                # os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
-
-                # scmd = f'{root_dir}/ebin/python3 -m pip install . --no-index --no-cache-dir --use-deprecated=legacy-resolver --force --find-links="{ext_whl_path}" ' 
-                # self.pip_install_offline('.')                
-                # print(scmd)
-                # os.system(scmd)
-
-                wrrr=1
 
                 # scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
                 self.cmd(f"{root_dir}/ebin/python3 setup.py install --single-version-externally-managed  {release_mod} --root / --force  ")  #--no-deps
@@ -1290,8 +1208,15 @@ pipenv run sh -c "pushd {path_to_dir};python3 setup.py bdist_wheel -d {relwheelp
         ext_whl_path = os.path.join(self.in_bin, "extwheel")
         our_whl_path = os.path.join(self.in_bin, "ourwheel")
 
-        scmd = f'pipenv run python3 -m pip install --find-links="{our_whl_path}" --find-links="{ext_whl_path}" wheel {pip_args_} --force-reinstall  --ignore-installed --no-cache-dir --no-index ' 
+        # scmd = f'pipenv run python3 -m pip install --find-links="{our_whl_path}" --find-links="{ext_whl_path}" wheel {pip_args_} --force-reinstall  --ignore-installed --no-cache-dir --no-index ' 
+        # lines.append(scmd)   # --no-cache-dir
+
+        scmd = f'''
+pipenv --rm
+pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
+''' 
         lines.append(scmd)   # --no-cache-dir
+
 
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
@@ -1416,10 +1341,11 @@ rm -f *.tar.*
                 # Heuristic to process strace files from Vagrant virtualboxes
                 fname = fname.replace('/vagrant', self.curdir)
                 # Heuristic to process strace files from remote VM, mounted by sshmnt
-                if 'sshmnt' in fname:
+                if '/mnt/local/home/stas/projects/deploy-for-audit/linux_distro/out/ebin/../pbin/libtorch_cpu.so' in fname:
                    wtrr=1
-                fname = re.sub(fr'''/mnt/sshmnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
+                fname = re.sub(fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
                 if os.path.isabs(fname):
+                    fname = os.path.abspath(fname)
                     if fname.startswith(abs_path_to_out_dir):
                         if os.path.islink(fname):
                             link_ = os.readlink(fname)
@@ -1440,7 +1366,11 @@ rm -f *.tar.*
 
         top10 = sorted(existing_files.items(), key=lambda x: -x[1])[:1000]
         print("Analyse first:") 
-        print("\n".join([f'{f}: \t {s}' for f,s in top10]))
+        for f, s in top10:
+            f_ = f.replace(abs_path_to_out_dir, '    - .*')
+            print(f'{f_} # \t {s}')
+
+        # print("\n".join([f'{f}: \t {s}' for f,s in top10]))
 
         pass
 
@@ -1539,7 +1469,7 @@ rm -f *.tar.*
                         
                     for filename in filenames:
                         fname_  = os.path.join(dirpath, filename)
-                        if '_add_newdocs.py' in fname_:
+                        if 'python' in fname_:
                             wtf=1
                         out_fname_ = os.path.join(root_dir, dirpath, filename)
                         out_fname_ = Template(out_fname_ ).render(self.tvars)                    
@@ -1551,15 +1481,23 @@ rm -f *.tar.*
                                 plain = True
                         except Exception:
                             pass
-                        if plain or fname_.endswith('.nj2'):
-                            template = env.get_template(fname_)
-                            output = template.render(self.tvars)                    
-                            with open(out_fname_, 'w', encoding='utf-8') as lf_:
-                                lf_.write(output)
-                        else:
-                            shutil.copy2(fname_, out_fname_)
-                        shutil.copymode(fname_, out_fname_)                        
+                        if os.path.islink(fname_):
+                            linkto = os.readlink(fname_)
+                            os.symlink(linkto, out_fname_)
+                        else:    
+                            if plain or fname_.endswith('.nj2'):
+                                template = env.get_template(fname_)
+                                output = template.render(self.tvars)                    
+                                with open(out_fname_, 'w', encoding='utf-8') as lf_:
+                                    lf_.write(output)
+                            else:
+                                shutil.copy2(fname_, out_fname_)
+                            shutil.copymode(fname_, out_fname_)                        
             
+            from ctypes.util import _findLib_ld
+            libc_path = _findLib_ld('c')
+            shutil.copy2(libc_path, f'{root_dir}/lib64/libc.so')
+
             print("Install templates takes")
             t.toc()
             pass
@@ -1654,6 +1592,10 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                     return
                 if 'libpthread-2.31.so' in f:
                     wtff = 1
+
+                if '/usr/bin/ld' in f:
+                    wtff = 1
+
                 if self.br.is_need_patch(f):  
                     self.process_binary(f)
                     self.add(f)
@@ -1663,7 +1605,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                     self.add(f)
                 else:
                     libfile = f
-                    # python tends to install in both /usr/lib and /usr/lib64, which doesn't mean it is
+                    # python tends  install in both /usr/lib and /usr/lib64, which doesn't mean it is
                     # a package for the wrong arch. 
                     # So we need to handle both /lib and /lib64. Copying files
                     # blindly from /lib could be a problem, but we filtered out all the i686 packages during
