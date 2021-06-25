@@ -1496,6 +1496,7 @@ rm -f *.tar.*
             
             from ctypes.util import _findLib_ld
             libc_path = _findLib_ld('c')
+            libc_path = "/lib64/libc-2.31.so" # temp hack
             shutil.copy2(libc_path, f'{root_dir}/lib64/libc.so')
 
             print("Install templates takes")
