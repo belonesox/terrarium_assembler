@@ -794,8 +794,8 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
         # So we need a separate step in which all packages are added together.
     
         for package_ in packages:
-            if 'postgresql12-server' == package_:
-                wttt=1
+            # if 'postgresql12-server' == package_:
+            #     wttt=1
 
             # TODO: Somehow parallelize repoquery running
             for try_ in range(3):
@@ -1041,10 +1041,12 @@ fi
         # Пока хардкодим вставку нашего питон-пипа. потом конечно надо бы избавится.
         root_dir = self.root_dir
         os.chdir(self.curdir)
-        os.chdir(os.path.join('in', 'src', 'pip'))
         our_whl_path = os.path.join(self.in_bin, "ourwheel")
         ext_whl_path = os.path.join(self.in_bin, "extwheel")
-        os.system(f'''{self.root_dir}/ebin/python3 setup.py install  ''')
+
+        os.chdir(os.path.join('in', 'src', 'pip'))
+        scmd = f'''{self.root_dir}/ebin/python3 setup.py install  '''
+        os.system(scmd)
 
         os.chdir(self.curdir)
         args = self.args
@@ -1055,11 +1057,17 @@ fi
 
         pip_args_ = self.pip_args_from_sources(terra=terra_)
         # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
-        smcd = f'''
-{self.root_dir}/ebin/python3 -m pip install {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
-        '''
+        if self.args.debug:
+            scmd = f'''
+{self.root_dir}/ebin/python3 -m pip install pip {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+            '''
+        else:
+            scmd = f'''
+{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+            '''
 
-        os.system(smcd)
+        os.chdir(self.curdir)
+        os.system(scmd)
         os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
         # if self.args.debug:
@@ -1112,7 +1120,8 @@ fi
                 for reqs_ in glob.glob(f'**/package.json', recursive=True):
                     os.chdir(setup_path)
                     dir_ = os.path.split(reqs_)[0]
-                    os.chdir(dir_)
+                    if dir_:
+                        os.chdir(dir_)
                     os.system(f"yarn install ")
                     os.system(f"yarn build ")
 
@@ -1240,8 +1249,8 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
 
 
         if terra:
-            projects += self.pp.terra.projects()
-            pip_targets += self.pp.terra.pip()
+            projects += self.pp.terra.projects
+            pip_targets += self.pp.terra.pip
         else:
             projects += self.pp.projects()
             pip_targets += self.pp.pip()
@@ -1269,8 +1278,8 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
         return pip_targets, pip_reqs
 
     def pip_args_from_sources(self, terra=False):
-        pip_targets, pip_reqs = self.get_pip_targets_and_reqs_from_sources()
-        pip_targets += self.pp.pip()
+        pip_targets, pip_reqs = self.get_pip_targets_and_reqs_from_sources(terra=terra)
+        # pip_targets += self.pp.pip()
 
         pip_targets_ = " ".join(pip_targets)
         pip_reqs_ = " ".join([f" -r {r} " for r in pip_reqs])
@@ -1574,6 +1583,8 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 dfsfdf = 1
             if '/lib/libpthread-2.31.so' in file_list:
                 dfsfdf = 1
+            if '/usr/lib64/python3.8/lib-dynload/unicodedata.cpython-38-x86_64-linux-gnu.so' not in file_list:
+                fdsfsdfds=1
             file_list.extend(fs_)
 
             os.system('echo 2 > /proc/sys/vm/drop_caches ')
