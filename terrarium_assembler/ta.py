@@ -790,29 +790,30 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
         # we don't want to use --list the first time: For one, we want to be able to filter
         # out some packages with files
         # we don't want to copy
-        # Second, repoquery --list do not include the actual package files when used with --resolve and --recursive (only its dependencies').
+        # Second, repoquery --list do not include the actual package files when used with --resolve 
+        # and --recursive (only its dependencies').
         # So we need a separate step in which all packages are added together.
     
-        for package_ in packages:
-            # if 'postgresql12-server' == package_:
-            #     wttt=1
+        # for package_ in packages:
+        #     # if 'postgresql12-server' == package_:
+        #     #     wttt=1
 
-            # TODO: Somehow parallelize repoquery running
-            for try_ in range(3):
-                try:
-                    files = subprocess.check_output(['repoquery',
-                                                '-y',
-                                                '--installed',
-                                                '--archlist=x86_64,noarch'
-                                                '--cacheonly',
-                                                '--list' ] + [package_], universal_newlines=True).splitlines()
-                    break                                
-                except:
-                    pass                                            
+        #     # TODO: Somehow parallelize repoquery running
+        #     for try_ in range(3):
+        #         try:
+        #             files = subprocess.check_output(['repoquery',
+        #                                         '-y',
+        #                                         '--installed',
+        #                                         '--archlist=x86_64,noarch'
+        #                                         '--cacheonly',
+        #                                         '--list' ] + [package_], universal_newlines=True).splitlines()
+        #             break                                
+        #         except:
+        #             pass                                            
 
-            for file in files:
-                if 'i686' in file:
-                    assert(True)
+        #     for file in files:
+        #         if 'i686' in file:
+        #             assert(True)
             
         
         candidates = subprocess.check_output(['repoquery',
