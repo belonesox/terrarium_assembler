@@ -238,10 +238,19 @@ class PackagesSpec:
     '''
     Packages Spec.
     '''
-    build:   list
+    build:  list
     terra:  list 
     exclude_prefix: list 
     exclude_suffix: list
+
+    def __post_init__(self):    
+        '''
+        Add some base-packages to «build» list
+        '''
+        for p_ in ['git', 'mc', 'pipenv']:
+            if p_ not in self.build:
+                self.build.append(p_)
+        pass                
 
     def is_package_needed(self, package):
         '''
@@ -257,6 +266,7 @@ class PackagesSpec:
                 return False
     
         return True 
+
 
 
 
