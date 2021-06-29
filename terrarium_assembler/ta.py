@@ -304,6 +304,7 @@ class TerrariumAssembler:
             'checkout' : 'checkout sources',
             'install-rpms': 'install downloaded RPMS',
             'download-wheels': 'download needed WHL-python packages',
+            'preinstall-wheels': 'Bootstrap build environment with external wheel packages',
             'build-wheels': 'compile wheels for our python sources',
             'install-wheels': 'Install our and external Python wheels',
             'build-nuitka': 'Compile Python packages to executable',
@@ -413,6 +414,13 @@ class TerrariumAssembler:
         mkdir_p(self.src_dir)    
         mkdir_p(self.out_dir)    
         mkdir_p(self.in_bin)    
+
+        self.our_whl_path = os.path.join(self.in_bin, "ourwheel")
+        mkdir_p(self.our_whl_path)    
+
+        self.ext_whl_path = os.path.join(self.in_bin, "extwheel")
+        mkdir_p(self.ext_whl_path)    
+
 
         os.environ['PATH']="/usr/lib64/ccache:" + os.environ['PATH']
 
@@ -1027,9 +1035,7 @@ fi
         '''
         Get options for installing by pip only using offline downloaded wheel packages
         '''
-        ext_whl_path = os.path.join(self.in_bin, "extwheel")
-        our_whl_path = os.path.join(self.in_bin, "ourwheel")
-        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed ' 
+        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{self.ext_whl_path}" --find-links="{self.our_whl_path}"  --force-reinstall  --ignore-installed ' 
         return scmd
 
 
@@ -1037,8 +1043,6 @@ fi
         '''
         Installing by pip only using offline downloaded wheel packages
         '''
-        ext_whl_path = os.path.join(self.in_bin, "extwheel")
-        our_whl_path = os.path.join(self.in_bin, "ourwheel")
         opts_ = self.pip_install_offline_cmd(target)
         scmd = f'{self.root_dir}/ebin/python3 {opts_} ' 
         self.cmd(scmd)
@@ -1052,8 +1056,6 @@ fi
         # Пока хардкодим вставку нашего питон-пипа. потом конечно надо бы избавится.
         root_dir = self.root_dir
         os.chdir(self.curdir)
-        our_whl_path = os.path.join(self.in_bin, "ourwheel")
-        ext_whl_path = os.path.join(self.in_bin, "extwheel")
 
         os.chdir(os.path.join('in', 'src', 'pip'))
         scmd = f'''{self.root_dir}/ebin/python3 setup.py install  '''
@@ -1070,11 +1072,11 @@ fi
         # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
         if self.args.debug:
             scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install pip {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+{self.root_dir}/ebin/python3 -m pip install pip {self.our_whl_path}/*.whl {self.ext_whl_path}/*.whl --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
             '''
         else:
             scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
             '''
 
         os.chdir(self.curdir)
@@ -1215,29 +1217,28 @@ pipenv run sh -c "pushd {path_to_dir};python3 setup.py bdist_wheel -d {relwheelp
             pass
         self.lines2sh("09-build-wheels", lines, "build-wheels")
 
-    def install_wheels(self):
+
+    def preinstall_wheels(self):
         os.chdir(self.curdir)
 
         lines = []
+        scmd = f'''
+pipenv --rm
+pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
+''' 
+        lines.append(scmd)   
+        self.lines2sh("08-preinstall-wheels", lines, "preinstall-wheels")
+        pass    
 
-        root_dir = self.root_dir
-        args = self.args
-
-        pip_args_ = self.pip_args_from_sources()
-
-        ext_whl_path = os.path.join(self.in_bin, "extwheel")
-        our_whl_path = os.path.join(self.in_bin, "ourwheel")
-
-        # scmd = f'pipenv run python3 -m pip install --find-links="{our_whl_path}" --find-links="{ext_whl_path}" wheel {pip_args_} --force-reinstall  --ignore-installed --no-cache-dir --no-index ' 
-        # lines.append(scmd)   # --no-cache-dir
+    def install_wheels(self):
+        os.chdir(self.curdir)
+        lines = []
 
         scmd = f'''
 pipenv --rm
-pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
+pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
 ''' 
         lines.append(scmd)   # --no-cache-dir
-
-
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
 
@@ -1541,6 +1542,7 @@ rm -f *.tar.*
         self.download_packages()
         self.checkout_sources()
         self.download_pip()
+        self.preinstall_wheels()
         self.build_wheels()
         self.install_wheels()
         self.build_nuitkas()
