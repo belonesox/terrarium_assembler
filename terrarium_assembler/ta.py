@@ -1354,7 +1354,7 @@ rm -f %s/extwheel/*
 
         scmd = f"""
 pushd {sp_}/extwheel
-ls *.tar.* | xargs -i[] -t python3 -m pip wheel []
+ls *.tar.* | xargs -i[] -t python3 -m pip wheel [] --no-deps
 rm -f *.tar.*
 """ 
         lines.append(scmd)                
