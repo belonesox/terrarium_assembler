@@ -238,6 +238,7 @@ class PackagesSpec:
     '''
     Packages Spec.
     '''
+    repos: list
     build:  list
     terra:  list 
     exclude_prefix: list 
@@ -302,6 +303,7 @@ class TerrariumAssembler:
             'download-rpms' : 'download RPMs',
             'download-sources-for-rpms': 'download SRPMs — sources packages for RPMS',
             'checkout' : 'checkout sources',
+            'install-repos': 'install RPM repositories',
             'install-rpms': 'install downloaded RPMS',
             'download-wheels': 'download needed WHL-python packages',
             'preinstall-wheels': 'Bootstrap build environment with external wheel packages',
@@ -334,21 +336,25 @@ class TerrariumAssembler:
             self.args.stage_download_all = True
 
         if self.args.stage_build_and_pack:
+            self.args.stage_install_repos = True
             self.args.stage_install_rpms = True
             self.args.stage_build_wheels = True
+            self.args.stage_preinstall_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
             self.args.stage_pack = self.args.stage_build_and_pack
 
         if self.args.stage_my_source_changed:
-            self.args.stage_checkout = True
+            # self.args.stage_checkout = True
             self.args.stage_download_wheels = True
+            self.args.stage_preinstall_wheels = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
             self.args.stage_pack = self.args.stage_my_source_changed
 
         if self.args.stage_download_all:
+            self.args.stage_install_repos = True
             self.args.stage_download_rpms = True
             self.args.stage_checkout = True
             self.args.stage_download_wheels = True
@@ -467,7 +473,7 @@ class TerrariumAssembler:
 # Stage "%s"
 # Automatically called when terrarium_assembler --stage-%s "%s" 
 set -x
-sudo chmod a+rwx in/src  -R
+#sudo chmod a+rwx in/src  -R
 ''' % (desc, stage_, self.args.specfile))
             lf.write("\n".join(lines))
 
@@ -522,6 +528,8 @@ export PATH="/usr/lib64/ccache:$PATH"
                 build_name = 'build_' + srcname
                 lines.append(fR"""
 time nice -19 pipenv run python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
+#time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
+#time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt 
     """ )
                 self.fs.folders.append(target_dir)
@@ -1145,6 +1153,25 @@ fi
         os.system(scmd)
         pass
 
+
+    def install_repos(self):
+        root_dir = self.root_dir
+        args = self.args
+        packages = []
+        lines = []
+
+    
+        for rp_ in self.ps.repos or []:
+            if rp_.endswith('.rpm'):
+                lines.append(f'sudo dnf install {rp_} -y ')
+            else:
+                lines.append(f'sudo yum-config-manager --add-repo {rp_} -y ')
+            pass
+
+        self.lines2sh("00-install-repos", lines, "install-repos")    
+        pass
+
+
     def download_packages(self):
         root_dir = self.root_dir
         args = self.args
@@ -1539,6 +1566,7 @@ rm -f *.tar.*
         # if self.args.stage_checkout:
 
 
+        self.install_repos()
         self.download_packages()
         self.checkout_sources()
         self.download_pip()
