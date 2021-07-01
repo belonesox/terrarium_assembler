@@ -56,16 +56,50 @@ def wtf(f):
             return True
         
 
-def yaml_load(filename):
-   '''
-   Load yaml file into edict. Hide edict deps.
-   ''' 
-   import yaml
+def yaml_load(filename, vars__=None):
+    '''
+    Load yaml file into edict. Hide edict deps.
+    ''' 
+    import yaml
+    from jinja2 import Environment, FileSystemLoader, Template, Undefined, DebugUndefined
 
-   fc = None
-   with open(filename, 'r') as f:
-     fc = edict(yaml.safe_load(f))
-   return fc
+    vars_ = {}
+    if vars__:
+        vars_ = vars__
+
+    fc = None
+    # with open(filename, 'r') as f:
+    dir_, filename_ = os.path.split(os.path.abspath(filename))
+    file_loader = FileSystemLoader(dir_)
+    env = Environment(loader=file_loader, undefined=DebugUndefined)
+    env.trim_blocks = True
+    env.lstrip_blocks = True
+    env.rstrip_blocks = True            
+
+    template = env.get_template(filename_)
+
+    real_yaml = ''
+    try:
+        for try_ in range(5):
+            real_yaml = template.render(vars_)
+            ld = yaml.safe_load(real_yaml)
+            vars_ = {**vars_, **ld}
+
+        # for key in vars_:
+        #     if key.endswith('_dir'):
+        #         vars_[key] = vars_[key].replace('/', '@')
+
+        real_yaml = template.render(vars_)
+        fc = edict(yaml.safe_load(template.render(vars_)))
+    except Exception as ex_:
+        print(f'Error parsing {filename_} see "troubles.yml" ')    
+        with open("troubles.yml", 'w', encoding='utf-8') as lf:
+            lf.write(real_yaml)
+        raise ex_    
+    # for key in fc:
+    #     if key.endswith('_dir'):
+    #         fc[key] = fc[key].replace('/', '\\')
+    return fc
 
 
 def fix_binary(path, libpath):

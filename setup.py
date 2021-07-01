@@ -15,6 +15,7 @@ requirements = [
     'pytictoc',
 #    'nuitka',
     'file-magic',
+    'python-magic',
     'jinja2', 
     'pyyaml',
     'pipenv',

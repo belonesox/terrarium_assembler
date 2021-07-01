@@ -58,56 +58,57 @@ t = TicToc()
 #         distutils.dir_util.copy_tree(src, dst, **kwargs)
 
 
-@dc.dataclass
-class BinRegexps:
-    '''
-    Binary regexps. 
-    '''
-    need_patch: list #bins that need to be patched.   
-    just_copy:  list #bins that just need to be copied.
-    need_exclude:    list #bins that just need to be copied.
+# @dc.dataclass
+# class BinRegexps:
+#     '''
+#     Binary regexps. 
+#     '''
+#     need_patch: list #bins that need to be patched.   
+#     just_copy:  list #bins that just need to be copied.
+#     need_exclude:    dict #bins that just need to be copied.
 
-    def __post_init__(self):
-        self.just_copy_re = []
-        if self.just_copy:
-            for res_ in self.just_copy or []:
-                re_ = re.compile(res_ + '$')
-                self.just_copy_re.append(re_) 
+#     def __post_init__(self):
+#         self.just_copy_re = []
+#         if self.just_copy:
+#             for res_ in self.just_copy or []:
+#                 re_ = re.compile(res_ + '$')
+#                 self.just_copy_re.append(re_) 
 
-        self.need_patch_re = []
-        for res_ in self.need_patch or []:
-            re_ = re.compile(res_ + '$')
-            self.need_patch_re.append(re_) 
+#         self.need_patch_re = []
+#         for res_ in self.need_patch or []:
+#             re_ = re.compile(res_ + '$')
+#             self.need_patch_re.append(re_) 
 
-        self.need_exclude_re = []
-        for res_ in self.need_exclude.common or []:
-            re_ = re.compile(res_ + '$')
-            self.need_exclude_re.append(re_) 
+#         self.need_exclude_re = {}
+#         for res_ in self.need_exclude.common or []:
+#             re_ = re.compile(res_ + '$')
+#             self.need_exclude_re[re_] = 0
 
 
 
-    def is_just_copy(self, f):
-        for re_ in self.just_copy_re:
-            if re_.match(f):
-                return True
-        return False    
+#     def is_just_copy(self, f):
+#         for re_ in self.just_copy_re:
+#             if re_.match(f):
+#                 return True
+#         return False    
 
-    def is_need_patch(self, f):
-        for re_ in self.need_patch_re:
-            if re_.match(f):
-                return True
-        return False    
+#     def is_need_patch(self, f):
+#         for re_ in self.need_patch_re:
+#             if re_.match(f):
+#                 return True
+#         return False    
 
-    def is_need_exclude(self, f):
-        for re_ in self.need_exclude_re:
-            if re_.match(f):
-                return True
-        return False    
+#     def is_need_exclude(self, f):
+#         for re_ in self.need_exclude_re:
+#             if re_.match(f):
+#                 self.need_exclude_re[re_] += 1
+#                 return True
+#         return False    
 
-    def is_needed(self, f):
-        return (self.is_just_copy(f) or self.is_need_patch(f)) and not self.is_need_exclude(f)
+#     def is_needed(self, f):
+#         return (self.is_just_copy(f) or self.is_need_patch(f)) and not self.is_need_exclude(f)
     
-    pass
+#     pass
 
 def fucking_magic(f):
     # m = magic.detect_from_filename(f)
@@ -135,7 +136,7 @@ class BinRegexps:
     '''
     need_patch: list #bins that need to be patched.   
     just_copy:  list #bins that just need to be copied.
-    need_exclude: list #bins that just need to be copied.
+    need_exclude: dict #bins that just need to be copied.
     debug: bool 
 
     def __post_init__(self):
@@ -149,6 +150,17 @@ class BinRegexps:
                 print("*"*20)
                 raise ex_
 
+        def add_listrex2dict(listrex, adict):            
+            for rex in listrex or []:
+                try:
+                    re_ = re.compile(rex + '$')
+                    adict[re_] = 0
+                except Exception as ex_:
+                    print("*"*20)
+                    print("Cannot regx-compile", rex)
+                    print("*"*20)
+                    raise ex_
+
 
         def add_listrex2list(listrex, alist):            
             for rex in listrex or []:
@@ -160,12 +172,12 @@ class BinRegexps:
         self.need_patch_re = []
         add_listrex2list(self.need_patch, self.need_patch_re)
 
-        self.need_exclude_re = []
-        add_listrex2list(self.need_exclude.common, self.need_exclude_re)
+        self.need_exclude_re = {}
+        add_listrex2dict(self.need_exclude.common, self.need_exclude_re)
         if self.debug:
-            add_listrex2list(self.need_exclude.debug, self.need_exclude_re)
+            add_listrex2dict(self.need_exclude.debug, self.need_exclude_re)
         else:
-            add_listrex2list(self.need_exclude.release, self.need_exclude_re)                       
+            add_listrex2dict(self.need_exclude.release, self.need_exclude_re)                       
         pass
 
     def is_just_copy(self, f):
@@ -336,10 +348,9 @@ class TerrariumAssembler:
             self.args.stage_download_all = True
 
         if self.args.stage_build_and_pack:
-            self.args.stage_install_repos = True
             self.args.stage_install_rpms = True
-            self.args.stage_build_wheels = True
             self.args.stage_preinstall_wheels = True
+            self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
             self.args.stage_pack = self.args.stage_build_and_pack
@@ -361,16 +372,23 @@ class TerrariumAssembler:
 
         specfile_  = expandpath(args.specfile)
         os.environ['TERRA_SPECDIR'] = os.path.split(specfile_)[0]
-        self.spec = spec = yaml_load(specfile_)    
 
-        self.start_dir = os.getcwd()
-         
+
         self.tvars = edict() 
         self.tvars.python_version_1, self.tvars.python_version_2 = sys.version_info[:2]
         self.tvars.py_ext = ".pyc"
         if self.args.debug:
             self.tvars.py_ext = ".py"
         self.tvars.release = not self.args.debug
+        with open('/etc/fedora-release', 'r', encoding='utf-8') as lf:
+            ls = lf.read()
+            self.tvars.fc_version = re.search('(\d\d)', ls).group(1)
+
+        self.spec = spec = yaml_load(specfile_, self.tvars)    
+
+        self.start_dir = os.getcwd()
+         
+
 
         need_patch = just_copy = need_exclude = None    
         if 'bin_regexps' in spec:
@@ -1043,7 +1061,9 @@ fi
         '''
         Get options for installing by pip only using offline downloaded wheel packages
         '''
-        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{self.ext_whl_path}" --find-links="{self.our_whl_path}"  --force-reinstall  --ignore-installed ' 
+        our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
+        ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed ' 
         return scmd
 
 
@@ -1077,19 +1097,24 @@ fi
             terra_ = False
 
         pip_args_ = self.pip_args_from_sources(terra=terra_)
+
+        our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
+        ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+
         # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
         if self.args.debug:
             scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install pip {self.our_whl_path}/*.whl {self.ext_whl_path}/*.whl --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+{self.root_dir}/ebin/python3 -m pip install pip {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
             '''
         else:
             scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
             '''
 
         os.chdir(self.curdir)
         os.system(scmd)
-        os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
+        if self.tvars.fc_version == '32':
+            os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
         # if self.args.debug:
         #     pl_ = self.get_wheel_list_to_install()
@@ -1147,8 +1172,8 @@ fi
                     os.system(f"yarn build ")
 
 
-
-        scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
+        if self.tvars.fc_version == '32':
+            scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
         print(scmd)
         os.system(scmd)
         pass
@@ -1217,8 +1242,8 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
         ]
         self.lines2sh("02-install-rpms", ilines, "install-rpms")    
 
-        self.lines2sh("03-download-rpms", lines, "download-rpms")    
-        self.lines2sh("04-install-rpms", ilines, "install-rpms")    
+        # self.lines2sh("03-download-rpms", lines, "download-rpms")    
+        # self.lines2sh("04-install-rpms", ilines, "install-rpms")    
         pass
 
 
@@ -1248,10 +1273,13 @@ pipenv run sh -c "pushd {path_to_dir};python3 setup.py bdist_wheel -d {relwheelp
     def preinstall_wheels(self):
         os.chdir(self.curdir)
 
+        ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+
         lines = []
         scmd = f'''
 pipenv --rm
-pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
+pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
 ''' 
         lines.append(scmd)   
         self.lines2sh("08-preinstall-wheels", lines, "preinstall-wheels")
@@ -1261,9 +1289,13 @@ pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{self.ex
         os.chdir(self.curdir)
         lines = []
 
+        our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
+        ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+
         scmd = f'''
 pipenv --rm
-pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
+pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
 ''' 
         lines.append(scmd)   # --no-cache-dir
         self.lines2sh("15-install-wheels", lines, "install-wheels")
@@ -1345,15 +1377,14 @@ rm -f %s/extwheel/*
 
         pip_args_ = self.pip_args_from_sources()
 
-        scmd = f"python3 -m pip download wheel {pip_args_} --dest {self.in_bin}/extwheel " 
+        scmd = f"python3 -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel " 
         lines.append(scmd)                
 
-        sp_ = os.path.relpath(self.in_bin, start=self.curdir)        
-        scmd = f"rm -f {sp_}/extwheel/enum34* "
+        scmd = f"rm -f {bin_dir}/extwheel/enum34* "
         lines.append(scmd)                
 
         scmd = f"""
-pushd {sp_}/extwheel
+pushd {bin_dir}/extwheel
 ls *.tar.* | xargs -i[] -t python3 -m pip wheel [] --no-deps
 rm -f *.tar.*
 """ 
@@ -1545,7 +1576,10 @@ rm -f *.tar.*
             from ctypes.util import _findLib_ld
             libc_path = _findLib_ld('c')
             libc_path = "/lib64/libc-2.31.so" # temp hack
-            shutil.copy2(libc_path, f'{root_dir}/lib64/libc.so')
+
+            from ctypes.util import _findSoname_ldconfig
+            libc_path = "/lib64/" + _findSoname_ldconfig('c')
+            shutil.copy2(libc_path, f'{root_dir}/lib64/libc.so', follow_symlinks=True)
 
             print("Install templates takes")
             t.toc()
@@ -1750,6 +1784,13 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 os.system(scmd)
                 pass
 
+            with open(f'{self.curdir}/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
+                lf.write('obsoletes excludes \n')
+                for re_, cnt_ in self.br.need_exclude_re.items():
+                    if cnt_ == 0:
+                        pat_ = re_.pattern
+                        lf.write(f'   {pat_} \n')
+
             # size_ = sum(file.stat().st_size for file in pathlib.Path(self.root_dir).rglob('*'))
             size_  = folder_size(self.root_dir, follow_symlinks=False)
             print("Size ", size_/1024/1024, 'Mb')
@@ -1783,25 +1824,3 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             os.system(scmd)
             print(filepath)
     
-        #     exclude_dirs = ['.git', '.vagrant', 'tmp']
-
-        #     for root, dirnames, filenames in os.walk(self.curdir):
-        #         ok = True
-        #         for ex_ in exclude_dirs:
-        #             if os.path.sep + ex_ + os.path.sep in root:
-        #                 ok = False
-        #                 break
-
-        #         if not ok:
-        #             continue        
-
-        #         for file_ in filenames:
-        #             file = '' + file_
-        #             print(os.path.join(root, file))
-        #             iso.add_file(
-        #                 os.path.join(root, file),
-        #                 f'/{file};3',
-        #                 #joliet_path=f'/{file}',
-        #                 #rr_name=file
-        #                 )
-        # # current_total_size += path.getsize(path.join(root, file))
