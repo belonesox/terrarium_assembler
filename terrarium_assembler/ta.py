@@ -380,9 +380,13 @@ class TerrariumAssembler:
         if self.args.debug:
             self.tvars.py_ext = ".py"
         self.tvars.release = not self.args.debug
-        with open('/etc/fedora-release', 'r', encoding='utf-8') as lf:
-            ls = lf.read()
-            self.tvars.fc_version = re.search('(\d\d)', ls).group(1)
+        self.tvars.fc_version = ''
+        try:
+            with open('/etc/fedora-release', 'r', encoding='utf-8') as lf:
+                ls = lf.read()
+                self.tvars.fc_version = re.search('(\d\d)', ls).group(1)
+        except:
+            pass # Building not on Fedora.        
 
         self.spec = spec = yaml_load(specfile_, self.tvars)    
 
