@@ -1031,7 +1031,7 @@ fi
 """ % vars())
 
         self.lines2sh("06-checkout", lines, 'checkout')    
-        self.lines2sh("96-pullall", lines2, 'checkout')    
+        # self.lines2sh("96-pullall", lines2)    
         pass
 
     def explode_pp_node(self, td_):
