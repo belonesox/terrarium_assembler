@@ -1116,7 +1116,7 @@ fi
             '''
 
         os.chdir(self.curdir)
-        os.system(scmd)
+        self.cmd(scmd)
         if self.tvars.fc_version == '32':
             os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
@@ -1168,12 +1168,13 @@ fi
 
                 os.chdir(setup_path)
                 for reqs_ in glob.glob(f'**/package.json', recursive=True):
-                    os.chdir(setup_path)
-                    dir_ = os.path.split(reqs_)[0]
-                    if dir_:
-                        os.chdir(dir_)
-                    os.system(f"yarn install ")
-                    os.system(f"yarn build ")
+                    if not 'node_modules' in reqs_:
+                        os.chdir(setup_path)
+                        dir_ = os.path.split(reqs_)[0]
+                        if dir_:
+                            os.chdir(dir_)
+                        os.system(f"yarn install ")
+                        os.system(f"yarn build ")
 
 
         if self.tvars.fc_version == '32':
@@ -1347,7 +1348,16 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
 
             reqs_path = 'requirements.txt'
             for reqs_ in glob.glob(f'**/{reqs_path}', recursive=True):
-                pip_reqs.append(os.path.join(os.path.relpath(setup_path, start=self.curdir), reqs_))
+                if 'django-q' in setup_path:
+                    rewqwerew=1
+                with open(reqs_, 'r', encoding='utf-8') as lf:
+                    reqs__ = lf.read()
+                    if not '--hash=sha256' in reqs__:
+                        # very strange requirements.txt, we cannot download it.
+                        pip_reqs.append(os.path.join(os.path.relpath(setup_path, start=self.curdir), reqs_))
+                    else:
+                        print(f'«--hash=sha256» in {setup_path}/{reqs_}')
+                        
             pass
 
         return pip_targets, pip_reqs
