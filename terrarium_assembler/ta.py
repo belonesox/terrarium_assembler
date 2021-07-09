@@ -1095,7 +1095,7 @@ fi
         os.chdir(self.curdir)
 
         os.chdir(os.path.join('in', 'src', 'pip'))
-        scmd = f'''{self.root_dir}/ebin/python3 setup.py install  '''
+        scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
         os.system(scmd)
 
         os.chdir(self.curdir)
@@ -1779,8 +1779,8 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                             # shutil.copy2(f, os.path.join(root_dir, libfile))
                             # add(f, arcname=libfile, recursive=False)  
                 pass
-                if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
-                    fsdfsdf = 1  
+                # if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
+                #     fsdfsdf = 1  
 
         
             dfsfsdfsdf=1
@@ -1788,12 +1788,12 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 lf.write('\n'.join(file_list))
 
             for f in file_list:
-                if 'java-11' in f:
-                    dfsfdsf=1
+                # if 'java-11' in f:
+                #     dfsfdsf=1
                 copy_file_to_environment(f)
 
-            if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
-                fsdfsdf = 1  
+            # if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
+            #     fsdfsdf = 1  
 
             if self.fs:    
                 for folder_ in self.fs.folders:
