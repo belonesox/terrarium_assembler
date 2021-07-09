@@ -199,7 +199,8 @@ class BinRegexps:
         return False    
 
     def is_needed(self, f):
-        return (self.is_just_copy(f) or self.is_need_patch(f)) and not self.is_need_exclude(f)
+        return (self.is_just_copy(f) or self.is_need_patch(f)) 
+        #and not self.is_need_exclude(f)
     
     pass
 
@@ -665,8 +666,8 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
             wtf333 = 1
 
 
-        if self.br.is_need_exclude(f):
-            return False
+        # if self.br.is_need_exclude(f):
+        #     return False
 
         if self.br.is_needed(f):
             return True
@@ -882,6 +883,8 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
         return res_
 
     def add(self, what, to_=None, recursive=True):
+        if 'java-11' in what:
+            dfsfsfdsf=1
         try:
             if not to_:
                 to_ = what
@@ -893,9 +896,11 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
             # ar.add(f)
             if os.path.isdir(what):
                 # copy_tree(what, os.path.join(root_dir, to_))
-                if not os.path.exists(os.path.join(self.root_dir, to_)):
-                    shutil.copytree(what, os.path.join(self.root_dir, to_), symlinks=True, copy_function=self.mycopy)
-                    #, exist_ok=True)
+                # Какого хуя!!!!!!!!!!
+                # if not os.path.exists(os.path.join(self.root_dir, to_)):
+                #     shutil.copytree(what, os.path.join(self.root_dir, to_), symlinks=True, copy_function=self.mycopy)
+                #     #, exist_ok=True)
+                pass
             else:
                 self.mycopy(what, os.path.join(self.root_dir, to_))
             pass
@@ -1193,7 +1198,7 @@ fi
     
         for rp_ in self.ps.repos or []:
             if rp_.endswith('.rpm'):
-                lines.append(f'sudo dnf install {rp_} -y ')
+                lines.append(f'sudo dnf install --nogpgcheck {rp_} -y ')
             else:
                 lines.append(f'sudo yum-config-manager --add-repo {rp_} -y ')
             pass
@@ -1242,7 +1247,7 @@ fi
         shfilename = "02-install-rpms"    
         ilines = [
 """
-sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
+sudo dnf install --nogpgcheck --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
 """ % vars()
         ]
         self.lines2sh("02-install-rpms", ilines, "install-rpms")    
@@ -1268,7 +1273,7 @@ sudo dnf install --skip-broken %(in_bin)s/rpms/*.rpm -y --allowerasing
             # scmd = "pushd %s" % (path_to_dir)
             # lines.append(scmd)
             scmd = f"""
-pipenv run sh -c "pushd {path_to_dir};python3 setup.py bdist_wheel -d {relwheelpath};popd" 
+pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup.py bdist_wheel -d {relwheelpath};popd" 
 """
             lines.append(scmd)
             pass
@@ -1325,8 +1330,8 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
 
 
         if terra:
-            projects += self.pp.terra.projects
-            pip_targets += self.pp.terra.pip
+            projects += self.pp.terra.projects or []
+            pip_targets += self.pp.terra.pip or []
         else:
             projects += self.pp.projects()
             pip_targets += self.pp.pip()
@@ -1419,32 +1424,30 @@ rm -f *.tar.*
 
         trace_file = None
         try:
-            trace_file = spec.tests.tracefile
+            trace_file_glob = spec.tests.tracefile
         except:
             print('You should specify tests→tracefile')    
             return
 
         used_files = set()
+        for trace_file in glob.glob(trace_file_glob):
+            re_file = re.compile(r'''.*\(.*"(?P<filename>[^"]+)".*''')
+            for line in open(trace_file, 'r', encoding='utf-8').readlines():
+                m_ = re_file.match(line)
+                if m_:
+                    fname = m_.group('filename')
+                    # Heuristic to process strace files from Vagrant virtualboxes
+                    fname = fname.replace('/vagrant', self.curdir)
+                    # Heuristic to process strace files from remote VM, mounted by sshmnt
+                    fname = re.sub(fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
+                    if os.path.isabs(fname):
+                        fname = os.path.abspath(fname)
+                        if fname.startswith(abs_path_to_out_dir):
+                            if os.path.islink(fname):
+                                link_ = os.readlink(fname)
+                                fname = os.path.abspath(os.path.join(os.path.split(fname)[0], link_))
+                            used_files.add(os.path.abspath(fname))
 
-        re_file = re.compile(r'''.*\(.*"(?P<filename>[^"]+)".*''')
-        for line in open(trace_file, 'r', encoding='utf-8').readlines():
-            m_ = re_file.match(line)
-            if m_:
-                fname = m_.group('filename')
-                # Heuristic to process strace files from Vagrant virtualboxes
-                fname = fname.replace('/vagrant', self.curdir)
-                # Heuristic to process strace files from remote VM, mounted by sshmnt
-                if '/mnt/local/home/stas/projects/deploy-for-audit/linux_distro/out/ebin/../pbin/libtorch_cpu.so' in fname:
-                   wtrr=1
-                fname = re.sub(fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
-                if os.path.isabs(fname):
-                    fname = os.path.abspath(fname)
-                    if fname.startswith(abs_path_to_out_dir):
-                        if os.path.islink(fname):
-                            link_ = os.readlink(fname)
-                            fname = os.path.abspath(os.path.join(os.path.split(fname)[0], link_))
-                        used_files.add(os.path.abspath(fname))
-        # print("\n".join(sorted(used_files)))
         existing_files = {}
         for dirpath, dirnames, filenames in os.walk(abs_path_to_out_dir):
             for filename in filenames:
@@ -1460,8 +1463,17 @@ rm -f *.tar.*
         top10 = sorted(existing_files.items(), key=lambda x: -x[1])[:1000]
         print("Analyse first:") 
         for f, s in top10:
-            f_ = f.replace(abs_path_to_out_dir, '    - .*')
-            print(f'{f_} # \t {s}')
+            rel_f = f.replace(abs_path_to_out_dir, '')
+            unban_ = False
+            for unban in [#'/usr/lib64/python3.9','/lib64/python3.9'
+                        ]:
+                if unban in rel_f:
+                    unban_ = True
+                    breakpoint
+            if unban_ :
+                continue        
+            f_ = re.escape(rel_f)
+            print(f'      - .*{f_} # \t {s} \t {rel_f}')
 
         # print("\n".join([f'{f}: \t {s}' for f,s in top10]))
 
@@ -1503,6 +1515,18 @@ rm -f *.tar.*
         tar = tarfile.open(tbzname, "w:bz2")
         tar.add(self.curdir, recursive=True, filter=filter_)
         tar.close()    
+
+    def remove_exclusions(self):
+        '''
+        Postprocessing, removing not needed files after installing python modules, etc
+        '''
+        from pathlib import Path
+        for path in Path(self.root_dir).rglob('*'):
+            rp_ = str(path.absolute())
+            if '/mildata/baselines_model.ckpt' in rp_:
+                sfdsfds =1
+            if self.br.is_need_exclude(rp_):
+                    path.unlink(missing_ok=True)
 
 
     def process(self):
@@ -1656,8 +1680,11 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             ''' % vars()])
 
         root_dir = 'out'
+
+
         if self.args.stage_pack:
             root_dir = self.root_dir = expandpath(args.stage_pack)
+            # self.remove_exclusions()
 
             # install_templates(root_dir, args)
 
@@ -1672,7 +1699,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 dfsfdf = 1
             if '/lib/libpthread-2.31.so' in file_list:
                 dfsfdf = 1
-            if '/usr/lib64/python3.8/lib-dynload/unicodedata.cpython-38-x86_64-linux-gnu.so' not in file_list:
+            if 'java-11' in file_list:
                 fdsfsdfds=1
             file_list.extend(fs_)
 
@@ -1694,7 +1721,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 if 'libpthread-2.31.so' in f:
                     wtff = 1
 
-                if '/usr/bin/ld' in f:
+                if 'java-11' in f:
                     wtff = 1
 
                 if self.br.is_need_patch(f):  
@@ -1751,26 +1778,40 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                             self.add(f, libfile, recursive=False)
                             # shutil.copy2(f, os.path.join(root_dir, libfile))
                             # add(f, arcname=libfile, recursive=False)  
+                pass
+                if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
+                    fsdfsdf = 1  
+
         
-        
+            dfsfsdfsdf=1
+            with open('file-list-from-packages.txt', 'w', encoding='utf-8') as lf:
+                lf.write('\n'.join(file_list))
+
             for f in file_list:
+                if 'java-11' in f:
+                    dfsfdsf=1
                 copy_file_to_environment(f)
+
+            if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
+                fsdfsdf = 1  
 
             if self.fs:    
                 for folder_ in self.fs.folders:
                     for dirpath, dirnames, filenames in os.walk(folder_):
                         for filename in filenames:
                             f = os.path.join(dirpath, filename)
-                            if self.br.is_need_exclude(f):
-                                continue
+                            # if self.br.is_need_exclude(f):
+                            #     continue
                             # if not self.should_copy(f):
                             #     continue
                             if self.br.is_need_patch(f):  
                                 self.process_binary(f)
                                 continue
                             libfile = os.path.join(self.root_dir, f.replace(folder_, 'pbin'))
-                            if self.br.is_need_exclude(libfile):
-                                continue
+                            if 'java-11' in libfile:
+                                erwerew =1
+                            # if self.br.is_need_exclude(libfile):
+                            #     continue
                             self.add(f, libfile, recursive=False)
                     pass
 
@@ -1806,7 +1847,12 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                         lf.write(f'   {pat_} \n')
 
             # size_ = sum(file.stat().st_size for file in pathlib.Path(self.root_dir).rglob('*'))
+            
+            # Postprocessing, removing not needed files after installing python modules, etc
+            self.remove_exclusions()
+            
             size_  = folder_size(self.root_dir, follow_symlinks=False)
+
             print("Size ", size_/1024/1024, 'Mb')
 
         if self.args.stage_make_isoexe:
@@ -1836,5 +1882,8 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
         ''' % vars()).replace('\n', ' ').strip()
             print(scmd)
             os.system(scmd)
+            os.chdir(isodir)
+            scmd = f'''ln -sf {filename} last.iso'''
+            self.cmd(scmd)
             print(filepath)
     
