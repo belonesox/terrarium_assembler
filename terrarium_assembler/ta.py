@@ -1489,6 +1489,8 @@ rm -f *.tar.*
         banned_start = ['tmp']
         banned_mid = ['/out/', '/wtf/', '/.vagrant/', '/.git/']
 
+        # there are regularly some files unaccessable for reading.
+        self.cmd('sudo chmod a+rx /usr/lib/cups -R')
         self.cmd('systemd-tmpfiles --remove dnf.conf')
 
         def filter_(tarinfo):
@@ -1656,7 +1658,6 @@ rm -f *.tar.*
         specfile_ = self.args.specfile
         self.lines2sh("50-pack", [
             '''
-sudo chmod a+rx /usr/lib/cups -R           
 #terrarium_assembler --stage-pack=./out "%(specfile_)s" --stage-make-isoexe
 terrarium_assembler --stage-pack=./out "%(specfile_)s" 
             ''' % vars()])
