@@ -1008,6 +1008,8 @@ pushd %(newpath)s
 git checkout %(git_branch)s
 git config core.fileMode false
 git config core.autocrlf input
+git lfs install 
+git lfs pull
 popd
 ''' % vars()
                 lines.append(scmd)
@@ -1864,13 +1866,16 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 label = self.spec.label
             installscript = "install-me.sh" % vars()
             installscriptpath = os.path.abspath(os.path.join("tmp/", installscript))
-            print("*"*10)
-            print(self.curdir)
-            print("*"*10)
+            if os.path.exists(installscriptpath):
+                os.unlink(installscriptpath)
+
+            pmode = ''
+            if shutil.which('pbzip2'):
+                pmode = ' --threads 8 --pbzip2 ' 
             os.chdir(self.curdir)
             self.cmd(f'chmod a+x {root_dir}/install-me')
-            scmd = ('''
-            makeself.sh --needroot %(root_dir)s  %(installscriptpath)s "Installation" ./install-me             
+            scmd = (f'''
+            makeself.sh {pmode} --needroot {root_dir} {installscriptpath} "Installation" ./install-me             
         ''' % vars()).replace('\n', ' ').strip()
             self.cmd(scmd)
 
