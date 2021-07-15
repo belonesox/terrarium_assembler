@@ -1492,7 +1492,7 @@ rm -f *.tar.*
         banned_mid = ['/out/', '/wtf/', '/.vagrant/', '/.git/']
 
         # there are regularly some files unaccessable for reading.
-        self.cmd('sudo chmod a+rx /usr/lib/cups -R')
+        self.cmd('sudo chmod a+r /usr/lib/cups -R')
         self.cmd('systemd-tmpfiles --remove dnf.conf')
 
         def filter_(tarinfo):
@@ -1790,9 +1790,8 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             with open('file-list-from-packages.txt', 'w', encoding='utf-8') as lf:
                 lf.write('\n'.join(file_list))
 
+            self.cmd('sudo chmod a+r /usr/lib/cups -R')
             for f in file_list:
-                # if 'java-11' in f:
-                #     dfsfdsf=1
                 copy_file_to_environment(f)
 
             # if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
