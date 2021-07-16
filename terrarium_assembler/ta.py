@@ -1290,6 +1290,7 @@ pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup
         lines = []
         scmd = f'''
 pipenv --rm
+rm -f Pipfile*
 pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
 pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
 ''' 
@@ -1474,7 +1475,22 @@ rm -f *.tar.*
                     breakpoint
             if unban_ :
                 continue        
-            f_ = re.escape(rel_f)
+            # f_ = re.escape(rel_f)
+            f_ = rel_f
+            for rex_ in [
+                r"\.so\.[\d]+\.[\d]+\.[\d]+", #act\.so\.4\.0\.1 → act\.so\.\d\.\d\.\d 
+                r"\.so\.[\d]+\.[\d]+", 
+                r"\.so\.[\d]+", 
+                r"[\d]+\.[\d]+\.so", 
+                r"[\d]+\.so", 
+                r"-[\d]+\.[\d]+-[\d]+", 
+            ]:
+                def replacement_f(mobj):
+                    return rex_
+                f_ = re.sub(rex_, replacement_f, f_)
+            if f_ == rel_f:    
+               f_ = re.escape(rel_f)
+
             print(f'      - .*{f_} # \t {s} \t {rel_f}')
 
         # print("\n".join([f'{f}: \t {s}' for f,s in top10]))
@@ -1532,6 +1548,13 @@ rm -f *.tar.*
             if self.br.is_need_exclude(rp_):
                     path.unlink(missing_ok=True)
 
+        # killing broken links    
+        for path in Path(self.root_dir).rglob('*'):
+            rp_ = str(path.absolute())
+            if os.path.islink(rp_) and not os.path.exists(rp_):
+                    path.unlink(missing_ok=True)
+
+        pass            
 
     def process(self):
         '''
@@ -1691,12 +1714,17 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
 
             # install_templates(root_dir, args)
 
-            packages_to_deploy = self.ps.terra
+            packages_to_deploy = []
+            pips_to_deploy = []
             if self.args.debug:
                 packages_to_deploy += self.ps.terra + self.ps.build
+                pips_to_deploy = self.pp.pip()
+            else:
+                packages_to_deploy = self.ps.terra
+                pips_to_deploy = self.pp.terra.pip or []
 
 
-            fs_ = self.generate_file_list_from_pips(self.pp.pip())
+            fs_ = self.generate_file_list_from_pips(pips_to_deploy)
             file_list = self.generate_file_list_from_packages(self.dependencies(packages_to_deploy))
             if '/lib/libpthread-2.31.so' in fs_:
                 dfsfdf = 1
