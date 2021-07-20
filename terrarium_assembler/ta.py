@@ -991,7 +991,12 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
         lines2 = []
         in_src = os.path.relpath(self.src_dir, start=self.curdir)
         # lines.add("rm -rf %s " % in_src)
-        lines.append("mkdir -p %s " % in_src)
+        lines.append(f"""
+mkdir -p tmp/snaphots-src
+snapshotdir=$(date +"tmp/snaphots-src/snapshot-src-before-%Y-%m-%d-%H-%M-%S")
+mv in/src $snapshotdir
+mkdir -p {in_src}
+""")
         already_checkouted = set()
         for td_ in self.pp.projects() + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
