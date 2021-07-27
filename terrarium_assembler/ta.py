@@ -1178,15 +1178,15 @@ fi
                 # scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
                 self.cmd(f"{root_dir}/ebin/python3 setup.py install --single-version-externally-managed  {release_mod} --root / --force  ")  #--no-deps
 
-                os.chdir(setup_path)
-                for reqs_ in glob.glob(f'**/package.json', recursive=True):
-                    if not 'node_modules' in reqs_:
-                        os.chdir(setup_path)
-                        dir_ = os.path.split(reqs_)[0]
-                        if dir_:
-                            os.chdir(dir_)
-                        os.system(f"yarn install ")
-                        os.system(f"yarn build ")
+                # os.chdir(setup_path)
+                # for reqs_ in glob.glob(f'**/package.json', recursive=True):
+                #     if not 'node_modules' in reqs_:
+                #         os.chdir(setup_path)
+                #         dir_ = os.path.split(reqs_)[0]
+                #         if dir_:
+                #             os.chdir(dir_)
+                #         os.system(f"yarn install ")
+                #         os.system(f"yarn build ")
 
 
         if self.tvars.fc_version == '32':
@@ -1571,6 +1571,11 @@ rm -f *.tar.*
         root_dir = self.root_dir 
         
         def install_templates(root_dir, args):
+            if 'prepare_install' in self.spec:
+                for scmd in self.spec.prepare_install.strip().split('\n'):
+                    self.cmd(scmd)
+
+
             if 'copy_folders' in self.spec:
                 for it_ in self.spec.copy_folders:
                     pass
