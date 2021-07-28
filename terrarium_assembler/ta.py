@@ -256,6 +256,7 @@ class PackagesSpec:
     terra:  list 
     exclude_prefix: list 
     exclude_suffix: list
+    remove_from_download: list
 
     def __post_init__(self):    
         '''
@@ -468,7 +469,7 @@ class TerrariumAssembler:
         May be here we will can catch output and hunt for heizenbugs
         '''    
         print(scmd)
-        os.system(scmd)
+        return os.system(scmd)
 
     def packages2list(self, pl):
         pl_ = []
@@ -1240,6 +1241,10 @@ fi
         scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --arch=noarch  --source %(packages)s -y ' % vars()
         lines_src.append(scmd)
 
+        for pack_ in self.ps.remove_from_download or []:
+            scmd = f'rm -f {in_bin}/rpms/{pack_}* '
+            lines.append(scmd)
+
         # for package in self.dependencies(pls_, local=False) + purls_:
         #     # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
         #     scmd = 'dnf download --downloaddir "%(in_bin)s/rpms" --arch=x86_64 "%(package)s" -y ' % vars()
@@ -1917,7 +1922,9 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             scmd = (f'''
             makeself.sh {pmode} --needroot {root_dir} {installscriptpath} "Installation" ./install-me             
         ''' % vars()).replace('\n', ' ').strip()
-            self.cmd(scmd)
+            if not self.cmd(scmd)==0:
+                print(f'« {scmd} » failed!')
+                return
 
             filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
             isodir = root_dir + '.iso'
