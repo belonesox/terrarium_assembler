@@ -1656,6 +1656,9 @@ rm -f *.tar.*
             libc_path = "/lib64/" + _findSoname_ldconfig('c')
             shutil.copy2(libc_path, f'{root_dir}/lib64/libc.so', follow_symlinks=True)
 
+            ebin_ = os.path.join(root_dir, 'ebin')
+            self.cmd(f'chmod a+x {ebin_}/*')
+
             print("Install templates takes")
             t.toc()
             pass
