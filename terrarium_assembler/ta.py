@@ -1205,10 +1205,12 @@ fi
 
     
         for rp_ in self.ps.repos or []:
-            if rp_.endswith('.rpm'):
+            if rp_.lower().endswith('.gpg'):
+                lines.append(f'sudo rpm --import {rp_} ')
+            elif rp_.endswith('.rpm'):
                 lines.append(f'sudo dnf install --nogpgcheck {rp_} -y ')
             else:
-                lines.append(f'sudo yum-config-manager --add-repo {rp_} -y ')
+                lines.append(f'sudo dnf config-manager --add-repo {rp_} -y ')
             pass
 
         self.lines2sh("00-install-repos", lines, "install-repos")    
@@ -1513,9 +1515,9 @@ rm -f *.tar.*
         parentdir, curname = os.path.split(self.curdir)
         disabled_suffix = curname + '.tar.bz2'
 
-        banned_ext = ['.old', '.iso', disabled_suffix]
+        banned_ext = ['.old', '.iso', '.lock', disabled_suffix, '.dblite', '.tmp', '.log']
         banned_start = ['tmp']
-        banned_mid = ['/out/', '/wtf/', '/.vagrant/', '/.git/']
+        banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/tmp/', '/src.', '/cache_', 'cachefilelist_', '/.image', '/!']
 
         # there are regularly some files unaccessable for reading.
         self.cmd('sudo chmod a+r /usr/lib/cups -R')
@@ -1543,7 +1545,7 @@ rm -f *.tar.*
         tbzname = os.path.join(self.curdir, 
                 "%(time_prefix)s-%(curname)s.tar.bz2" % vars())
         tar = tarfile.open(tbzname, "w:bz2")
-        tar.add(self.curdir, recursive=True, filter=filter_)
+        tar.add(self.curdir, "./sources-for-audit", recursive=True, filter=filter_)
         tar.close()    
 
     def remove_exclusions(self):
