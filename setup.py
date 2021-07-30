@@ -18,6 +18,7 @@ requirements = [
     'python-magic',
     'jinja2', 
     'pyyaml',
+    'prettytable',
     'pipenv',
     'wheel_filename',
 ]

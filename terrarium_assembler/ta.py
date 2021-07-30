@@ -12,6 +12,7 @@ import magic
 import stat
 import re
 import yaml
+import json
 import dataclasses as dc
 import dnf
 import datetime
@@ -32,83 +33,26 @@ from .nuitkaprofiles import *
 from pytictoc import TicToc
 t = TicToc()
 
-
-# import contextlib
-# import os
-# import distutils.dir_util
-
-# @contextlib.contextmanager
-# def monkeypatch(object, name, patch):
-#     value_orig = getattr(object, name)
-#     setattr(object, name, patch)
-#     yield object
-#     setattr(object, name, value_orig)
-
-
-# def copy_tree(src, dst, **kwargs):
-#     stdlib_symlink = os.symlink
-
-#     def _symlink(src, dst, **kwargs):
-#         try:
-#             stdlib_symlink(src, dst, **kwargs)
-#         except FileExistsError as err:
-#             pass
-
-#     with monkeypatch(distutils.dir_util.os, 'symlink', _symlink):
-#         distutils.dir_util.copy_tree(src, dst, **kwargs)
+def write_doc_table(filename, headers, rows):
+    with open(filename, 'w', encoding='utf-8') as lf:
+        lf.write(f"""
+<table class='wikitable' border=1>
+""")            
+        lf.write(f"""<tr>""")
+        for col_ in headers:
+            lf.write(f"""<th>{col_}</th>""")
+        lf.write(f"""</tr>\n""")
+        for row_ in rows:
+            lf.write(f"""<tr>""")
+            for col_ in row_:
+                lf.write(f"""<td>{col_}</td>""")
+            lf.write(f"""</tr>\n""")
+        lf.write(f"""
+</table>
+""")            
+    return
 
 
-# @dc.dataclass
-# class BinRegexps:
-#     '''
-#     Binary regexps. 
-#     '''
-#     need_patch: list #bins that need to be patched.   
-#     just_copy:  list #bins that just need to be copied.
-#     need_exclude:    dict #bins that just need to be copied.
-
-#     def __post_init__(self):
-#         self.just_copy_re = []
-#         if self.just_copy:
-#             for res_ in self.just_copy or []:
-#                 re_ = re.compile(res_ + '$')
-#                 self.just_copy_re.append(re_) 
-
-#         self.need_patch_re = []
-#         for res_ in self.need_patch or []:
-#             re_ = re.compile(res_ + '$')
-#             self.need_patch_re.append(re_) 
-
-#         self.need_exclude_re = {}
-#         for res_ in self.need_exclude.common or []:
-#             re_ = re.compile(res_ + '$')
-#             self.need_exclude_re[re_] = 0
-
-
-
-#     def is_just_copy(self, f):
-#         for re_ in self.just_copy_re:
-#             if re_.match(f):
-#                 return True
-#         return False    
-
-#     def is_need_patch(self, f):
-#         for re_ in self.need_patch_re:
-#             if re_.match(f):
-#                 return True
-#         return False    
-
-#     def is_need_exclude(self, f):
-#         for re_ in self.need_exclude_re:
-#             if re_.match(f):
-#                 self.need_exclude_re[re_] += 1
-#                 return True
-#         return False    
-
-#     def is_needed(self, f):
-#         return (self.is_just_copy(f) or self.is_need_patch(f)) and not self.is_need_exclude(f)
-    
-#     pass
 
 def fucking_magic(f):
     # m = magic.detect_from_filename(f)
@@ -525,7 +469,7 @@ set -x
             return
 
         tmpdir = os.path.join(self.curdir, "tmp/ta")
-        tmpdir_ = os.path.relpath(tmpdir)
+        tmpdir = os.path.relpath(tmpdir)
         bfiles = []
 
         #First pass
@@ -766,31 +710,28 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
         with open(os.path.join(self.start_dir, 'selected-packages.txt'), 'w', encoding='utf-8') as lf:
             lf.write('\n- '.join(packages_))
 
-        with open(os.path.join(self.start_dir, 'selected-packages.rst'), 'w', encoding='utf-8') as lf:
-            lf.write("""
-+-------------------------------+-----------------+
-| Development tools             | Version         |
-+===============================+=================+
-| Visual Studio Code            |  1.47.0         |
-+-------------------------------+-----------------+""")            
-            packages_set_ = set()
-            for package_ in packages_:
-                purepackage = package_.split('.', 1)[0]
-                if len(purepackage) < len(package_):
-                    purepackage  = purepackage.rsplit('-', 1)[0]
-                packages_set_.add(purepackage)
 
-            for package_ in sorted(packages_set_):
-                res_ = list(self.installed_packages.filter(name=package_))
-                if len(res_)==0:
-                    continue
-                name_ = res_[0].name
-                version_ = res_[0].version
-                wtf = 1
-                lf.write("""
-|%(name_)-31s|%(version_)17s|
-+-------------------------------+-----------------+""" % vars())            
-                pass
+
+        packages_set_ = set()
+        for package_ in packages_:
+            purepackage = package_.split('.', 1)[0]
+            if len(purepackage) < len(package_):
+                purepackage  = purepackage.rsplit('-', 1)[0]
+            packages_set_.add(purepackage)
+
+        rows_ = []
+        for package_ in sorted(packages_set_):
+            res_ = list(self.installed_packages.filter(name=package_))
+            if len(res_)==0:
+                continue
+            name_ = res_[0].name
+            version_ = res_[0].version
+            wtf = 1
+
+            rows_.append([name_, version_])
+            pass
+
+        write_doc_table('doc-rpm-packages.htm', ['Packages', 'Version'], rows_)
 
         with open(cache_filename, 'w', encoding='utf-8') as lf:
             lf.write(','.join(packages_))
@@ -1699,6 +1640,19 @@ rm -f *.tar.*
         # self.install_localpythons()
         # self.build_nuitkas()
             # return
+
+        try:
+            output_ = subprocess.check_output('pipenv run pip list --format json', shell=True)            
+            json_ = json.loads(output_)
+
+            rows_ = []
+            for r_ in json_:
+                rows_.append([r_['name'], r_['version']])
+
+            write_doc_table('doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
+        except Exception as ex_:
+            print(ex_)
+            pass    
 
         specfile_ = self.args.specfile
         self.lines2sh("50-pack", [
