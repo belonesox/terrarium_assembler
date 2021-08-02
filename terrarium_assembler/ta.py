@@ -20,6 +20,8 @@ import tarfile
 import hashlib 
 import time
 import glob
+import csv
+
 from wheel_filename import parse_wheel_filename
 
 from .utils import *
@@ -704,6 +706,7 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
                 lf.write('\n----------------\n')
                 lf.write(res)
     
+
         output  = subprocess.check_output(['repoquery'] + options_ + pl_,  universal_newlines=True).splitlines()
         output = [remove_epoch(x) for x in output if self.ps.is_package_needed(x)]
         packages_ = output + pl_
@@ -1458,7 +1461,7 @@ rm -f *.tar.*
 
         banned_ext = ['.old', '.iso', '.lock', disabled_suffix, '.dblite', '.tmp', '.log']
         banned_start = ['tmp']
-        banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/tmp/', '/src.', '/cache_', 'cachefilelist_', '/.image', '/!']
+        banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/key/', '/tmp/', '/src.', '/bin.',  '/cache_', 'cachefilelist_', '/.image', '/!']
 
         # there are regularly some files unaccessable for reading.
         self.cmd('sudo chmod a+r /usr/lib/cups -R')
@@ -1686,6 +1689,22 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             root_dir = self.root_dir = expandpath(args.stage_pack)
             # self.remove_exclusions()
 
+            cloc_csv = 'tmp/cloc.csv'
+            if not os.path.exists(cloc_csv):
+                if shutil.which('cloc'):
+                    os.system('cloc ./in/src/ --csv  --report-file=tmp/cloc.csv --3')
+            if os.path.exists(cloc_csv):
+                table_csv = []
+                with open(cloc_csv, newline='') as csvfile:
+                    csv_r = csv.reader(csvfile, delimiter=',', quotechar='|')
+                    for row in list(csv_r)[1:]:
+                        row[-1] = int(float(row[-1]))
+                        table_csv.append(row)
+
+                table_csv[-1][-2], table_csv[-1][-1] = table_csv[-1][-1], table_csv[-1][-2]       
+                write_doc_table('doc-cloc.htm', ['Файлов', 'Язык', 'Пустых', 'Комментариев', 'Строчек кода', 'Мощность языка', 'COCOMO строк'], 
+                                table_csv)        
+
             # install_templates(root_dir, args)
 
             packages_to_deploy = []
@@ -1819,7 +1838,9 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                             self.add(f, libfile, recursive=False)
                     pass
 
-    
+
+
+
             install_templates(root_dir, args)
             self.install_terra_pythons()
             # install_templates(root_dir, args)
