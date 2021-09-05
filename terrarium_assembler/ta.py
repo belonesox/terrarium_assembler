@@ -1174,12 +1174,14 @@ fi
     
         lines = []
         lines_src = []
+        in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
+        scmd = f"rm -rf '{in_bin}/rpms'"
+        lines.append(scmd)
         scmd = "sudo yum-config-manager --enable remi"
         lines.append(scmd)
         pls_ = [p for p in self.need_packages + self.ps.build + self.ps.terra if isinstance(p, str)]
         purls_ = [p.url for p in self.need_packages + self.ps.build + self.ps.terra if not isinstance(p, str)]
-        in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
         packages = " ".join(self.dependencies(pls_, local=False) + purls_)    
         scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/rpms" --arch=x86_64  --arch=x86_64 --arch=noarch  %(packages)s -y ' % vars()
