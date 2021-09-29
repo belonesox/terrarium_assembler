@@ -193,6 +193,42 @@ class PythonPackages:
 
 
 @dc.dataclass
+class GoPackagesSpec:
+    '''
+    Specification of set of go packages,
+    by goget modules and by git-nodes of some go projects
+    '''
+    # pip: list = None
+    projects: list = None
+
+
+@dc.dataclass
+class GoPackages:
+    '''
+        We separate go projects to two classes:
+        build: only needed for building on builder host
+        terra: needed to be install into terrarium
+    '''
+    build: GoPackagesSpec
+    terra: GoPackagesSpec
+
+    def __post_init__(self):    
+        '''
+        Recode from easydicts to objects
+        '''
+        self.build = GoPackagesSpec(**self.build)
+        self.terra = GoPackagesSpec(**self.terra)
+        pass
+
+    def projects(self):
+        '''
+        Get full list of go projects
+        ''' 
+        return (self.build.projects or []) + (self.terra.projects or [])
+
+
+
+@dc.dataclass
 class PackagesSpec:
     '''
     Packages Spec.
@@ -270,6 +306,7 @@ class TerrariumAssembler:
             'build-wheels': 'compile wheels for our python sources',
             'install-wheels': 'Install our and external Python wheels',
             'build-nuitka': 'Compile Python packages to executable',
+            'build-go': 'Compile Go projects to executable',
             'make-isoexe': 'Also make self-executable install archive and ISO disk',
             'pack-me' :  'Pack current dir to time prefixed tar.bz2'
         }
@@ -301,6 +338,7 @@ class TerrariumAssembler:
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
+            self.args.stage_build_go = True
             self.args.stage_pack = self.args.stage_build_and_pack
 
         if self.args.stage_my_source_changed:
@@ -310,6 +348,7 @@ class TerrariumAssembler:
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
+            self.args.stage_build_go = True
             self.args.stage_pack = self.args.stage_my_source_changed
 
         if self.args.stage_download_all:
@@ -376,6 +415,10 @@ class TerrariumAssembler:
 
         self.ps = PackagesSpec(**spec.packages)
         self.pp = PythonPackages(**spec.python_packages)
+        self.gp = None
+        if 'go_packages' in spec:
+            self.gp = GoPackages(**spec.go_packages)
+
         fs_ = []
         if 'folders' in spec:
             fs_ = spec.folders
@@ -549,6 +592,46 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
         for b_ in bfiles:
             lines.append("./" + b_ + '.sh')
         self.lines2sh("40-build-nuitkas", lines, "build-nuitka")
+        pass
+
+
+    def build_go(self):
+        if not self.gp:
+            return
+
+        tmpdir = os.path.join(self.curdir, "tmp/ta")
+        bfiles = []
+
+        #First pass
+        module2build = {}
+        standalone2build = []
+        referenced_modules = set()
+
+        for td_ in self.gp.projects():
+            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+            os.chdir(self.curdir)
+            if os.path.exists(path_to_dir_):
+                os.chdir(path_to_dir_)
+                path_to_dir__ = os.path.relpath(path_to_dir_, start=self.curdir)
+                outputname = os.path.split(path_to_dir_)[-1]
+                target_dir = os.path.join(tmpdir, outputname + '.build')
+                target_dir_ = os.path.relpath(target_dir, start=path_to_dir_)
+                lines = []
+                build_name = 'build_' + outputname
+                lines.append(fR"""
+pushd {path_to_dir_}       
+go mod download          
+go build -ldflags="-linkmode=internal -r" -o {target_dir_}/{outputname} 2>&1 >{outputname}.log
+popd
+    """ )
+                self.fs.folders.append(target_dir)
+                self.lines2sh(build_name, lines, None)
+                bfiles.append(build_name)
+
+        lines = []
+        for b_ in bfiles:
+            lines.append("./" + b_ + '.sh')
+        self.lines2sh("42-build-go", lines, "build-go")
         pass
 
 
@@ -855,6 +938,18 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
             #raise ex_
             pass
 
+    def projects(self):
+        """
+        return all projects list (Python/go/etc)
+        """
+        projects_ = []
+        if self.pp:
+            projects_ += self.pp.projects() 
+
+        if self.gp:
+            projects_ += self.gp.projects() 
+        return projects_
+
 
     def process_binary(self, binpath):
         '''
@@ -913,7 +1008,7 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
         curdir = os.getcwd()
         args = self.args
         in_src = os.path.relpath(self.src_dir, start=self.curdir)
-        for td_ in self.pp.projects() + self.spec.templates_dirs:
+        for td_ in self.projects() + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
             os.chdir(curdir)
             if os.path.exists(path_to_dir_):
@@ -943,7 +1038,7 @@ mv in/src $snapshotdir
 mkdir -p {in_src}
 """)
         already_checkouted = set()
-        for td_ in self.pp.projects() + self.spec.templates_dirs:
+        for td_ in self.projects() + self.spec.templates_dirs:
             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
             if path_to_dir_ not in already_checkouted:
                 probably_package_name = os.path.split(path_to_dir_)[-1]
@@ -1639,6 +1734,7 @@ rm -f *.tar.*
         self.build_wheels()
         self.install_wheels()
         self.build_nuitkas()
+        self.build_go()
         # self.install_packages()
 
         # if self.args.stage_build_nuitka:
