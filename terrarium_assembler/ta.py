@@ -1,5 +1,4 @@
 """Main module."""
-
 import argparse
 import io
 import os
@@ -34,6 +33,7 @@ from .nuitkaprofiles import *
 
 from pytictoc import TicToc
 t = TicToc()
+
 
 def write_doc_table(filename, headers, rows):
     with open(filename, 'w', encoding='utf-8') as lf:
@@ -375,7 +375,9 @@ class TerrariumAssembler:
         except:
             pass # Building not on Fedora.        
 
-        self.spec = spec = yaml_load(specfile_, self.tvars)    
+        self.spec, vars_ = yaml_load(specfile_, self.tvars)    
+        self.tvars = edict(vars_)
+        spec = self.spec
 
         self.start_dir = os.getcwd()
          
@@ -621,7 +623,7 @@ pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
                 lines.append(fR"""
 pushd {path_to_dir_}       
 go mod download          
-go build -ldflags="-linkmode=internal -r" -o {target_dir_}/{outputname} 2>&1 >{outputname}.log
+CGO_ENABLED=0 go build -ldflags="-linkmode=internal -r" -o {target_dir_}/{outputname} 2>&1 >{outputname}.log
 popd
     """ )
                 self.fs.folders.append(target_dir)
@@ -1653,6 +1655,7 @@ rm -f *.tar.*
             
                 file_loader = FileSystemLoader(path_to_dir)
                 env = Environment(loader=file_loader)
+                env.filters["hash"] = j2_hash_filter    
                 env.trim_blocks = True
                 env.lstrip_blocks = True
                 env.rstrip_blocks = True            
@@ -1678,6 +1681,8 @@ rm -f *.tar.*
                         
                         plain = False
                         try:
+                            if 'users.xml' in fname_:
+                                dfdsfdsf=1
                             m = fucking_magic(fname_)
                             if 'text' in m:
                                 plain = True

@@ -10,6 +10,30 @@ import pathlib
 from easydict import EasyDict as edict
 # from elevate import elevate
 
+import hashlib
+
+
+def j2_hash_filter(value, hash_type="sha1"):
+    """
+    Example filter providing custom Jinja2 filter - hash
+
+    Hash type defaults to 'sha1' if one is not specified
+
+    :param value: value to be hashed
+    :param hash_type: valid hash type
+    :return: computed hash as a hexadecimal string
+    """
+    hash_func = getattr(hashlib, hash_type, None)
+
+    if hash_func:
+        computed_hash = hash_func(value.encode("utf-8")).hexdigest()
+    else:
+        raise AttributeError(
+            "No hashing function named {hname}".format(hname=hash_type)
+        )
+
+    return computed_hash
+
 def mkdir_p(path):
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
     pass
@@ -72,6 +96,7 @@ def yaml_load(filename, vars__=None):
     dir_, filename_ = os.path.split(os.path.abspath(filename))
     file_loader = FileSystemLoader(dir_)
     env = Environment(loader=file_loader, undefined=DebugUndefined)
+    env.filters["hash"] = j2_hash_filter    
     env.trim_blocks = True
     env.lstrip_blocks = True
     env.rstrip_blocks = True            
@@ -99,7 +124,7 @@ def yaml_load(filename, vars__=None):
     # for key in fc:
     #     if key.endswith('_dir'):
     #         fc[key] = fc[key].replace('/', '\\')
-    return fc
+    return fc, vars_
 
 
 def fix_binary(path, libpath):
@@ -124,7 +149,7 @@ def fix_binary(path, libpath):
                                patched_elf])
     except Exception as ex_:
         print("Cannot patch ", path)
-        raise ex_
+        # raise ex_
         pass
 
     os.close(fd_)
