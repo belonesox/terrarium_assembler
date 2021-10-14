@@ -1160,6 +1160,13 @@ fi
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
 
         # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
+
+        scmd = f'''
+{self.root_dir}/ebin/python3 -m pip install setuptools --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
+        '''
+        self.cmd(scmd)
+
+
         if self.args.debug:
             scmd = f'''
 {self.root_dir}/ebin/python3 -m pip install pip {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
