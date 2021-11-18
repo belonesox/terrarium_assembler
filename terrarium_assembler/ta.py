@@ -21,6 +21,8 @@ import time
 import glob
 import csv
 
+
+from contextlib import suppress
 from wheel_filename import parse_wheel_filename
 
 from .utils import *
@@ -999,6 +1001,11 @@ popd
         os.remove(patched_binary)
         pass
 
+    def get_all_sources(self):
+        for td_ in self.projects() + self.spec.templates_dirs:
+            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+            yield git_url, git_branch, path_to_dir_
+
     def folder_command(self):
         '''
             Just checking out sources.
@@ -1010,8 +1017,10 @@ popd
         curdir = os.getcwd()
         args = self.args
         in_src = os.path.relpath(self.src_dir, start=self.curdir)
-        for td_ in self.projects() + self.spec.templates_dirs:
-            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+        # for td_ in self.projects() + self.spec.templates_dirs:
+        #     git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+
+        for git_url, git_branch, path_to_dir_ in self.get_all_sources():
             os.chdir(curdir)
             if os.path.exists(path_to_dir_):
                 os.chdir(path_to_dir_)
@@ -1991,12 +2000,48 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             print("Size ", size_/1024/1024, 'Mb')
 
         if self.args.stage_make_isoexe:
+            from dateutil.relativedelta import relativedelta            
+
             os.chdir(self.curdir)
-            time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
+
+            isodir = root_dir + '.iso'
+            mkdir_p(isodir)
+            old_isos = [f_ for f_ in os.listdir(isodir) if f_.endswith('.iso')]
+            
+            current_time = datetime.datetime.now().replace(microsecond=0) 
+            prev_release_time = current_time + relativedelta(months=-1)
+            
+            for iso_ in reversed(sorted(old_isos)):
+                try:
+                    prev_release_time = datetime.datetime.strptime(iso_[:19], '%Y-%m-%dT%H-%M-%S')
+                    break
+                except:    
+                    pass
+
+            since_time_ = prev_release_time.isoformat()
+            gitlogcmd_ = f'git log --since="{since_time_}" --pretty --name-status '
+
+            lines_ = []
+            for git_url, git_branch, path_to_dir_ in self.get_all_sources():
+                os.chdir(self.curdir)
+                if os.path.exists(path_to_dir_):
+                    os.chdir(path_to_dir_)
+                    with suppress(Exception):
+                        change_ = subprocess.check_output(gitlogcmd_, shell=True).decode('utf-8').strip()
+                        if change_:
+                            lines_.append(f'----\n Changelog for {path_to_dir_} ({git_url} / {git_branch})')
+                            lines_.append(change_)
+
+            pass
+
+
+            # current_time = datetime.datetime.now().replace(microsecond=0) 
+            time_prefix = current_time.isoformat().replace(':', '-')
             label = 'disk'
             if 'label' in self.spec:
                 label = self.spec.label
             installscript = "install-me.sh" % vars()
+            os.chdir(self.curdir)
             installscriptpath = os.path.abspath(os.path.join("tmp/", installscript))
             if os.path.exists(installscriptpath):
                 os.unlink(installscriptpath)
@@ -2012,16 +2057,28 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
             if not self.cmd(scmd)==0:
                 print(f'« {scmd} » failed!')
                 return
+            os.chdir(self.curdir)
+            filename = f"{time_prefix}-{label}-dm.iso" % vars()
+            changelogfilename = filename + '.changelog.txt'
 
-            filename = "%(time_prefix)s-%(label)s-dm.iso" % vars()
-            isodir = root_dir + '.iso'
-            mkdir_p(isodir)
             filepath = os.path.join(isodir, filename)
             scmd = ('''
         mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s 
         ''' % vars()).replace('\n', ' ').strip()
-            print(scmd)
-            os.system(scmd)
+            os.chdir(self.curdir)
+            self.cmd(scmd)
+            scmd = (f'''
+        md5sum {filepath}
+        ''').replace('\n', ' ').strip()
+            os.chdir(self.curdir)
+            md5s_ = subprocess.check_output(scmd, shell=True).decode('utf-8').strip().split()[0]
+            lines_.insert(0, f';MD5: {md5s_}')
+
+            with suppress(Exception):
+                chp_ = os.path.join(isodir, changelogfilename)
+                open(chp_, 'w', encoding='utf-8').write('\n'.join(lines_))
+                open(f'{filepath}.md5', 'w', encoding='utf-8').write(md5s_)
+
             os.chdir(isodir)
             scmd = f'''ln -sf {filename} last.iso'''
             self.cmd(scmd)
