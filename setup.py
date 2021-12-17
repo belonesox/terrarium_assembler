@@ -59,6 +59,5 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/belonesox/terrarium_assembler',
-    version='0.1.9',
     zip_safe=False,
 )

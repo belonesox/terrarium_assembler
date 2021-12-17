@@ -2051,6 +2051,12 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 pmode = ' --threads 8 --pbzip2 ' 
             os.chdir(self.curdir)
             self.cmd(f'chmod a+x {root_dir}/install-me')
+
+            filename = f"{time_prefix}-{label}-dm.iso" % vars()
+            with suppress(Exception):
+                chp_ = os.path.join(root_dir, 'isodistr.txt')
+                open(chp_, 'w', encoding='utf-8').write(filename)
+
             scmd = (f'''
             makeself.sh {pmode} --needroot {root_dir} {installscriptpath} "Installation" ./install-me             
         ''' % vars()).replace('\n', ' ').strip()
@@ -2058,7 +2064,6 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 print(f'« {scmd} » failed!')
                 return
             os.chdir(self.curdir)
-            filename = f"{time_prefix}-{label}-dm.iso" % vars()
             changelogfilename = filename + '.changelog.txt'
 
             filepath = os.path.join(isodir, filename)
