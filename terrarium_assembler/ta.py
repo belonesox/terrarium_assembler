@@ -304,7 +304,8 @@ class TerrariumAssembler:
             'install-repos': 'install RPM repositories',
             'install-rpms': 'install downloaded RPMS',
             'download-wheels': 'download needed WHL-python packages',
-            'preinstall-wheels': 'Bootstrap build environment with external wheel packages',
+            # 'preinstall-wheels': 'Bootstrap build environment with external wheel packages',
+            'init-env': 'Create  build environment with some bootstrapping',
             'build-wheels': 'compile wheels for our python sources',
             'install-wheels': 'Install our and external Python wheels',
             'build-nuitka': 'Compile Python packages to executable',
@@ -336,7 +337,8 @@ class TerrariumAssembler:
 
         if self.args.stage_build_and_pack:
             self.args.stage_install_rpms = True
-            self.args.stage_preinstall_wheels = True
+            # self.args.stage_preinstall_wheels = True
+            self.args.stage_init_env = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
@@ -346,7 +348,8 @@ class TerrariumAssembler:
         if self.args.stage_my_source_changed:
             # self.args.stage_checkout = True
             self.args.stage_download_wheels = True
-            self.args.stage_preinstall_wheels = True
+            self.args.stage_init_env = True
+            # self.args.stage_preinstall_wheels = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
@@ -1093,7 +1096,7 @@ if [ -d "%(newpath)s" ]; then
 fi            
 """ % vars())
 
-        self.lines2sh("06-checkout", lines, 'checkout')    
+        self.lines2sh("05-checkout", lines, 'checkout')    
         # self.lines2sh("96-pullall", lines2)    
         pass
 
@@ -1152,7 +1155,14 @@ fi
         root_dir = self.root_dir
         os.chdir(self.curdir)
 
-        os.chdir(os.path.join('in', 'src', 'pip'))
+        pipdir = ''
+        for pdir in ('github-belonesox-pip', 'pip'):
+            pipdir = os.path.join('in', 'src', pdir)
+            if os.path.exists(pipdir):
+                break
+
+        os.chdir(pipdir)    
+        # os.chdir(os.path.join('in', 'src', 'github-belonesox-pip'))
         scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
         os.system(scmd)
 
@@ -1350,23 +1360,40 @@ pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup
 """
             lines.append(scmd)
             pass
-        self.lines2sh("09-build-wheels", lines, "build-wheels")
+        self.lines2sh("06-build-wheels", lines, "build-wheels")
 
 
-    def preinstall_wheels(self):
+#     def preinstall_wheels(self):
+#         os.chdir(self.curdir)
+
+#         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+
+#         lines = []
+#         scmd = f'''
+# pipenv --rm
+# rm -f Pipfile*
+# pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+# pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
+# ''' 
+#         lines.append(scmd)   
+#         self.lines2sh("08-preinstall-wheels", lines, "preinstall-wheels")
+#         pass    
+
+    def init_env(self):
         os.chdir(self.curdir)
 
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
 
         lines = []
         scmd = f'''
-pipenv --rm
+python -m pipenv --rm
 rm -f Pipfile*
-pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
+sudo python -m pip uninstall virtualenv
+python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+python -m pipenv install setuptools_git_versioning wheel
 ''' 
         lines.append(scmd)   
-        self.lines2sh("08-preinstall-wheels", lines, "preinstall-wheels")
+        self.lines2sh("04-init-env", lines, "init-env")
         pass    
 
     def install_wheels(self):
@@ -1470,7 +1497,7 @@ rm -f %s/extwheel/*
 
         pip_args_ = self.pip_args_from_sources()
 
-        scmd = f"python3 -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel " 
+        scmd = f"python3 -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel --find-links='{bin_dir}/ourwheel' "  
         lines.append(scmd)                
 
         scmd = f"rm -f {bin_dir}/extwheel/enum34* "
@@ -1480,6 +1507,8 @@ rm -f %s/extwheel/*
 pushd {bin_dir}/extwheel
 ls *.tar.* | xargs -i[] -t python3 -m pip wheel [] --no-deps
 rm -f *.tar.*
+popd
+python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
 """ 
         lines.append(scmd)                
         self.lines2sh("07-download-wheels", lines, "download-wheels")
@@ -1751,7 +1780,8 @@ rm -f *.tar.*
         self.download_packages()
         self.checkout_sources()
         self.download_pip()
-        self.preinstall_wheels()
+        # self.preinstall_wheels()
+        self.init_env()
         self.build_wheels()
         self.install_wheels()
         self.build_nuitkas()
