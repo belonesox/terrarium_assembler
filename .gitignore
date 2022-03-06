@@ -112,3 +112,5 @@ demo/*.iso
 e
 demo/out*
 .vagrant
+.packit.yaml
+*.tar.gz
