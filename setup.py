@@ -54,7 +54,7 @@ setup(
     version_config={
         "enabled": True,
 #        "template": 	"{tag}",
-#        "dev_template": "{tag}.dev{ccount}",
+        "dev_template": "{tag}.dev{ccount}",
         "dirty_template": "{tag}.dev{ccount}",
     },
     setup_requires=['setuptools-git-versioning'],
