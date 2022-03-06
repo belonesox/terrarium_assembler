@@ -1388,7 +1388,7 @@ pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup
         scmd = f'''
 python -m pipenv --rm
 rm -f Pipfile*
-sudo python -m pip uninstall virtualenv
+# sudo python -m pip uninstall -y virtualenv
 python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
 python -m pipenv install setuptools_git_versioning wheel
 ''' 
@@ -1737,7 +1737,13 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                             linkto = os.readlink(fname_)
                             os.symlink(linkto, out_fname_)
                         else:    
-                            if plain or fname_.endswith('.nj2'):
+                            if fname_.endswith('.copy-file'):
+                                out_fname_ = os.path.splitext(out_fname_)[0]
+                                path_ = open(fname_).read().strip()
+                                if not os.path.isabs(path_):
+                                    path_ = os.path.join(self.curdir, path_)
+                                shutil.copy2(path_, out_fname_)
+                            elif plain or fname_.endswith('.nj2'):
                                 template = env.get_template(fname_)
                                 output = template.render(self.tvars)                    
                                 with open(out_fname_, 'w', encoding='utf-8') as lf_:
