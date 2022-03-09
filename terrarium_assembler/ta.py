@@ -551,6 +551,7 @@ time nice -19 pipenv run python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {buil
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt 
+pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt 
     """ )
                 self.fs.folders.append(target_dir)
                 if "outputname" in target_:
@@ -1492,12 +1493,16 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
 
         lines = []
         lines.append('''
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+export PIPENV_PIPFILE=$d/Pipfile
+
 rm -f %s/extwheel/*        
 ''' % bin_dir)
 
         pip_args_ = self.pip_args_from_sources()
 
-        scmd = f"python3 -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel --find-links='{bin_dir}/ourwheel' "  
+        scmd = f"python3 -m pipenv run python -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel --find-links='{bin_dir}/ourwheel' "  
         lines.append(scmd)                
 
         scmd = f"rm -f {bin_dir}/extwheel/enum34* "
@@ -1505,7 +1510,7 @@ rm -f %s/extwheel/*
 
         scmd = f"""
 pushd {bin_dir}/extwheel
-ls *.tar.* | xargs -i[] -t python3 -m pip wheel [] --no-deps
+ls *.tar.* | xargs -i[] -t python -m pipenv run python -m pip wheel [] --no-deps
 rm -f *.tar.*
 popd
 python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
