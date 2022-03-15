@@ -450,14 +450,19 @@ class TerrariumAssembler:
 
         os.environ['PATH']="/usr/lib64/ccache:" + os.environ['PATH']
 
-        base = dnf.Base()
-        base.fill_sack()
-        q_ = base.sack.query()
-        self.installed_packages = q_.installed()
 
         self.nuitka_plugins_dir = os.path.realpath(os.path.join(os.path.split(__file__)[0], '..', 'nuitka_plugins'))
 
         pass
+
+    @property
+    def installed_packages(self):
+        if not self.installed_packages_:
+            base = dnf.Base()
+            base.fill_sack()
+            q_ = base.sack.query()
+            self.installed_packages_ = q_.installed()
+        return self.installed_packages_
 
     def cmd(self, scmd):
         '''
@@ -1291,10 +1296,10 @@ fi
         packages = []
         lines = []
 
-        base = dnf.Base()
-        base.fill_sack()
-        q_ = base.sack.query()
-        self.installed_packages = q_.installed()
+        # base = dnf.Base()
+        # base.fill_sack()
+        # q_ = base.sack.query()
+        # self.installed_packages = q_.installed()
     
         lines = []
         lines_src = []
