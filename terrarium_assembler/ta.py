@@ -1455,6 +1455,8 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
 
             reqs_path = 'requirements.txt'
             for reqs_ in glob.glob(f'**/{reqs_path}', recursive=True):
+                if 'tests/' in reqs_:
+                    continue
                 if 'django-q' in setup_path:
                     rewqwerew=1
                 with open(reqs_, 'r', encoding='utf-8') as lf:
@@ -1827,7 +1829,7 @@ terrarium_assembler --stage-pack=./out "%(specfile_)s"
         self.lines2sh("51-pack-iso", [
             '''
 sudo chmod a+rx /usr/lib/cups -R           
-terrarium_assembler --stage-pack=./out "%(specfile_)s" --stage-make-isoexe
+terrarium_assembler "%(specfile_)s" --stage-make-isoexe
             ''' % vars()])
 
         self.lines2sh("91-pack-debug", [
