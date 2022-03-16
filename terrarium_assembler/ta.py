@@ -452,6 +452,7 @@ class TerrariumAssembler:
 
 
         self.nuitka_plugins_dir = os.path.realpath(os.path.join(os.path.split(__file__)[0], '..', 'nuitka_plugins'))
+        self.installed_packages_ = None
 
         pass
 
