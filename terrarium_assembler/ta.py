@@ -1192,7 +1192,6 @@ fi
         '''
         self.cmd(scmd)
 
-
         if self.args.debug:
             scmd = f'''
 {self.root_dir}/ebin/python3 -m pip install pip {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location     
@@ -1204,6 +1203,9 @@ fi
 
         os.chdir(self.curdir)
         self.cmd(scmd)
+        # не спрашивайте. Теоретически, должно ставится за прошлый раз, но иногда нет.
+        self.cmd(scmd)
+
         if self.tvars.fc_version == '32':
             os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
@@ -1991,6 +1993,18 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                     for dirpath, dirnames, filenames in os.walk(folder_):
                         for filename in filenames:
                             f = os.path.join(dirpath, filename)
+                            if '_webp.so' in f:
+                                wtf=1
+                                pass
+                            if 'cv2' in f:
+                                wtf=1
+                                pass
+                            if 'PIL' in f:
+                                wtf=1
+                                pass
+                            if 'pydantic' in f:
+                                wtf=1
+                                pass
                             # if self.br.is_need_exclude(f):
                             #     continue
                             # if not self.should_copy(f):
@@ -2004,6 +2018,10 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                             # if self.br.is_need_exclude(libfile):
                             #     continue
                             self.add(f, libfile, recursive=False)
+                            if os.path.exists('/home/stas/projects/dmi-building/out/pbin/PIL'):
+                                wtf = 1
+                                pass
+
                     pass
 
 
