@@ -1806,10 +1806,10 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
         self.install_repos()
         self.download_packages()
+        self.init_env()
         self.checkout_sources()
         self.download_pip()
         # self.preinstall_wheels()
-        self.init_env()
         self.build_wheels()
         self.install_wheels()
         self.build_nuitkas()
