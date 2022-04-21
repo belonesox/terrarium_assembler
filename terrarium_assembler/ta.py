@@ -1103,6 +1103,13 @@ if [ -d "%(newpath)s" ]; then
 fi            
 """ % vars())
 
+                lines.append(f"""
+# We need to update all shell files after checkout.
+terrarium_assembler "{self.args.specfile}" 
+""")
+
+
+
         self.lines2sh("05-checkout", lines, 'checkout')    
         # self.lines2sh("96-pullall", lines2)    
         pass
