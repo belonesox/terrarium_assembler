@@ -1294,6 +1294,11 @@ terrarium_assembler "{self.args.specfile}"
                 lines.append(f'sudo dnf install --nogpgcheck {rp_} -y ')
             else:
                 lines.append(f'sudo dnf config-manager --add-repo {rp_} -y ')
+                prp_ = rp_
+                if '://' in prp_:
+                    prp_ = prp_.split('://')[1]
+                prp_ = prp_.replace('/', '_')    
+                lines.append(f'sudo dnf config-manager --save --setopt={prp_}.gpgcheck=0 -y')
             pass
 
         self.lines2sh("00-install-repos", lines, "install-repos")    
@@ -2132,7 +2137,7 @@ terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-mak
                 open(chp_, 'w', encoding='utf-8').write(filename)
 
             scmd = (f'''
-            makeself.sh {pmode} --needroot {root_dir} {installscriptpath} "Installation" ./install-me             
+            makeself.sh {pmode} --tar-extra --xattrs --untar-extra --xattrs  --tar-extra --xattrs-include=* --untar-extra --xattrs-include=*  --needroot {root_dir} {installscriptpath} "Installation" ./install-me             
         ''' % vars()).replace('\n', ' ').strip()
             if not self.cmd(scmd)==0:
                 print(f'« {scmd} » failed!')
