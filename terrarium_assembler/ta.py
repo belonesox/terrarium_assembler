@@ -172,6 +172,8 @@ class PythonPackages:
     '''
     build: PythonPackagesSpec
     terra: PythonPackagesSpec
+    remove_from_download: list = None
+
 
     def __post_init__(self):    
         '''
@@ -179,6 +181,8 @@ class PythonPackages:
         '''
         self.build = PythonPackagesSpec(**self.build)
         self.terra = PythonPackagesSpec(**self.terra)
+        # if 'remove_from_download' not in dir(self):
+        #     self.remove_from_download = []
         pass
 
     def pip(self):
@@ -1527,8 +1531,9 @@ rm -f %s/extwheel/*
         scmd = f"python3 -m pipenv run python -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel --find-links='{bin_dir}/ourwheel' "  
         lines.append(scmd)                
 
-        scmd = f"rm -f {bin_dir}/extwheel/enum34* "
-        lines.append(scmd)                
+        for py_ in self.pp.remove_from_download or []:
+            scmd = f'rm -f {bin_dir}/extwheel/{py_}-*'
+            lines.append(scmd)
 
         scmd = f"""
 pushd {bin_dir}/extwheel
