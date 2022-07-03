@@ -173,6 +173,7 @@ class PythonPackages:
     build: PythonPackagesSpec
     terra: PythonPackagesSpec
     remove_from_download: list = None
+    shell_commands: list = None
 
 
     def __post_init__(self):    
@@ -370,6 +371,12 @@ class TerrariumAssembler:
         os.environ['TERRA_SPECDIR'] = os.path.split(specfile_)[0]
 
 
+        self.pipenv_dir = ''
+        from pipenv.project import Project
+        p = Project()
+        self.pipenv_dir = p.virtualenv_location
+
+
         self.tvars = edict() 
         self.tvars.python_version_1, self.tvars.python_version_2 = sys.version_info[:2]
         self.tvars.py_ext = ".pyc"
@@ -377,6 +384,10 @@ class TerrariumAssembler:
             self.tvars.py_ext = ".py"
         self.tvars.release = not self.args.debug
         self.tvars.fc_version = ''
+        self.tvars.pipenv_dir = self.pipenv_dir
+        self.tvars.python_major_version = sys.version_info.major 
+        self.tvars.python_minor_version = sys.version_info.minor
+
         try:
             with open('/etc/fedora-release', 'r', encoding='utf-8') as lf:
                 ls = lf.read()
@@ -502,10 +513,16 @@ class TerrariumAssembler:
                 lf.write('''
 # Stage "%s"
 # Automatically called when terrarium_assembler --stage-%s "%s" 
-set -x
-#sudo chmod a+rwx in/src  -R
 ''' % (desc, stage_, self.args.specfile))
+            for k, v in self.tvars.items():
+                if isinstance(v, str) or isinstance(v, int):
+                    lf.write(f'''export TA_{k}="{v}"\n''')
+            lf.write('''
+set -x
+''')
             lf.write("\n".join(lines))
+                
+
 
         st = os.stat(fname)
         os.chmod(fname, st.st_mode | stat.S_IEXEC)
@@ -1337,7 +1354,7 @@ terrarium_assembler "{self.args.specfile}"
         scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --arch=noarch  --source %(packages)s -y ' % vars()
         lines_src.append(scmd)
 
-        for pack_ in self.ps.remove_from_download or []:
+        for pack_ in self.pp.remove_from_download or []:
             scmd = f'rm -f {in_bin}/rpms/{pack_}* '
             lines.append(scmd)
 
@@ -1434,6 +1451,10 @@ pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version
 pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index 
 ''' 
         lines.append(scmd)   # --no-cache-dir
+
+        for scmd_ in self.pp.shell_commands or []:
+            lines.append(scmd_)
+
         self.lines2sh("15-install-wheels", lines, "install-wheels")
         pass    
 
