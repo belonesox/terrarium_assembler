@@ -1354,7 +1354,7 @@ terrarium_assembler "{self.args.specfile}"
         scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --arch=noarch  --source %(packages)s -y ' % vars()
         lines_src.append(scmd)
 
-        for pack_ in self.pp.remove_from_download or []:
+        for pack_ in self.ps.remove_from_download or []:
             scmd = f'rm -f {in_bin}/rpms/{pack_}* '
             lines.append(scmd)
 
