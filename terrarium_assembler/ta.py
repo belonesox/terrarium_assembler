@@ -1576,7 +1576,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         spec = self.spec
         abs_path_to_out_dir = os.path.abspath(args.analyse)
         root_dir = self.root_dir 
-        lastdirs = os.path.sep.join(abs_path_to_out_dir.split(os.path.sep)[-3:])
+        lastdirs = os.path.sep.join(abs_path_to_out_dir.split(os.path.sep)[-2:])
 
         trace_file = None
         try:
