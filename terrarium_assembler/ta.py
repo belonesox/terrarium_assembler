@@ -1637,6 +1637,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                 r"[\d]+\.[\d]+\.so", 
                 r"[\d]+\.so", 
                 r"-[\d]+\.[\d]+-[\d]+", 
+                r"c\+\+", 
             ]:
                 def replacement_f(mobj):
                     return rex_
@@ -1873,26 +1874,26 @@ terrarium_assembler --stage-pack=./out "%(specfile_)s"
             ''' % vars()])
 
         self.lines2sh("51-pack-iso", [
-            '''
+            f'''
 sudo chmod a+rx /usr/lib/cups -R           
-terrarium_assembler "%(specfile_)s" --stage-make-isoexe
-            ''' % vars()])
+terrarium_assembler {specfile_} --stage-make-isoexe
+            '''])
 
         self.lines2sh("91-pack-debug", [
-            '''
+            f'''
 sudo chmod a+rx /usr/lib/cups -R           
-terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" 
-            ''' % vars()])
+terrarium_assembler --debug --stage-pack=./out-debug {specfile_}
+            '''])
 
         self.lines2sh("92-pack-debug-iso", [
-            '''
+            f'''
 sudo chmod a+rx /usr/lib/cups -R           
-terrarium_assembler --debug --stage-pack=./out-debug "%(specfile_)s" --stage-make-isoexe
-            ''' % vars()])
+terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-isoexe
+            '''])
+
+        self.lines2sh("93-analyse", [f"terrarium_assembler {specfile_} --analyse=./out > optimize_me.txt"])
 
         root_dir = 'out'
-
-
         if self.args.stage_pack:
             root_dir = self.root_dir = expandpath(args.stage_pack)
             # self.remove_exclusions()
