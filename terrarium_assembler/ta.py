@@ -141,6 +141,8 @@ class BinRegexps:
         return False    
 
     def is_need_exclude(self, f):
+        if 'libtorch_cuda.so' in f:
+            wtf=34342
         for re_ in self.need_exclude_re:
             if re_.match(f):
                 return True
@@ -291,7 +293,7 @@ class TerrariumAssembler:
     '''
     
     def __init__(self):
-        self.curdir = os.getcwd()
+        # self.curdir = os.getcwd()
         self.root_dir = None
 
         # Потом сделать параметром функций.
@@ -368,13 +370,15 @@ class TerrariumAssembler:
             self.args.stage_download_wheels = True
 
         specfile_  = expandpath(args.specfile)
-        os.environ['TERRA_SPECDIR'] = os.path.split(specfile_)[0]
+        self.start_dir = self.curdir = os.path.split(specfile_)[0]
+        os.environ['TERRA_SPECDIR'] = self.start_dir
+        os.chdir(self.curdir)
 
 
-        self.pipenv_dir = ''
-        from pipenv.project import Project
-        p = Project()
-        self.pipenv_dir = p.virtualenv_location
+        # self.pipenv_dir = ''
+        # from pipenv.project import Project
+        # p = Project()
+        # self.pipenv_dir = p.virtualenv_location
 
 
         self.tvars = edict() 
@@ -384,7 +388,7 @@ class TerrariumAssembler:
             self.tvars.py_ext = ".py"
         self.tvars.release = not self.args.debug
         self.tvars.fc_version = ''
-        self.tvars.pipenv_dir = self.pipenv_dir
+        # self.tvars.pipenv_dir = self.pipenv_dir
         self.tvars.python_major_version = sys.version_info.major 
         self.tvars.python_minor_version = sys.version_info.minor
 
@@ -399,9 +403,7 @@ class TerrariumAssembler:
         self.tvars = edict(vars_)
         spec = self.spec
 
-        self.start_dir = os.getcwd()
-         
-
+        # self.start_dir = os.getcwd()
 
         need_patch = just_copy = need_exclude = None    
         if 'bin_regexps' in spec:
@@ -513,6 +515,7 @@ class TerrariumAssembler:
                 lf.write('''
 # Stage "%s"
 # Automatically called when terrarium_assembler --stage-%s "%s" 
+export TA_PIPENV_DIR=`python -m pipenv --venv`
 ''' % (desc, stage_, self.args.specfile))
             for k, v in self.tvars.items():
                 if isinstance(v, str) or isinstance(v, int):
@@ -781,7 +784,7 @@ popd
 
         pl_ = self.packages2list(package_list)
         package_list_md5 = hashlib.md5((self.rpm_update_time() + '\n' + '\n'.join(pl_)).encode('utf-8')).hexdigest()
-        cache_filename = 'cache_' + package_list_md5 + '.list' 
+        cache_filename = 'tmp/cache_' + package_list_md5 + '.list' 
         if os.path.exists(cache_filename):
             with open(cache_filename, 'r', encoding='utf-8') as lf:
                 ls_ = lf.read()
@@ -886,7 +889,7 @@ popd
         '''
     
         package_list_md5 = hashlib.md5((self.rpm_update_time() + '\n' + '\n'.join(packages)).encode('utf-8')).hexdigest()
-        cache_filename = 'cachefilelist_' + package_list_md5 + '.list' 
+        cache_filename = 'tmp/cachefilelist_' + package_list_md5 + '.list' 
         if os.path.exists(cache_filename):
             with open(cache_filename, 'r', encoding='utf-8') as lf:
                 ls_ = lf.read()
@@ -1124,7 +1127,7 @@ if [ -d "%(newpath)s" ]; then
 fi            
 """ % vars())
 
-                lines.append(f"""
+        lines.append(f"""
 # We need to update all shell files after checkout.
 terrarium_assembler "{self.args.specfile}" 
 """)
@@ -1588,14 +1591,17 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         used_files = set()
         for trace_file in glob.glob(trace_file_glob):
             re_file = re.compile(r'''.*\(.*"(?P<filename>[^"]+)".*''')
-            for line in open(trace_file, 'r', encoding='utf-8').readlines():
+            for linenum, line in enumerate(open(trace_file, 'r', encoding='utf-8').readlines()):
                 m_ = re_file.match(line)
                 if m_:
                     fname = m_.group('filename')
+                    if 'pbin/ld.so' in fname or linenum>140:
+                        wtf=1
                     # Heuristic to process strace files from Vagrant virtualboxes
                     fname = fname.replace('/vagrant', self.curdir)
                     # Heuristic to process strace files from remote VM, mounted by sshmnt
                     fname = re.sub(fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
+                    fname = re.sub(fr'''/opt/dm/''', abs_path_to_out_dir, fname)
                     if os.path.isabs(fname):
                         fname = os.path.abspath(fname)
                         if fname.startswith(abs_path_to_out_dir):
@@ -1616,7 +1622,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                         size_ = os.stat(fname_).st_size
                         existing_files[fname_] = size_
 
-        top10 = sorted(existing_files.items(), key=lambda x: -x[1])[:1000]
+        top10 = sorted(existing_files.items(), key=lambda x: -x[1])[:4000]
         print("Analyse first:") 
         for f, s in top10:
             rel_f = f.replace(abs_path_to_out_dir, '')
@@ -1659,7 +1665,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
         banned_ext = ['.old', '.iso', '.lock', disabled_suffix, '.dblite', '.tmp', '.log']
         banned_start = ['tmp']
-        banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/key/', '/tmp/', '/src.', '/bin.',  '/cache_', 'cachefilelist_', '/.image', '/!']
+        banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/key/', '/tmp/', '/src.', '/bin.',  '/cache_', 'cachefilelist_', '/tmp', '/.image', '/!']
 
         # there are regularly some files unaccessable for reading.
         self.cmd('sudo chmod a+r /usr/lib/cups -R')
