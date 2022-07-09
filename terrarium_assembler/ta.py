@@ -652,6 +652,8 @@ pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
                 os.chdir(path_to_dir_)
                 path_to_dir__ = os.path.relpath(path_to_dir_, start=self.curdir)
                 outputname = os.path.split(path_to_dir_)[-1]
+                if 'name' in td_:
+                    outputname = td_.name
                 target_dir = os.path.join(tmpdir, outputname + '.build')
                 target_dir_ = os.path.relpath(target_dir, start=path_to_dir_)
                 lines = []
