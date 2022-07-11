@@ -457,6 +457,7 @@ class TerrariumAssembler:
         mkdir_p(self.src_dir)    
         mkdir_p(self.out_dir)    
         mkdir_p(self.in_bin)    
+        mkdir_p('tmp')    
 
         self.our_whl_path = os.path.join(self.in_bin, "ourwheel")
         mkdir_p(self.our_whl_path)    
