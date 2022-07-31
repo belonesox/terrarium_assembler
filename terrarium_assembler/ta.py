@@ -516,6 +516,7 @@ class TerrariumAssembler:
                 lf.write('''
 # Stage "%s"
 # Automatically called when terrarium_assembler --stage-%s "%s" 
+export PIPENV_VENV_IN_PROJECT=1
 export TA_PIPENV_DIR=`python -m pipenv --venv`
 ''' % (desc, stage_, self.args.specfile))
             for k, v in self.tvars.items():
@@ -733,7 +734,7 @@ popd
         if f == "": 
             return False
 
-        if f == '/lib/libpthread-2.31.so':
+        if f == '/usr/lib64/python3.9/distutils/version.py':
             wtf333 = 1
 
 
