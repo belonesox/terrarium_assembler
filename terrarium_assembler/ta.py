@@ -1497,7 +1497,7 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
             os.chdir(setup_path)
             
             is_python_package = False
-            for file_ in ['setup.py', 'pyproject.toml', 'requirements.txt']:
+            for file_ in ['setup.py', 'pyproject.toml']:
                 if os.path.exists(file_):
                     is_python_package = True
                     break
