@@ -1810,7 +1810,10 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                 path_ = open(fname_).read().strip()
                                 if not os.path.isabs(path_):
                                     path_ = os.path.join(self.curdir, path_)
-                                shutil.copy2(path_, out_fname_)
+                                if os.path.isdir(path_):    
+                                    shutil.copytree(path_, out_fname_)
+                                else:
+                                    shutil.copy2(path_, out_fname_)
                             elif plain or fname_.endswith('.nj2'):
                                 template = env.get_template(fname_)
                                 output = template.render(self.tvars)                    
