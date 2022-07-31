@@ -513,15 +513,15 @@ class TerrariumAssembler:
             if stage:
                 desc = self.stages[stage]
                 stage_  = stage.replace('_', '-')
-                lf.write('''
-# Stage "%s"
-# Automatically called when terrarium_assembler --stage-%s "%s" 
-''' % (desc, stage_, self.args.specfile))
+                lf.write(f'''
+# Stage "{desc}"
+# Automatically called when terrarium_assembler --stage-{stage_} "{self.args.specfile}" 
+''')
 
             lf.write('''
 export PIPENV_VENV_IN_PROJECT=1
 export TA_PIPENV_DIR=`python -m pipenv --venv`
-''' % (desc, stage_, self.args.specfile))
+''')
 
             for k, v in self.tvars.items():
                 if isinstance(v, str) or isinstance(v, int):
