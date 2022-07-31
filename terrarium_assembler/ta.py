@@ -516,9 +516,13 @@ class TerrariumAssembler:
                 lf.write('''
 # Stage "%s"
 # Automatically called when terrarium_assembler --stage-%s "%s" 
+''' % (desc, stage_, self.args.specfile))
+
+            lf.write('''
 export PIPENV_VENV_IN_PROJECT=1
 export TA_PIPENV_DIR=`python -m pipenv --venv`
 ''' % (desc, stage_, self.args.specfile))
+
             for k, v in self.tvars.items():
                 if isinstance(v, str) or isinstance(v, int):
                     lf.write(f'''export TA_{k}="{v}"\n''')
