@@ -36,6 +36,10 @@ from .nuitkaprofiles import *
 from pytictoc import TicToc
 t = TicToc()
 
+import pwd
+import grp
+import getpass
+
 
 def write_doc_table(filename, headers, rows):
     with open(filename, 'w', encoding='utf-8') as lf:
@@ -1806,12 +1810,17 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                             os.symlink(linkto, out_fname_)
                         else:    
                             if fname_.endswith('.copy-file'):
+                                if 'error' in fname_:
+                                    wtf = 4
                                 out_fname_ = os.path.splitext(out_fname_)[0]
                                 path_ = open(fname_).read().strip()
                                 if not os.path.isabs(path_):
                                     path_ = os.path.join(self.curdir, path_)
                                 if os.path.isdir(path_):    
-                                    shutil.copytree(path_, out_fname_)
+                                    # shutil.copytree(path_, out_fname_)
+                                    scmd = f'rsync -rav {path_}/ {out_fname_}'
+                                    print(scmd)
+                                    os.system(scmd)
                                 else:
                                     shutil.copy2(path_, out_fname_)
                             elif plain or fname_.endswith('.nj2'):
@@ -1821,7 +1830,8 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                     lf_.write(output)
                             else:
                                 shutil.copy2(fname_, out_fname_)
-                            shutil.copymode(fname_, out_fname_)                        
+                            if not os.path.isdir(out_fname_):    
+                                shutil.copymode(fname_, out_fname_)                        
             
             from ctypes.util import _findLib_ld
             libc_path = _findLib_ld('c')
