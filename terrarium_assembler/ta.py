@@ -339,6 +339,7 @@ class TerrariumAssembler:
         ap.add_argument('--stage-pack', default='', type=str, help='Stage pack to given destination directory')
         ap.add_argument('--analyse', default='', type=str, help='Analyse resulting pack')
         ap.add_argument('--folder-command', default='', type=str, help='Perform some shell command for all projects')
+        ap.add_argument('--git-sync', default='', type=str, help='Perform lazy git sync for all projects')
         ap.add_argument('specfile', type=str, help='Specification File')
         
         self.args = args = ap.parse_args()
@@ -1073,6 +1074,37 @@ popd
                 print('*'*10 + f' Git «{args.folder_command}» for {git_url} ')
                 scmd = f'''{args.folder_command}'''
                 os.system(scmd)
+        pass
+
+
+    def git_sync(self):
+        '''
+         Performing lazy git sync all project folders
+         * get last git commit message (usially link to issue)
+         * commit with same message
+         * pull-merge (without rebase)
+         * push to same branch
+        '''
+        curdir = os.getcwd()
+        args = self.args
+        in_src = os.path.relpath(self.src_dir, start=self.curdir)
+        # for td_ in self.projects() + self.spec.templates_dirs:
+        #     git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+
+        for git_url, git_branch, path_to_dir_ in self.get_all_sources():
+            os.chdir(curdir)
+            if os.path.exists(path_to_dir_):
+                os.chdir(path_to_dir_)
+                print(f'''\nSyncing project "{path_to_dir_}"''')
+                last_commit_message = subprocess.check_output("git log -1 --pretty=%B", shell=True).decode("utf-8")
+                last_commit_message = last_commit_message.strip('"')
+                last_commit_message = last_commit_message.strip("'")
+                if not last_commit_message.startswith("Merge branch"):
+                    os.system(f'''git commit -am "{last_commit_message}" ''')
+                os.system(f'''git pull --rebase=false ''')
+                if 'out' in self.args.git_sync:
+                    os.system(f'''git push origin ''')
+                os.chdir(self.curdir)
         pass
 
     def checkout_sources(self):
@@ -1850,6 +1882,10 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
         if self.args.folder_command:
             self.folder_command()
+            return
+
+        if self.args.git_sync:
+            self.git_sync()
             return
 
         if self.args.analyse:
