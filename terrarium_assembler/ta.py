@@ -1627,12 +1627,13 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
         trace_file = None
         try:
-            trace_file_glob = spec.tests.tracefile
+            trace_file_glob = os.path.expandvars(spec.tests.tracefile)
         except:
             print('You should specify tests→tracefile')    
             return
 
         used_files = set()
+        print(f'Looking strace files in {trace_file_glob}')
         for trace_file in glob.glob(trace_file_glob):
             re_file = re.compile(r'''.*\(.*"(?P<filename>[^"]+)".*''')
             for linenum, line in enumerate(open(trace_file, 'r', encoding='utf-8').readlines()):
@@ -1850,7 +1851,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                     path_ = os.path.join(self.curdir, path_)
                                 if os.path.isdir(path_):    
                                     # shutil.copytree(path_, out_fname_)
-                                    scmd = f'rsync -rav {path_}/ {out_fname_}'
+                                    scmd = f'rsync -rav --exclude ".git" {path_}/ {out_fname_}'
                                     print(scmd)
                                     os.system(scmd)
                                 else:
