@@ -2227,8 +2227,15 @@ terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-is
                 chp_ = os.path.join(root_dir, 'isodistr.txt')
                 open(chp_, 'w', encoding='utf-8').write(filename)
 
+            res_ = list(self.installed_packages.filter(name='makeself'))
+            add_opts = ''
+            if len(res_) >= 0:
+                version_ = res_[0].version
+                from packaging import version
+                if version.parse("version_") >= version.parse("2.4.5"):
+                    add_opts = ' --tar-format posix '
             scmd = (f'''
-            makeself.sh {pmode} --tar-extra --xattrs --untar-extra --xattrs  --tar-extra --xattrs-include=* --untar-extra --xattrs-include=*  --needroot {root_dir} {installscriptpath} "Installation" ./install-me             
+            makeself.sh {pmode} {add_opts}  --tar-extra --xattrs --untar-extra --xattrs  --tar-extra --xattrs-include=* --untar-extra --xattrs-include=*  --needroot {root_dir} {installscriptpath} "Installation" ./install-me             
         ''' % vars()).replace('\n', ' ').strip()
             if not self.cmd(scmd)==0:
                 print(f'« {scmd} » failed!')
