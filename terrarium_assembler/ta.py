@@ -1635,13 +1635,13 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         used_files = set()
         print(f'Looking strace files in {trace_file_glob}')
         for trace_file in glob.glob(trace_file_glob):
-            re_file = re.compile(r'''.*\(.*"(?P<filename>[^"]+)".*''')
+            re_file = re.compile(r'''.*\([^"]*.\"(?P<filename>[^"]+)\".*''')
             for linenum, line in enumerate(open(trace_file, 'r', encoding='utf-8').readlines()):
                 m_ = re_file.match(line)
                 if m_:
                     fname = m_.group('filename')
-                    if 'pbin/ld.so' in fname or linenum>140:
-                        wtf=1
+                    if '04_a4_gorizont_2_page(1).png' in fname or linenum>=17132:
+                         wtf=1
                     # Heuristic to process strace files from Vagrant virtualboxes
                     fname = fname.replace('/vagrant', self.curdir)
                     # Heuristic to process strace files from remote VM, mounted by sshmnt
@@ -1769,6 +1769,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         args = self.args
         spec = self.spec
         root_dir = self.root_dir
+        t.tic()
 
         def install_templates(root_dir, args):
             if 'prepare_install' in self.spec:
@@ -1796,7 +1797,6 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                 wtfff=1
 
             from jinja2 import Environment, FileSystemLoader, Template
-            t.tic()
 
             for td_ in spec.templates_dirs:
                 git_url, git_branch, path_to_dir, _ = self.explode_pp_node(td_)
