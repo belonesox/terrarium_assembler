@@ -131,6 +131,11 @@ class BinRegexps:
         else:
             add_listrex2dict(self.need_exclude.release, self.need_exclude_re)
         pass
+        self.ignore_re = {}
+        if 'ignore' in self.need_exclude:
+            add_listrex2dict(self.need_exclude.ignore, self.ignore_re)
+
+
 
     def is_just_copy(self, f):
         for re_ in self.just_copy_re:
@@ -147,6 +152,9 @@ class BinRegexps:
     def is_need_exclude(self, f):
         if 'libtorch_cuda.so' in f:
             wtf=34342
+        for re_ in self.ignore_re:
+            if re_.match(f):
+                return False
         for re_ in self.need_exclude_re:
             if re_.match(f):
                 return True
@@ -1671,6 +1679,13 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         print("Analyse first:")
         for f, s in top10:
             rel_f = f.replace(abs_path_to_out_dir, '')
+            ignore_ = False
+            for re_ in self.br.ignore_re:
+                if re_.match(f):
+                    ignore_ = True
+                    break
+            if ignore_:
+                continue    
             unban_ = False
             for unban in [#'/usr/lib64/python3.9','/lib64/python3.9'
                         ]:
