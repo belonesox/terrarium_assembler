@@ -2,7 +2,6 @@
 import argparse
 import io
 import os
-import pathlib
 import subprocess
 import shutil
 import sys
@@ -24,6 +23,7 @@ import csv
 
 from contextlib import suppress
 from wheel_filename import parse_wheel_filename
+from pathlib import Path, PurePath
 
 from .utils import *
 
@@ -157,12 +157,16 @@ class BinRegexps:
                 return False
         for re_ in self.need_exclude_re:
             if re_.match(f):
+                cnt_ = self.need_exclude_re[re_]
+                if not cnt_:
+                    cnt = 0
+                self.need_exclude_re[re_] = cnt_ + 1
                 return True
         return False
 
     def is_needed(self, f):
         return (self.is_just_copy(f) or self.is_need_patch(f))
-        #and not self.is_need_exclude(f)
+                #and not self.is_need_exclude(f)
 
     pass
 
@@ -754,17 +758,16 @@ popd
         if f == '/usr/lib64/python3.9/distutils/version.py':
             wtf333 = 1
 
+        if self.br.is_needed(f):
+            return True
 
         # if self.br.is_need_exclude(f):
         #     return False
 
-        if self.br.is_needed(f):
-            return True
-
         if f.startswith("/lib64/ld-linux"): # Этот файл надо специально готовить, чтобы сделать перемещаемым.
             return False
 
-        parts = list(pathlib.PurePath(f).parts)
+        parts = list(PurePath(f).parts)
         el = parts.pop(0)
         if el != "/":
             raise RuntimeError("unexpected path: not absolute! {}".format(f))
@@ -979,7 +982,7 @@ popd
                     to_ = to_[1:]
 
             dir_, _ = os.path.split(to_)
-            pathlib.Path(os.path.join(self.root_dir, dir_)).mkdir(parents=True, exist_ok=True)
+            Path(os.path.join(self.root_dir, dir_)).mkdir(parents=True, exist_ok=True)
             # ar.add(f)
             if os.path.isdir(what):
                 # copy_tree(what, os.path.join(root_dir, to_))
@@ -1634,34 +1637,44 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         lastdirs = os.path.sep.join(abs_path_to_out_dir.split(os.path.sep)[-2:])
 
         trace_file = None
-        try:
-            trace_file_glob = os.path.expandvars(spec.tests.tracefile)
-        except:
+        if not 'tracefile' in spec.tests:
             print('You should specify tests→tracefile')
             return
 
+        tracefiles = []
+        if isinstance(spec.tests.tracefile, str):
+            tracefiles.append(spec.tests.tracefile) 
+
+        if isinstance(spec.tests.tracefile, list):
+            tracefiles.extend(spec.tests.tracefile) 
+
+        for i_ in range(len(tracefiles)):
+            tracefiles[i_] = str(Path(tracefiles[i_]).resolve())
+            tracefiles[i_] = os.path.expandvars(tracefiles[i_])    
+
         used_files = set()
-        print(f'Looking strace files in {trace_file_glob}')
-        for trace_file in glob.glob(trace_file_glob):
-            re_file = re.compile(r'''.*\([^"]*.\"(?P<filename>[^"]+)\".*''')
-            for linenum, line in enumerate(open(trace_file, 'r', encoding='utf-8').readlines()):
-                m_ = re_file.match(line)
-                if m_:
-                    fname = m_.group('filename')
-                    if '04_a4_gorizont_2_page(1).png' in fname or linenum>=17132:
-                         wtf=1
-                    # Heuristic to process strace files from Vagrant virtualboxes
-                    fname = fname.replace('/vagrant', self.curdir)
-                    # Heuristic to process strace files from remote VM, mounted by sshmnt
-                    fname = re.sub(fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
-                    fname = re.sub(fr'''/opt/dm/''', abs_path_to_out_dir, fname)
-                    if os.path.isabs(fname):
-                        fname = os.path.abspath(fname)
-                        if fname.startswith(abs_path_to_out_dir):
-                            if os.path.islink(fname):
-                                link_ = os.readlink(fname)
-                                fname = os.path.abspath(os.path.join(os.path.split(fname)[0], link_))
-                            used_files.add(os.path.abspath(fname))
+        for trace_file_glob in tracefiles:
+            print(f'Looking strace files in {trace_file_glob}')
+            for trace_file in glob.glob(trace_file_glob):
+                re_file = re.compile(r'''.*\([^"]*.\"(?P<filename>[^"]+)\".*''')
+                for linenum, line in enumerate(open(trace_file, 'r', encoding='utf-8').readlines()):
+                    m_ = re_file.match(line)
+                    if m_:
+                        fname = m_.group('filename')
+                        if '04_a4_gorizont_2_page(1).png' in fname or linenum>=17132:
+                            wtf=1
+                        # Heuristic to process strace files from Vagrant virtualboxes
+                        fname = fname.replace('/vagrant', self.curdir)
+                        # Heuristic to process strace files from remote VM, mounted by sshmnt
+                        fname = re.sub(fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
+                        fname = re.sub(fr'''/opt/dm/''', abs_path_to_out_dir, fname)
+                        if os.path.isabs(fname):
+                            fname = os.path.abspath(fname)
+                            if fname.startswith(abs_path_to_out_dir):
+                                if os.path.islink(fname):
+                                    link_ = os.readlink(fname)
+                                    fname = os.path.abspath(os.path.join(os.path.split(fname)[0], link_))
+                                used_files.add(os.path.abspath(fname))
 
         existing_files = {}
         for dirpath, dirnames, filenames in os.walk(abs_path_to_out_dir):
@@ -1760,7 +1773,6 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         '''
         Postprocessing, removing not needed files after installing python modules, etc
         '''
-        from pathlib import Path
         for path in Path(self.root_dir).rglob('*'):
             rp_ = str(path.absolute())
             if '/mildata/baselines_model.ckpt' in rp_:
@@ -2167,6 +2179,9 @@ terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-is
                 print(scmd)
                 os.system(scmd)
                 pass
+            # size_ = sum(file.stat().st_size for file in Path(self.root_dir).rglob('*'))
+            # Postprocessing, removing not needed files after installing python modules, etc
+            self.remove_exclusions()
 
             with open(f'{self.curdir}/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
                 lf.write('obsoletes excludes \n')
@@ -2174,11 +2189,6 @@ terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-is
                     if cnt_ == 0:
                         pat_ = re_.pattern
                         lf.write(f'   {pat_} \n')
-
-            # size_ = sum(file.stat().st_size for file in pathlib.Path(self.root_dir).rglob('*'))
-
-            # Postprocessing, removing not needed files after installing python modules, etc
-            self.remove_exclusions()
 
             size_  = folder_size(self.root_dir, follow_symlinks=False)
 
