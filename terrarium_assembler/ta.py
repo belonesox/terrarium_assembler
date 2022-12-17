@@ -1490,7 +1490,7 @@ python -m pipenv --rm
 rm -f Pipfile*
 # sudo python -m pip uninstall -y virtualenv
 python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-python -m pipenv install setuptools_git_versioning wheel
+python -m pipenv install setuptools_git_versioning wheel pip==21.1.2
 '''
         lines.append(scmd)
         self.lines2sh("04-init-env", lines, "init-env")
