@@ -1861,8 +1861,10 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                             if 'users.xml' in fname_:
                                 dfdsfdsf=1
                             m = fucking_magic(fname_)
-                            if 'text' in m:
-                                plain = True
+                            for t_ in ['ASCII text', 'UTF8 text']:
+                                if t_ in m:
+                                    plain = True
+                                    break
                         except Exception:
                             pass
                         print(f"Processing template «{fname_}» type «{m}»...")
