@@ -1805,7 +1805,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
 
             if 'copy_folders' in self.spec:
-                for it_ in self.spec.copy_folders:
+                for it_ in self.spec.copy_folders or []:
                     pass
                 from_ = os.path.join(self.src_dir, it_['from'])
                 to_ = os.path.join(root_dir, it_['to'])
@@ -1865,6 +1865,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                 plain = True
                         except Exception:
                             pass
+                        print(f"Processing template «{fname_}» type «{m}»...")
                         if os.path.islink(fname_):
                             linkto = os.readlink(fname_)
                             os.symlink(linkto, out_fname_)
