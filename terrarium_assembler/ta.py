@@ -1861,7 +1861,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                             if 'users.xml' in fname_:
                                 dfdsfdsf=1
                             m = fucking_magic(fname_)
-                            for t_ in ['ASCII text', 'UTF8 text']:
+                            for t_ in ['ASCII text', 'UTF8 text', 'Unicode text', 'UTF-8 text']:
                                 if t_ in m:
                                     plain = True
                                     break
