@@ -600,7 +600,7 @@ export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
                 lines.append(fR"""
-time nice -19 pipenv run python3 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
+time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
