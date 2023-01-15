@@ -1817,9 +1817,10 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                 # All standard python copy_tree is broken
                 # https://bugs.python.org/issue41134
                 # https://stackoverflow.com/questions/53090360/python-distutils-copy-tree-fails-to-update-if-there-are-symlinks
-                scmd = f'rsync -rav {from_}/ {to_}'
-                print(scmd)
-                os.system(scmd)
+                if from_.strip():
+                    scmd = f'rsync -rav {from_}/ {to_}'
+                    print(scmd)
+                    os.system(scmd)
 
                 wtfff=1
 
@@ -1879,7 +1880,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                 path_ = open(fname_).read().strip()
                                 if not os.path.isabs(path_):
                                     path_ = os.path.join(self.curdir, path_)
-                                if os.path.isdir(path_):
+                                if path_.strip() and os.path.isdir(path_):
                                     # shutil.copytree(path_, out_fname_)
                                     scmd = f'rsync -rav --exclude ".git" {path_}/ {out_fname_}'
                                     print(scmd)
