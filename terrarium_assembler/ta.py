@@ -1661,13 +1661,13 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                     m_ = re_file.match(line)
                     if m_:
                         fname = m_.group('filename')
-                        if '04_a4_gorizont_2_page(1).png' in fname or linenum>=17132:
+                        if 'lib64/girepository-1.0/GdkPixbuf-2.0.typelib' in fname:
                             wtf=1
                         # Heuristic to process strace files from Vagrant virtualboxes
                         fname = fname.replace('/vagrant', self.curdir)
                         # Heuristic to process strace files from remote VM, mounted by sshmnt
                         fname = re.sub(fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
-                        fname = re.sub(fr'''/opt/dm/''', abs_path_to_out_dir, fname)
+                        fname = re.sub(fr'''/opt/dm''', abs_path_to_out_dir, fname)
                         if os.path.isabs(fname):
                             fname = os.path.abspath(fname)
                             if fname.startswith(abs_path_to_out_dir):
