@@ -2264,7 +2264,7 @@ terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-is
                 if version.parse(version_) >= version.parse("2.4.5"):
                     add_opts = ' --tar-format posix '
             scmd = (f'''
-            makeself.sh {pmode} {add_opts}  --tar-extra --xattrs --untar-extra --xattrs  --tar-extra --xattrs-include=* --untar-extra --xattrs-include=*  --needroot {root_dir} {installscriptpath} "Installation" ./install-me
+            makeself.sh {pmode} {add_opts}  --tar-extra "--xattrs --xattrs-include=*" --untar-extra "--xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" ./install-me
         ''' % vars()).replace('\n', ' ').strip()
             if not self.cmd(scmd)==0:
                 print(f'« {scmd} » failed!')
