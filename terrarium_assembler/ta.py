@@ -1643,14 +1643,14 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
         tracefiles = []
         if isinstance(spec.tests.tracefile, str):
-            tracefiles.append(spec.tests.tracefile) 
+            tracefiles.append(spec.tests.tracefile)
 
         if isinstance(spec.tests.tracefile, list):
-            tracefiles.extend(spec.tests.tracefile) 
+            tracefiles.extend(spec.tests.tracefile)
 
         for i_ in range(len(tracefiles)):
             tracefiles[i_] = str(Path(tracefiles[i_]).resolve())
-            tracefiles[i_] = os.path.expandvars(tracefiles[i_])    
+            tracefiles[i_] = os.path.expandvars(tracefiles[i_])
 
         used_files = set()
         for trace_file_glob in tracefiles:
@@ -1698,7 +1698,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                     ignore_ = True
                     break
             if ignore_:
-                continue    
+                continue
             unban_ = False
             for unban in [#'/usr/lib64/python3.9','/lib64/python3.9'
                         ]:
@@ -2264,7 +2264,7 @@ terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-is
                 if version.parse(version_) >= version.parse("2.4.5"):
                     add_opts = ' --tar-format posix '
             scmd = (f'''
-            makeself.sh {pmode} {add_opts}  --tar-extra "--xattrs --xattrs-include=*" --untar-extra "--xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" ./install-me
+            makeself.sh {pmode} {add_opts}  --notemp --tar-extra "--xattrs --xattrs-include=*" --untar-extra "--xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" ./install-me
         ''' % vars()).replace('\n', ' ').strip()
             if not self.cmd(scmd)==0:
                 print(f'« {scmd} » failed!')
