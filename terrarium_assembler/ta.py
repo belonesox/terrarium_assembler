@@ -90,6 +90,7 @@ class BinRegexps:
     just_copy:  list #bins that just need to be copied.
     need_exclude: dict #bins that just need to be copied.
     debug: bool
+    # optional_patcher: str # path to script for optional patching
 
     def __post_init__(self):
         def add_rex2list(rex, alist):
@@ -1047,6 +1048,12 @@ popd
             print('Cannot get interpreter for binary', binpath)
             # raise ex_
         pass
+
+        if 'optional_bin_patcher' in self.spec:
+            if os.path.exists(self.spec.optional_bin_patcher):
+                # scmd = f'''{self.spec.optional_bin_patcher} patched_binary'''
+                res = subprocess.check_output([self.spec.optional_bin_patcher, patched_binary], universal_newlines=True)
+                wtf = 1                                    
 
         self.add(patched_binary, os.path.join("pbin", pyname))
         os.remove(patched_binary)

@@ -135,8 +135,10 @@ def fix_binary(path, libpath):
     '''
 
     from tempfile import mkstemp
+    patching_dir = 'tmp/patching'
+    mkdir_p(patching_dir)
 
-    fd_, patched_elf = mkstemp()
+    fd_, patched_elf = mkstemp(dir=patching_dir)
     shutil.copy2(path, patched_elf)
     
     orig_perm = stat.S_IMODE(os.lstat(path).st_mode)
