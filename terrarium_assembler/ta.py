@@ -318,6 +318,7 @@ class TerrariumAssembler:
             'download-rpms': 'download RPMs',
             'download-sources-for-rpms': 'download SRPMs — sources packages for RPMS',
             'checkout': 'checkout sources',
+            'download-base-wheels': 'download base WHL-python packages with fixed versions',
             'install-repos': 'install RPM repositories',
             'install-rpms': 'install downloaded RPMS',
             'download-wheels': 'download needed WHL-python packages',
@@ -374,6 +375,7 @@ class TerrariumAssembler:
 
         if self.args.stage_my_source_changed:
             # self.args.stage_checkout = True
+            self.args.stage_download_base_wheels = True
             self.args.stage_download_wheels = True
             self.args.stage_init_env = True
             # self.args.stage_preinstall_wheels = True
@@ -387,6 +389,7 @@ class TerrariumAssembler:
             self.args.stage_install_repos = True
             self.args.stage_download_rpms = True
             self.args.stage_checkout = True
+            self.args.stage_download_base_wheels = True
             self.args.stage_download_wheels = True
 
         specfile_ = expandpath(args.specfile)
@@ -481,6 +484,9 @@ class TerrariumAssembler:
 
         self.ext_whl_path = os.path.join(self.in_bin, "extwheel")
         mkdir_p(self.ext_whl_path)
+
+        self.base_whl_path = os.path.join(self.in_bin, "basewheel")
+        mkdir_p(self.base_whl_path)
 
         os.environ['PATH'] = "/usr/lib64/ccache:" + os.environ['PATH']
 
@@ -1482,9 +1488,9 @@ pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup
         scmd = f'''
 python -m pipenv --rm
 rm -f Pipfile*
-# sudo python -m pip uninstall -y virtualenv
+touch Pipfile
 python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-python -m pipenv install setuptools_git_versioning wheel pip==21.1.2
+pipenv run python -m pip install ./in/bin/basewheel/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
         lines.append(scmd)
         self.lines2sh("04-init-env", lines, "init-env")
@@ -1500,7 +1506,7 @@ python -m pipenv install setuptools_git_versioning wheel pip==21.1.2
         scmd = f'''
 pipenv --rm
 pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+pipenv run python -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
         lines.append(scmd)   # --no-cache-dir
 
@@ -1570,14 +1576,47 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
 
         return pip_targets, pip_reqs
 
-    def pip_args_from_sources(self, terra=False):
+    def pip_args_from_sources(self, terra=False, ignore_fixed=False):
         pip_targets, pip_reqs = self.get_pip_targets_and_reqs_from_sources(
             terra=terra)
         # pip_targets += self.pp.pip()
 
-        pip_targets_ = " ".join(pip_targets)
+        pip_targets_ = " ".join([r for r in pip_targets if not ignore_fixed or '==' not in r])
         pip_reqs_ = " ".join([f" -r {r} " for r in pip_reqs])
         return f" {pip_reqs_} {pip_targets_} "
+
+
+    def download_base_wheels(self):
+        '''
+        Consistent downloading only python packages with fixed versions.
+        They should be downloaded before building our packages and creating pipenv environment.
+        '''
+        os.chdir(self.curdir)
+        os.chdir(self.out_dir)
+
+        root_dir = self.root_dir
+        args = self.args
+
+        bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
+
+        lines = []
+        lines.append('''
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+
+rm -f %s/basewheel/*
+''' % bin_dir)
+
+        pip_targets, _ = self.get_pip_targets_and_reqs_from_sources(terra=False)
+        pip_targets_ = " ".join([r for r in pip_targets if '==' in r])
+
+        # pipenv environment does not exists we using regular python to download base packages.
+        scmd = f"python -m pip download  {pip_targets_} --dest {bin_dir}/basewheel "
+
+        lines.append(scmd)
+        self.lines2sh("03-download-base-wheels", lines, "download-base-wheels")
+        pass
+
 
     def download_pip(self):
         '''
@@ -1595,14 +1634,13 @@ pipenv run python3 -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.wh
         lines.append('''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
-export PIPENV_PIPFILE=$d/Pipfile
 
 rm -f %s/extwheel/*
 ''' % bin_dir)
 
         pip_args_ = self.pip_args_from_sources()
 
-        scmd = f"python3 -m pipenv run python -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel --find-links='{bin_dir}/ourwheel' "
+        scmd = f"python3 -m pipenv run python -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel --find-links='{bin_dir}/ourwheel' --find-links='{bin_dir}/basewheel' "
         lines.append(scmd)
 
         for py_ in self.pp.remove_from_download or []:
@@ -1610,6 +1648,10 @@ rm -f %s/extwheel/*
             lines.append(scmd)
 
         scmd = f"""
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+export PIPENV_PIPFILE=$d/Pipfile
+
 pushd {bin_dir}/extwheel
 ls *.tar.* | xargs -i[] -t python -m pipenv run python -m pip wheel [] --no-deps
 rm -f *.tar.*
@@ -1934,6 +1976,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
         self.install_repos()
         self.download_packages()
+        self.download_base_wheels()
         self.init_env()
         self.checkout_sources()
         self.download_pip()
@@ -1992,6 +2035,13 @@ terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-is
 
         self.lines2sh(
             "93-analyse", [f"terrarium_assembler {specfile_} --analyse=./out > optimize_me.txt"])
+
+        self.lines2sh("94-install-last-nuitka", [
+            f'''
+export PIPENV_VENV_IN_PROJECT=1
+python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
+            '''])
+
 
         root_dir = 'out'
         if self.args.stage_pack:
