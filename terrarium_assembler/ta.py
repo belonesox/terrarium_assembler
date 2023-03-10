@@ -376,8 +376,8 @@ class TerrariumAssembler:
         if self.args.stage_my_source_changed:
             # self.args.stage_checkout = True
             self.args.stage_download_base_wheels = True
-            self.args.stage_download_wheels = True
             self.args.stage_init_env = True
+            self.args.stage_download_wheels = True
             # self.args.stage_preinstall_wheels = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
@@ -545,7 +545,8 @@ export TA_PIPENV_DIR=`python -m pipenv --venv`
 
             for k, v in self.tvars.items():
                 if isinstance(v, str) or isinstance(v, int):
-                    lf.write(f'''export TA_{k}="{v}"\n''')
+                    if '\n' not in str(v):
+                        lf.write(f'''export TA_{k}="{v}"\n''')
             lf.write('''
 set -x
 ''')
