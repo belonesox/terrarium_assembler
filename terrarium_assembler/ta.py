@@ -1935,6 +1935,10 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                 template = env.get_template(fname_)
                                 output = template.render(self.tvars)
                                 with open(out_fname_, 'w', encoding='utf-8') as lf_:
+                                    if not lf_.writable():
+                                        # Trying to fix rights.
+                                        scmd = f'chmod u+w "{out_fname_}"'
+                                        os.system(scmd)
                                     lf_.write(output)
                             else:
                                 shutil.copy2(fname_, out_fname_)
