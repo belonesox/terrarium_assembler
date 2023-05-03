@@ -9,11 +9,9 @@ import os
 import subprocess
 import shutil
 import sys
-from tempfile import mkstemp
 import magic
 import stat
 import re
-import yaml
 import json
 import dataclasses as dc
 import dnf
@@ -23,6 +21,7 @@ import hashlib
 import time
 import glob
 import csv
+import jinja2.exceptions
 
 
 from contextlib import suppress
@@ -524,7 +523,6 @@ class TerrariumAssembler:
         return pl_
 
     def lines2sh(self, name, lines, stage=None):
-        import stat
         os.chdir(self.curdir)
         fname = name + '.sh'
 
@@ -1900,6 +1898,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                             wtf = 1
                         out_fname_ = os.path.join(root_dir, dirpath, filename)
                         out_fname_ = Template(out_fname_).render(self.tvars)
+                        # Path(out_fname_).parent.mkdir(exist_ok=True)
 
                         plain = False
                         try:
@@ -1917,6 +1916,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                             linkto = os.readlink(fname_)
                             os.symlink(linkto, out_fname_)
                         else:
+                            processed_ = False
                             if fname_.endswith('.copy-file'):
                                 if 'error' in fname_:
                                     wtf = 4
@@ -1931,18 +1931,23 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                     os.system(scmd)
                                 else:
                                     shutil.copy2(path_, out_fname_)
+                                processed_ = True    
                             elif plain or fname_.endswith('.nj2'):
-                                template = env.get_template(fname_)
-                                output = template.render(self.tvars)
                                 try:
-                                    with open(out_fname_, 'a', encoding='utf-8') as lf_:
-                                        pass
-                                except PermissionError as ex_:
-                                    scmd = f'chmod u+w "{out_fname_}"'
-                                    os.system(scmd)
-                                with open(out_fname_, 'w', encoding='utf-8') as lf_:
-                                    lf_.write(output)
-                            else:
+                                    template = env.get_template(fname_)
+                                    output = template.render(self.tvars)
+                                    try:
+                                        with open(out_fname_, 'a', encoding='utf-8') as lf_:
+                                            pass
+                                    except PermissionError as ex_:
+                                        scmd = f'chmod u+w "{out_fname_}"'
+                                        os.system(scmd)
+                                    with open(out_fname_, 'w', encoding='utf-8') as lf_:
+                                        lf_.write(output)
+                                    processed_ = True        
+                                except jinja2.exceptions.TemplateError as ex_:         
+                                    print(f'''{fname_} looks not Jinja template''')
+                            if not processed_:        
                                 shutil.copy2(fname_, out_fname_)
                             if not os.path.isdir(out_fname_):
                                 shutil.copymode(fname_, out_fname_)
