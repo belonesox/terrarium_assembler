@@ -2409,8 +2409,22 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 
         os.chdir(self.curdir)
 
+        def get_git_version():
+            tags = subprocess.check_output("git tag --sort=-creatordate --merged", 
+                                           shell=True, universal_newlines=True)
+            for tag in tags.strip().split('\n'):
+                if tag.startswith('v'):
+                   return tag[1:] 
+            return '1.0.0'
+
+        git_version = get_git_version()
+
         nfpm_dir = os.path.join(self.curdir, 'tmp/nfpm')
         mkdir_p(nfpm_dir)
+
+        current_time = datetime.datetime.now().replace(microsecond=0)
+        time_ = current_time.isoformat().replace(':', '').replace('-', '').replace('T', '')
+
 
         os.chdir(nfpm_dir)
         with open(os.path.join(nfpm_dir, 'postinstall.sh'), 'w', encoding='utf-8') as lf:
@@ -2423,7 +2437,7 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 name: "{self.spec.label}"
 arch: "amd64"
 platform: "linux"
-version: "v1.0.0"
+version: "v{git_version}-{time_}"
 section: "default"
 priority: "extra"
 provides:
