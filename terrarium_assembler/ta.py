@@ -602,20 +602,56 @@ export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
                 lines.append(fR"""
-time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log
-mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
+time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log || {{ echo 'Compilation failed' ; exit 1; }}
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
 pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
     """)
                 self.fs.folders.append(target_dir)
+                lines.append(fR"""
+mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
+""")
                 if "outputname" in target_:
                     srcname = target_.outputname
                     if srcname != outputname:
                         lines.append(R"""
-    mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
+mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
     """ % vars())
+
+                if "sync" in target_:
+                    ts_ = target_.sync
+                    for dst_ in ts_:
+                        si_ = ts_[dst_]    
+                        srcs = []
+                        filtermod = ''
+                        if isinstance(si_, str):
+                            srcs.append(si_)
+                        elif isinstance(si_, dict):   
+                            filtermods = []
+                            if "filters" in si_:
+                                filtermods += [
+                                    " --include='*/' "
+                                ]
+
+                                for fil_ in si_.filters:
+                                    filtermods.append(f'--include="{fil_}"')
+
+                                filtermods += [
+                                    "--include='*/'",
+                                    "--exclude='*'"
+                                ]
+
+                            filtermod = ' '.join(filtermods)        
+                            for s_ in si_.src:
+                                srcs.append(s_)    
+                        for src in srcs:        
+                            scmd = f'''
+mkdir -p {target_dir_}/{dst_}                            
+rsync -ravm {src} {target_dir_}/{dst_} {filtermod} 
+                            '''
+                            lines.append(scmd)
+
 
 #             if "modules" in target_:
 #                 force_modules = []
@@ -651,9 +687,17 @@ pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
                 self.lines2sh(build_name, lines, None)
                 bfiles.append(build_name)
 
+        if 'custombuilds' in self.spec:
+            cbs = self.spec.custombuilds
+            for cb in cbs:
+                build_name = 'build_' + cb.name
+                self.lines2sh(build_name, [cb.shell.strip()], None)
+                bfiles.insert(0, build_name)
+
         lines = []
         for b_ in bfiles:
             lines.append("./" + b_ + '.sh')
+
         self.lines2sh("40-build-nuitkas", lines, "build-nuitka")
         pass
 
@@ -1844,10 +1888,6 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         t.tic()
 
         def install_templates(root_dir, args):
-            if 'prepare_install' in self.spec:
-                for scmd in self.spec.prepare_install.strip().split('\n'):
-                    self.cmd(scmd)
-
             if 'copy_folders' in self.spec:
                 for it_ in self.spec.copy_folders or []:
                     pass
@@ -2207,9 +2247,6 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
                             if 'cv2' in f:
                                 wtf = 1
                                 pass
-                            if 'PIL' in f:
-                                wtf = 1
-                                pass
                             if 'pydantic' in f:
                                 wtf = 1
                                 pass
@@ -2217,9 +2254,19 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
                             #     continue
                             # if not self.should_copy(f):
                             #     continue
+
+                            if 'constance' in f:
+                                wtf = 1
+                                pass
+
                             if self.br.is_need_patch(f):
                                 self.process_binary(f)
                                 continue
+
+                            if 'constance' in f:
+                                wtf = 1
+                                pass
+
                             libfile = os.path.join(
                                 self.root_dir, f.replace(folder_, 'pbin'))
                             if 'java-11' in libfile:
@@ -2432,9 +2479,21 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 #!/bin/bash
 {self.spec.post_installer}
         '''.strip())
+
+        remove_mod = ''            
+        if 'pre_remove' in self.spec:
+            with open(os.path.join(nfpm_dir, 'pre_remove.sh'), 'w', encoding='utf-8') as lf:
+                lf.write(f'''
+    #!/bin/bash
+    {self.spec.pre_remove}
+            '''.strip())
+                remove_mod ="""
+      preremove: ./pre_remove.sh
+"""
+
         with open(os.path.join(nfpm_dir, 'nfpm.yaml'), 'w', encoding='utf-8') as lf:
             lf.write(f'''
-name: "{self.spec.label}"
+name: "{self.spec.label.lower()}"
 arch: "amd64"
 platform: "linux"
 version: "v{git_version}-{time_}"
@@ -2454,9 +2513,11 @@ overrides:
   rpm:
     scripts:
       postinstall: ./postinstall.sh
+{remove_mod}      
   deb:
     scripts:
       postinstall: ./postinstall.sh
+{remove_mod}      
 ''')
         for packagetype in ['rpm', 'deb']:
             pkgdir = self.out_dir + '.'+ packagetype
