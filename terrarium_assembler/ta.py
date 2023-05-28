@@ -799,7 +799,7 @@ popd
         if f == "":
             return False
 
-        if f == '/usr/lib64/python3.9/distutils/version.py':
+        if 'grafana-cli' in f:
             wtf333 = 1
 
         if self.br.is_needed(f):
@@ -826,7 +826,7 @@ popd
             return False
 
         if not self.args.debug:
-            if (parts[0] not in ["lib", "lib64"]) and (parts != ['bin', 'bash', 'sbin']):
+            if (parts[0] not in ["lib", "lib64", "libexec"]) and (parts != ['bin', 'bash', 'sbin']):
                 return False
         parts.pop(0)
 
@@ -965,6 +965,8 @@ popd
 
         exclusions = []
         for package_ in packages:
+            if 'grafana' in package_:
+                wtf=1
             exclusions += subprocess.check_output(
                 ['rpm', '-qd', package_], universal_newlines=True).splitlines()
 
@@ -2161,7 +2163,7 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
                     wtff = 1
                 if not self.should_copy(f):
                     return
-                if 'libpthread-2.31.so' in f:
+                if 'grafana-cli' in f:
                     wtff = 1
 
                 if 'java-11' in f:
@@ -2231,6 +2233,8 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 
             self.cmd('sudo chmod a+r /usr/lib/cups -R')
             for f in file_list:
+                if 'grafana-cli' in f:
+                    wtff = 1
                 copy_file_to_environment(f)
 
             # if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
