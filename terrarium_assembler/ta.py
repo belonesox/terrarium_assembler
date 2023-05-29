@@ -2526,7 +2526,7 @@ overrides:
 {remove_mod}      
   deb:
     scripts:
-      postinstall: ./postinstall.sh
+{install_mod}
 {remove_mod}      
 ''')
         for packagetype in ['rpm', 'deb']:
