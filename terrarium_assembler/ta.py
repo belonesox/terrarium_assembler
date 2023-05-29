@@ -2479,11 +2479,16 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 
 
         os.chdir(nfpm_dir)
-        with open(os.path.join(nfpm_dir, 'postinstall.sh'), 'w', encoding='utf-8') as lf:
-            lf.write(f'''
+        install_mod = ''            
+        if 'post_install' in self.spec:
+            with open(os.path.join(nfpm_dir, 'postinstall.sh'), 'w', encoding='utf-8') as lf:
+                lf.write(f'''
 #!/bin/bash
 {self.spec.post_installer}
-        '''.strip())
+            '''.strip())
+            install_mod ="""
+      postinstall: ./postinstall.sh
+"""
 
         remove_mod = ''            
         if 'pre_remove' in self.spec:
@@ -2517,7 +2522,7 @@ contents:
 overrides:
   rpm:
     scripts:
-      postinstall: ./postinstall.sh
+{install_mod}
 {remove_mod}      
   deb:
     scripts:
