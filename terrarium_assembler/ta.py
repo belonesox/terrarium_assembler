@@ -2450,6 +2450,7 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         os.chdir(isodir)
         scmd = f'''ln -sf {filename} last.iso'''
         self.cmd(scmd)
+        os.chdir(self.curdir)
         print(filepath)
 
 
@@ -2529,4 +2530,14 @@ overrides:
             scmd = f'''
     nfpm pkg --packager {packagetype} --target {pkgdir}        
     '''.strip()
+            os.chdir(nfpm_dir)
             self.cmd(scmd)
+
+            package_dir = f'out.{packagetype}'
+            os.chdir(self.curdir)
+            os.chdir(package_dir)
+            paths = sorted([f for f in Path('').glob(f'*.{packagetype}') if f.is_file()], key=os.path.getmtime)
+            filename = paths[-1]
+            scmd = f'''ln -sf {filename} last.{packagetype}'''
+            self.cmd(scmd)
+        pass
