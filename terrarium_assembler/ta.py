@@ -2480,7 +2480,7 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 
         os.chdir(nfpm_dir)
         install_mod = ''            
-        if 'post_install' in self.spec:
+        if 'post_installer' in self.spec:
             with open(os.path.join(nfpm_dir, 'postinstall.sh'), 'w', encoding='utf-8') as lf:
                 lf.write(f'''
 #!/bin/bash
@@ -2494,8 +2494,8 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         if 'pre_remove' in self.spec:
             with open(os.path.join(nfpm_dir, 'pre_remove.sh'), 'w', encoding='utf-8') as lf:
                 lf.write(f'''
-    #!/bin/bash
-    {self.spec.pre_remove}
+#!/bin/bash
+{self.spec.pre_remove}
             '''.strip())
                 remove_mod ="""
       preremove: ./pre_remove.sh
@@ -2509,8 +2509,6 @@ platform: "linux"
 version: "v{git_version}-{time_}"
 section: "default"
 priority: "extra"
-provides:
-- dm-client
 maintainer: "{self.spec.maintainer}"
 description: "{self.spec.description} "
 vendor: "{self.spec.vendor} "
