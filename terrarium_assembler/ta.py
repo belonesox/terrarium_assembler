@@ -79,6 +79,14 @@ def fucking_magic(f):
     return m
 
 
+def get_git_version():
+    tags = subprocess.check_output("git tag --sort=-creatordate --merged", 
+                                    shell=True, universal_newlines=True)
+    for tag in tags.strip().split('\n'):
+        if tag.startswith('v'):
+            return tag[1:] 
+    return '1.0.0'
+
 @dc.dataclass
 class BinRegexps:
     '''
@@ -2332,21 +2340,31 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         from dateutil.relativedelta import relativedelta
 
         os.chdir(self.curdir)
+        git_version = get_git_version()
 
         root_dir = os.path.realpath(self.out_dir)
         isodir = self.out_dir + '.iso'
         mkdir_p(isodir)
-        old_isos = [f_ for f_ in os.listdir(isodir) if f_.endswith('.iso')]
+
+        old_isos = sorted([f for f in Path('out.iso').glob(f'*.iso') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
+        # old_isos = [f_ for f_ in os.listdir(isodir) if f_.endswith('.iso')]
 
         current_time = datetime.datetime.now().replace(microsecond=0)
         prev_release_time = current_time + relativedelta(months=-1)
 
         for iso_ in reversed(sorted(old_isos)):
             try:
-                prev_release_time = datetime.datetime.strptime(
-                    iso_[:19], '%Y-%m-%dT%H-%M-%S')
+                timedt_ = '-'.join(iso_.name.split('-')[2:])[:19]
+                prev_release_time = datetime.datetime.strptime(timedt_, '%Y-%m-%dT%H-%M-%S')
                 break
             except:
+                # Temporary legacy mode
+                try:
+                    prev_release_time = datetime.datetime.strptime(
+                        iso_[:19], '%Y-%m-%dT%H-%M-%S')
+                    break
+                except:
+                    pass
                 pass
 
         since_time_ = prev_release_time.isoformat()
@@ -2385,7 +2403,7 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         os.chdir(self.curdir)
         self.cmd(f'chmod a+x {root_dir}/install-me')
 
-        filename = f"{time_prefix}-{label}-dm.iso" % vars()
+        filename = f"{label.lower()}-{git_version}-{time_prefix}.iso" % vars()
         with suppress(Exception):
             chp_ = os.path.join(root_dir, 'isodistr.txt')
             open(chp_, 'w', encoding='utf-8').write(filename)
@@ -2461,14 +2479,6 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 
         os.chdir(self.curdir)
 
-        def get_git_version():
-            tags = subprocess.check_output("git tag --sort=-creatordate --merged", 
-                                           shell=True, universal_newlines=True)
-            for tag in tags.strip().split('\n'):
-                if tag.startswith('v'):
-                   return tag[1:] 
-            return '1.0.0'
-
         git_version = get_git_version()
 
         nfpm_dir = os.path.join(self.curdir, 'tmp/nfpm')
@@ -2539,7 +2549,7 @@ overrides:
             package_dir = f'out.{packagetype}'
             os.chdir(self.curdir)
             os.chdir(package_dir)
-            paths = sorted([f for f in Path('').glob(f'*.{packagetype}') if f.is_file()], key=os.path.getmtime)
+            paths = sorted([f for f in Path('').glob(f'*.{packagetype}') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
             filename = paths[-1]
             scmd = f'''ln -sf {filename} last.{packagetype}'''
             self.cmd(scmd)
