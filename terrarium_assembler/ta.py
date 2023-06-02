@@ -2157,12 +2157,18 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
             file_list.extend(fs_)
 
             os.system('echo 2 > /proc/sys/vm/drop_caches ')
-            if os.path.exists(root_dir + ".old"):
-                shutil.rmtree(root_dir + ".old", ignore_errors=True)
-            if os.path.exists(root_dir + ".old"):
-                os.system("rm -rf " + root_dir + ".old")
+            user_ = os.getlogin()            
+            scmd = f'sudo chown {user_} {root_dir} -R '
+            self.cmd(scmd)
+            old_root_dir = root_dir + ".old"
+            if os.path.exists(old_root_dir):
+                scmd = f'sudo chown {user_} {old_root_dir} -R '
+                self.cmd(scmd)
+                shutil.rmtree(old_root_dir, ignore_errors=True)
+            if os.path.exists(old_root_dir):
+                os.system("rm -rf " + old_root_dir)
             if os.path.exists(root_dir):
-                shutil.move(root_dir, root_dir + ".old")
+                shutil.move(root_dir, old_root_dir)
 
             mkdir_p(root_dir)
 
@@ -2343,6 +2349,10 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         git_version = get_git_version()
 
         root_dir = os.path.realpath(self.out_dir)
+        user_ = os.getlogin()            
+        scmd = f'sudo chown {user_} {root_dir} -R '
+        self.cmd(scmd)
+
         isodir = self.out_dir + '.iso'
         mkdir_p(isodir)
 
@@ -2404,9 +2414,9 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         self.cmd(f'chmod a+x {root_dir}/install-me')
 
         filename = f"{label.lower()}-{git_version}-{time_prefix}.iso" % vars()
-        with suppress(Exception):
-            chp_ = os.path.join(root_dir, 'isodistr.txt')
-            open(chp_, 'w', encoding='utf-8').write(filename)
+        # with suppress(Exception):
+        chp_ = os.path.join(root_dir, 'isodistr.txt')
+        open(chp_, 'w', encoding='utf-8').write(filename)
 
         res_ = list(self.installed_packages.filter(name='makeself'))
         add_opts = ''
