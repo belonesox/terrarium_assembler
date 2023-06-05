@@ -23,6 +23,7 @@ import glob
 import csv
 import jinja2.exceptions
 from jinja2 import Environment, FileSystemLoader, Template
+from tempfile import mkstemp
 
 
 from contextlib import suppress
@@ -311,8 +312,12 @@ class TerrariumAssembler:
         # self.curdir = os.getcwd()
         self.root_dir = None
 
+        self.patching_dir = 'tmp/patching'
+        mkdir_p(self.patching_dir)
+
         # Потом сделать параметром функций.
         self.overwrite_mode = False
+        self.interpreter = None
 
         ap = argparse.ArgumentParser(
             description='Create a portable linux folder-application')
@@ -502,6 +507,10 @@ class TerrariumAssembler:
         self.nuitka_plugins_dir = os.path.realpath(os.path.join(
             os.path.split(__file__)[0], '..', 'nuitka_plugins'))
         self.installed_packages_ = None
+
+        self.optional_bin_patcher = None
+        if 'optional_bin_patcher' in self.spec and os.path.exists(self.spec.optional_bin_patcher):
+            self.optional_bin_patcher = self.spec.optional_bin_patcher
 
         pass
 
@@ -1065,6 +1074,32 @@ popd
             projects_ += self.gp.projects()
         return projects_
 
+    def fix_elf(self, path, libpath=None):
+        '''
+        Patch ELF file
+        '''
+        fd_, patched_elf = mkstemp(dir=self.patching_dir)
+        shutil.copy2(path, patched_elf)
+        
+        orig_perm = stat.S_IMODE(os.lstat(path).st_mode)
+        os.chmod(patched_elf, orig_perm | stat.S_IWUSR)         
+
+        if libpath:
+            try:
+                subprocess.check_call(['patchelf',
+                                    '--set-rpath',
+                                    libpath,
+                                    patched_elf])
+            except Exception as ex_:
+                print("Cannot patch ", path)
+                pass
+
+        os.close(fd_)
+        os.chmod(patched_elf, orig_perm)         
+        self.optional_patch_binary(patched_elf)
+        return patched_elf
+
+
     def process_binary(self, binpath):
         '''
         Фиксим бинарник.
@@ -1084,39 +1119,38 @@ popd
 
         pyname = os.path.basename(binpath)
         try:
-            patched_binary = fix_binary(binpath, '$ORIGIN/../lib64/')
+            patched_binary = self.fix_elf(binpath, '$ORIGIN/../lib64/')
         except Exception as ex_:
             print("Mime type ", m)
             print("Cannot fix", binpath)
             raise ex_
 
-        try:
-            interpreter = subprocess.check_output(['patchelf',
+        if not self.interpreter:
+            self.interpreter = subprocess.check_output(['patchelf',
                                                    '--print-interpreter',
                                                    patched_binary], universal_newlines=True).splitlines()[0]
-            self.add(os.path.realpath(interpreter),
-                     os.path.join("pbin", "ld.so"))
-        except Exception as ex_:
-            print('Cannot get interpreter for binary', binpath)
-            # raise ex_
-        pass
-
-        if 'optional_bin_patcher' in self.spec:
-            if os.path.exists(self.spec.optional_bin_patcher):
-                # scmd = f'''{self.spec.optional_bin_patcher} patched_binary'''
-                res = subprocess.check_output(
-                    [self.spec.optional_bin_patcher, patched_binary], universal_newlines=True)
-                wtf = 1
+            patched_interpreter = self.fix_elf(os.path.realpath(self.interpreter))
+            self.add(patched_interpreter, os.path.join("pbin", "ld.so"))
+        # except Exception as ex_:
+        #     print('Cannot get interpreter for binary', binpath)
+        #     # raise ex_
+        # pass
 
         self.add(patched_binary, os.path.join("pbin", pyname))
         os.remove(patched_binary)
 
     def fix_sharedlib(self, binpath, targetpath):
         relpath = os.path.join(os.path.relpath("lib64", targetpath), "lib64")
-        patched_binary = fix_binary(binpath, '$ORIGIN/' + relpath)
+        patched_binary = self.fix_elf(binpath, '$ORIGIN/' + relpath)
         self.add(patched_binary, targetpath)
         os.remove(patched_binary)
         pass
+
+    def optional_patch_binary(self, f):
+        if self.optional_bin_patcher:
+            res = subprocess.check_output(
+                [self.optional_bin_patcher, f], universal_newlines=True)
+            wtf = 1
 
     def get_all_sources(self):
         for td_ in self.projects() + self.spec.templates_dirs:

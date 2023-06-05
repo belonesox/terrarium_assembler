@@ -127,36 +127,36 @@ def yaml_load(filename, vars__=None):
     return fc, vars_
 
 
-def fix_binary(path, libpath):
-    '''
-    Make "portable" Elf-binary or SO-library.
+# def fix_elf_for_interpreter(path, libpath):
+#     '''
+#     Make "portable" Elf-binary or SO-library.
 
-    Calling patchelf to set RUNPATH to given libpath.
-    '''
+#     Calling patchelf to set RUNPATH to given libpath.
+#     '''
 
-    from tempfile import mkstemp
-    patching_dir = 'tmp/patching'
-    mkdir_p(patching_dir)
+#     from tempfile import mkstemp
+#     patching_dir = 'tmp/patching'
+#     mkdir_p(patching_dir)
 
-    fd_, patched_elf = mkstemp(dir=patching_dir)
-    shutil.copy2(path, patched_elf)
+#     fd_, patched_elf = mkstemp(dir=patching_dir)
+#     shutil.copy2(path, patched_elf)
     
-    orig_perm = stat.S_IMODE(os.lstat(path).st_mode)
-    os.chmod(patched_elf, orig_perm | stat.S_IWUSR)         
+#     orig_perm = stat.S_IMODE(os.lstat(path).st_mode)
+#     os.chmod(patched_elf, orig_perm | stat.S_IWUSR)         
 
-    try:
-        subprocess.check_call(['patchelf',
-                               '--set-rpath',
-                               libpath,
-                               patched_elf])
-    except Exception as ex_:
-        print("Cannot patch ", path)
-        # raise ex_
-        pass
+#     try:
+#         subprocess.check_call(['patchelf',
+#                                '--set-rpath',
+#                                libpath,
+#                                patched_elf])
+#     except Exception as ex_:
+#         print("Cannot patch ", path)
+#         # raise ex_
+#         pass
 
-    os.close(fd_)
-    os.chmod(patched_elf, orig_perm)         
-    return patched_elf
+#     os.close(fd_)
+#     os.chmod(patched_elf, orig_perm)         
+#     return patched_elf
 
 def rmdir(oldpath):
     if os.path.exists(oldpath):
