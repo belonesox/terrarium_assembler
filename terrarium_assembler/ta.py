@@ -29,8 +29,10 @@ from tempfile import mkstemp
 from contextlib import suppress
 from wheel_filename import parse_wheel_filename
 from pathlib import Path, PurePath
+from packaging import version
 
 from .utils import *
+from dateutil.relativedelta import relativedelta
 
 # будет отключено
 from .nuitkaflags import *
@@ -315,12 +317,14 @@ class TerrariumAssembler:
         self.patching_dir = 'tmp/patching'
         mkdir_p(self.patching_dir)
 
+        self.changelogdir= 'changelogs'
+        mkdir_p(self.changelogdir)
         # Потом сделать параметром функций.
         self.overwrite_mode = False
         self.interpreter = None
 
         ap = argparse.ArgumentParser(
-            description='Create a portable linux folder-application')
+            description='Create a «portable linux folder»-application')
         # ap.add_argument('--output', required=True, help='Destination directory')
         ap.add_argument('--debug', default=False,
                         action='store_true', help='Debug version of release')
@@ -335,20 +339,22 @@ class TerrariumAssembler:
             'install-repos': 'install RPM repositories',
             'install-rpms': 'install downloaded RPMS',
             'download-wheels': 'download needed WHL-python packages',
-            # 'preinstall-wheels': 'Bootstrap build environment with external wheel packages',
             'init-env': 'Create  build environment with some bootstrapping',
             'build-wheels': 'compile wheels for our python sources',
             'install-wheels': 'Install our and external Python wheels',
             'build-nuitka': 'Compile Python packages to executable',
             'build-go': 'Compile Go projects to executable',
-            'make-isoexe': 'Make self-executable install archive and ISO disk',
-            'make-packages': 'Make RPM/DEB packages from build folder',
+            'make-packages': 'Make RPM/DEB/ISO packages from build folder',
             'pack-me':  'Pack current dir to time prefixed tar.bz2'
         }
 
         for stage, desc in self.stages.items():
-            ap.add_argument('--stage-%s' % stage, default=False,
-                            action='store_true', help='Stage for %s ' % desc)
+            if 'packages' in stage:
+                ap.add_argument('--stage-%s' % stage, default="",
+                                action='store', help='Stage for %s ' % desc)
+            else:
+                ap.add_argument('--stage-%s' % stage, default=False,
+                                action='store_true', help='Stage for %s ' % desc)
 
         # ap.add_argument('--stage-download', default=False, action='store_true', help='Stage for download binary artifacts')
         # ap.add_argument('--stage-build-wheels', default=False, action='store_true', help='Build Wheels for source packages')
@@ -398,6 +404,7 @@ class TerrariumAssembler:
             self.args.stage_build_nuitka = True
             self.args.stage_build_go = True
             self.args.stage_pack = self.args.stage_my_source_changed
+            self.args.stage_make_packages = 'default'
 
         if self.args.stage_download_all:
             self.args.stage_install_repos = True
@@ -411,11 +418,6 @@ class TerrariumAssembler:
         os.environ['TERRA_SPECDIR'] = self.start_dir
         os.chdir(self.curdir)
 
-        # self.pipenv_dir = ''
-        # from pipenv.project import Project
-        # p = Project()
-        # self.pipenv_dir = p.virtualenv_location
-
         self.tvars = edict()
         self.tvars.python_version_1, self.tvars.python_version_2 = sys.version_info[:2]
         self.tvars.py_ext = ".pyc"
@@ -423,7 +425,6 @@ class TerrariumAssembler:
             self.tvars.py_ext = ".py"
         self.tvars.release = not self.args.debug
         self.tvars.fc_version = ''
-        # self.tvars.pipenv_dir = self.pipenv_dir
         self.tvars.python_major_version = sys.version_info.major
         self.tvars.python_minor_version = sys.version_info.minor
 
@@ -456,6 +457,14 @@ class TerrariumAssembler:
             need_exclude=need_exclude,
             debug=self.args.debug,
         )
+
+        self.package_modes = 'iso'
+        if 'packaging' in self.spec:
+            self.package_modes = ','.join(self.spec.packaging)
+            
+        if self.args.stage_make_packages == 'default':
+            self.args.stage_make_packages = self.package_modes
+
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath',
                               'python3-wheel', 'python3-pip', 'python3-devel', 'python3-yaml',
@@ -550,6 +559,8 @@ class TerrariumAssembler:
             if stage:
                 desc = self.stages[stage]
                 stage_ = stage.replace('_', '-')
+                if 'packing' in stage_:
+                    stage_ += f'={self.package_modes}' 
                 lf.write(f'''
 # Stage "{desc}"
 # Automatically called when terrarium_assembler --stage-{stage_} "{self.args.specfile}"
@@ -760,6 +771,15 @@ popd
         self.lines2sh("42-build-go", lines, "build-go")
         pass
 
+    def clear_shell_files(self):
+        os.chdir(self.curdir)
+        re_ = re.compile('\d\d-.*\.sh')
+        for sh_ in Path(self.curdir).glob('*.sh'):
+            if re_.match(sh_.name):
+                sh_.unlink()
+        pass        
+
+
     def mycopy(self, src, dst):
         '''
         Адаптивная процедура копирования в подкаталоги окружения — симлинки релятивизируются
@@ -768,6 +788,8 @@ popd
         if os.path.exists(dst) and not self.overwrite_mode:
             return
         if '__pycache__' in src:
+            return
+        if src.endswith('.rpmmoved'):
             return
         try:
             #
@@ -1034,7 +1056,7 @@ popd
         return res_
 
     def add(self, what, to_=None, recursive=True):
-        if 'java-11' in what:
+        if '_gi.so' in what:
             dfsfsfdsf = 1
         try:
             if not to_:
@@ -1328,8 +1350,8 @@ terrarium_assembler "{self.args.specfile}"
         pass
 
     def install_terra_pythons(self):
-        # if not self.pp.terra.pip and not self.pp.terra.projects:
-        #     return
+        if not self.pp.terra.pip and not self.pp.terra.projects:
+            return
 
         # Пока хардкодим вставку нашего питон-пипа. потом конечно надо бы избавится.
         root_dir = self.root_dir
@@ -1341,6 +1363,8 @@ terrarium_assembler "{self.args.specfile}"
             if os.path.exists(pipdir):
                 break
 
+        if not pipdir:
+            return        
         os.chdir(pipdir)
         # os.chdir(os.path.join('in', 'src', 'github-belonesox-pip'))
         scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
@@ -2011,8 +2035,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
                                 if path_.strip() and os.path.isdir(path_):
                                     # shutil.copytree(path_, out_fname_)
                                     scmd = f'rsync -rav --exclude ".git" {path_}/ {out_fname_}'
-                                    print(scmd)
-                                    os.system(scmd)
+                                    self.cmd(scmd)
                                 else:
                                     shutil.copy2(path_, out_fname_)
                                 processed_ = True    
@@ -2070,6 +2093,7 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
 
         # if self.args.stage_checkout:
 
+        self.clear_shell_files()
         self.install_repos()
         self.download_packages()
         self.download_base_wheels()
@@ -2107,33 +2131,19 @@ python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}
         self.lines2sh("50-pack", [
             '''
 sudo chown $USER . -R || true
-#terrarium_assembler --stage-pack=./out "%(specfile_)s" --stage-make-isoexe
+sudo chmod a+rx /usr/lib/cups -R
 terrarium_assembler --stage-pack=./out "%(specfile_)s"
             ''' % vars()])
 
-        self.lines2sh("51-pack-iso", [
+        self.lines2sh("52-make-packages", [
             f'''
-sudo chmod a+rx /usr/lib/cups -R
-terrarium_assembler {specfile_} --stage-make-isoexe
+terrarium_assembler {specfile_} --stage-make-packages={self.package_modes}
             '''])
-
-        self.lines2sh("52-pack-packages", [
-            f'''
-sudo chmod a+rx /usr/lib/cups -R
-terrarium_assembler {specfile_} --stage-make-packages
-            '''])
-
 
         self.lines2sh("91-pack-debug", [
             f'''
 sudo chmod a+rx /usr/lib/cups -R
 terrarium_assembler --debug --stage-pack=./out-debug {specfile_}
-            '''])
-
-        self.lines2sh("92-pack-debug-iso", [
-            f'''
-sudo chmod a+rx /usr/lib/cups -R
-terrarium_assembler --debug --stage-pack=./out-debug {specfile_} --stage-make-isoexe
             '''])
 
         self.lines2sh(
@@ -2325,11 +2335,18 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
                                 erwerew = 1
                             # if self.br.is_need_exclude(libfile):
                             #     continue
-                            self.add(f, libfile, recursive=False)
-                            if os.path.exists('/home/stas/projects/dmi-building/out/pbin/PIL'):
-                                wtf = 1
-                                pass
 
+                            m = ''
+                            try:
+                                m = fucking_magic(f)
+                            except Exception as ex_:
+                                print("Cannot detect Magic for ", f)
+                                raise ex_
+                            if m.startswith('ELF') and 'shared' in m:
+                                # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
+                                self.fix_sharedlib(f, libfile)
+                            else:
+                                self.add(f, libfile, recursive=False)
                     pass
 
             install_templates(root_dir, args)
@@ -2343,9 +2360,9 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
             #         copy_file_to_environment(f)
 
             os.chdir(root_dir)
-            scmd = "%(root_dir)s/ebin/python3 -m compileall -b . " % vars()
-            print(scmd)
-            os.system(scmd)
+            if [_ for _ in Path(f'{root_dir}/pbin/').glob('python3.*')]:
+                scmd = "%(root_dir)s/ebin/python3 -m compileall -b . " % vars()
+                self.cmd(scmd)
 
             if 0 and not self.args.debug:
                 # Remove source files.
@@ -2368,48 +2385,189 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
 
             print("Size ", size_/1024/1024, 'Mb')
 
-        if self.args.stage_make_isoexe:
-            self.make_isoexe()
-
         if self.args.stage_make_packages:
             self.make_packages()
 
         pass    
 
-    def make_isoexe(self):
-        from dateutil.relativedelta import relativedelta
-
+    def get_version(self):
         os.chdir(self.curdir)
-        git_version = get_git_version()
+        version_ = get_git_version()
+        if 'version' in self.spec:
+            versions_ = self.spec.version
+            if version.parse(versions_) > version.parse(version_):
+                version_ = versions_
+        return version_        
+
+    # def make_isoexe(self):
+    #     from dateutil.relativedelta import relativedelta
+
+    #     os.chdir(self.curdir)
+    #     git_version = self.get_version()
+
+    #     root_dir = os.path.realpath(self.out_dir)
+    #     user_ = os.getlogin()            
+    #     scmd = f'sudo chown {user_} {root_dir} -R '
+    #     self.cmd(scmd)
+
+    #     isodir = self.out_dir + '.iso'
+    #     mkdir_p(isodir)
+
+    #     old_changelogs = sorted([f for f in Path('out.iso').glob(f'*.iso') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
+    #     # old_changelogs = [f_ for f_ in os.listdir(isodir) if f_.endswith('.iso')]
+
+    #     current_time = datetime.datetime.now().replace(microsecond=0)
+    #     prev_release_time = current_time + relativedelta(months=-1)
+
+    #     for iso_ in reversed(sorted(old_changelogs)):
+    #         try:
+    #             timedt_ = '-'.join(iso_.name.split('-')[2:])[:19]
+    #             prev_release_time = datetime.datetime.strptime(timedt_, '%Y-%m-%dT%H-%M-%S')
+    #             break
+    #         except:
+    #             # Temporary legacy mode
+    #             try:
+    #                 prev_release_time = datetime.datetime.strptime(
+    #                     iso_[:19], '%Y-%m-%dT%H-%M-%S')
+    #                 break
+    #             except:
+    #                 pass
+    #             pass
+
+    #     since_time_ = prev_release_time.isoformat()
+    #     gitlogcmd_ = f'git log --since="{since_time_}" --pretty --name-status '
+
+    #     lines_ = []
+    #     for git_url, git_branch, path_to_dir_ in self.get_all_sources():
+    #         os.chdir(self.curdir)
+    #         if os.path.exists(path_to_dir_):
+    #             os.chdir(path_to_dir_)
+    #             with suppress(Exception):
+    #                 change_ = subprocess.check_output(
+    #                     gitlogcmd_, shell=True).decode('utf-8').strip()
+    #                 if change_:
+    #                     lines_.append(
+    #                         f'----\n Changelog for {path_to_dir_} ({git_url} / {git_branch})')
+    #                     lines_.append(change_)
+
+    #     pass
+
+    #     # current_time = datetime.datetime.now().replace(microsecond=0)
+    #     time_prefix = current_time.isoformat().replace(':', '-')
+    #     label = 'disk'
+    #     if 'label' in self.spec:
+    #         label = self.spec.label
+    #     installscript = "install-me.sh" % vars()
+    #     os.chdir(self.curdir)
+    #     installscriptpath = os.path.abspath(
+    #         os.path.join("tmp/", installscript))
+    #     if os.path.exists(installscriptpath):
+    #         os.unlink(installscriptpath)
+
+    #     pmode = ''
+    #     if shutil.which('pbzip2'):
+    #         pmode = ' --threads 8 --pbzip2 '
+    #     os.chdir(self.curdir)
+    #     self.cmd(f'chmod a+x {root_dir}/install-me')
+
+    #     filename = f"{label.lower()}-{git_version}-{time_prefix}.iso" % vars()
+    #     # with suppress(Exception):
+    #     chp_ = os.path.join(root_dir, 'isodistr.txt')
+    #     open(chp_, 'w', encoding='utf-8').write(filename)
+
+    #     res_ = list(self.installed_packages.filter(name='makeself'))
+    #     add_opts = ''
+    #     if len(res_) >= 0:
+    #         version_ = res_[0].version
+    #         from packaging import version
+    #         if version.parse(version_) >= version.parse("2.4.5"):
+    #             add_opts = ' --tar-format posix '
+
+    #         path_to_dir = Path(__file__).parent
+    #         makeself_header_template_path = path_to_dir / "ta-makeself-header.sh"
+    #         assert(makeself_header_template_path.exists())
+    #         makeself_header_template = ''
+    #         # with open(makeself_header_template_path, 'r', encoding='utf-8') as lf:
+    #         #     makeself_header_template = lf.read()
+
+    #         file_loader = FileSystemLoader(path_to_dir)
+    #         env = Environment(loader=file_loader)
+    #         env.trim_blocks = True
+    #         env.lstrip_blocks = True
+    #         env.rstrip_blocks = True
+
+    #         # makeself_header = makeself_header_template.format(vars())
+    #         template = env.get_template(makeself_header_template_path.name)
+    #         makeself_header = template.render(self.tvars)
+
+    #         makeself_header_path = 'tmp/makeself-header.sh'
+    #         with open(makeself_header_path, 'w', encoding='utf-8') as lf:
+    #             lf.write(makeself_header)
+
+    #         scmd = (f'''
+    #     makeself.sh {pmode} {add_opts} --header {makeself_header_path} --target "{self.spec.install_dir}" --tar-extra "--xattrs --xattrs-include=*" --untar-extra " --xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" {self.spec.install_dir}/install-me
+    # ''' % vars()).replace('\n', ' ').strip()
+    #         if not self.cmd(scmd) == 0:
+    #             print(f'« {scmd} » failed!')    
+    #             return
+    #     os.chdir(self.curdir)
+    #     changelogfilename = filename + '.changelog.txt'
+
+    #     filepath = os.path.join(isodir, filename)
+    #     scmd = ('''
+    # mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s
+    # ''' % vars()).replace('\n', ' ').strip()
+    #     os.chdir(self.curdir)
+    #     self.cmd(scmd)
+    #     scmd = (f'''
+    # md5sum {filepath}
+    # ''').replace('\n', ' ').strip()
+    #     os.chdir(self.curdir)
+    #     md5s_ = subprocess.check_output(
+    #         scmd, shell=True).decode('utf-8').strip().split()[0]
+    #     lines_.insert(0, f';MD5: {md5s_}')
+
+    #     with suppress(Exception):
+    #         chp_ = os.path.join(isodir, changelogfilename)
+    #         open(chp_, 'w', encoding='utf-8').write('\n'.join(lines_))
+    #         open(f'{filepath}.md5', 'w', encoding='utf-8').write(md5s_)
+
+    #     os.chdir(isodir)
+    #     scmd = f'''ln -sf {filename} last.iso'''
+    #     self.cmd(scmd)
+    #     os.chdir(self.curdir)
+    #     print(filepath)
+
+
+    def make_packages(self):
+        os.chdir(self.curdir)
 
         root_dir = os.path.realpath(self.out_dir)
         user_ = os.getlogin()            
         scmd = f'sudo chown {user_} {root_dir} -R '
         self.cmd(scmd)
 
-        isodir = self.out_dir + '.iso'
-        mkdir_p(isodir)
+        label = 'disk'
+        if 'label' in self.spec:
+            label = self.spec.label
 
-        old_isos = sorted([f for f in Path('out.iso').glob(f'*.iso') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
-        # old_isos = [f_ for f_ in os.listdir(isodir) if f_.endswith('.iso')]
+        git_version = self.get_version()
+
+        nfpm_dir = os.path.join(self.curdir, 'tmp/nfpm')
+        mkdir_p(nfpm_dir)
 
         current_time = datetime.datetime.now().replace(microsecond=0)
-        prev_release_time = current_time + relativedelta(months=-1)
+        time_ = current_time.isoformat().replace(':', '').replace('-', '').replace('T', '')
+        deployname = f"{label.lower()}-{git_version}-{time_}" 
 
-        for iso_ in reversed(sorted(old_isos)):
-            try:
-                timedt_ = '-'.join(iso_.name.split('-')[2:])[:19]
-                prev_release_time = datetime.datetime.strptime(timedt_, '%Y-%m-%dT%H-%M-%S')
-                break
-            except:
-                # Temporary legacy mode
-                try:
-                    prev_release_time = datetime.datetime.strptime(
-                        iso_[:19], '%Y-%m-%dT%H-%M-%S')
-                    break
-                except:
-                    pass
-                pass
+        prev_release_time = current_time + relativedelta(months=-1)
+        old_changelogs = sorted([f for f in (Path(self.curdir) / self.changelogdir).glob(f'*.txt') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
+
+        for changelog_ in reversed(sorted(old_changelogs)):
+            tformat_ = '%Y%m%d%H%M%S'
+            timedt_ = '-'.join(changelog_.name.split('-')[2:])[:len(tformat_)]
+            prev_release_time = datetime.datetime.strptime(timedt_, tformat_)
+            break
 
         since_time_ = prev_release_time.isoformat()
         gitlogcmd_ = f'git log --since="{since_time_}" --pretty --name-status '
@@ -2426,111 +2584,18 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
                         lines_.append(
                             f'----\n Changelog for {path_to_dir_} ({git_url} / {git_branch})')
                         lines_.append(change_)
-
         pass
 
-        # current_time = datetime.datetime.now().replace(microsecond=0)
-        time_prefix = current_time.isoformat().replace(':', '-')
-        label = 'disk'
-        if 'label' in self.spec:
-            label = self.spec.label
-        installscript = "install-me.sh" % vars()
-        os.chdir(self.curdir)
-        installscriptpath = os.path.abspath(
-            os.path.join("tmp/", installscript))
-        if os.path.exists(installscriptpath):
-            os.unlink(installscriptpath)
+        changelogfilename = (Path(self.curdir) / self.changelogdir) / f'{deployname}.changelog.txt'
+        open(changelogfilename, 'w', encoding='utf-8').write('\n'.join(lines_))
 
-        pmode = ''
-        if shutil.which('pbzip2'):
-            pmode = ' --threads 8 --pbzip2 '
-        os.chdir(self.curdir)
-        self.cmd(f'chmod a+x {root_dir}/install-me')
-
-        filename = f"{label.lower()}-{git_version}-{time_prefix}.iso" % vars()
-        # with suppress(Exception):
+        isofilename = f"{deployname}.iso"
         chp_ = os.path.join(root_dir, 'isodistr.txt')
-        open(chp_, 'w', encoding='utf-8').write(filename)
+        open(chp_, 'w', encoding='utf-8').write(isofilename)
 
-        res_ = list(self.installed_packages.filter(name='makeself'))
-        add_opts = ''
-        if len(res_) >= 0:
-            version_ = res_[0].version
-            from packaging import version
-            if version.parse(version_) >= version.parse("2.4.5"):
-                add_opts = ' --tar-format posix '
-
-            path_to_dir = Path(__file__).parent
-            makeself_header_template_path = path_to_dir / "ta-makeself-header.sh"
-            assert(makeself_header_template_path.exists())
-            makeself_header_template = ''
-            # with open(makeself_header_template_path, 'r', encoding='utf-8') as lf:
-            #     makeself_header_template = lf.read()
-
-            file_loader = FileSystemLoader(path_to_dir)
-            env = Environment(loader=file_loader)
-            env.trim_blocks = True
-            env.lstrip_blocks = True
-            env.rstrip_blocks = True
-
-            # makeself_header = makeself_header_template.format(vars())
-            template = env.get_template(makeself_header_template_path.name)
-            makeself_header = template.render(self.tvars)
-
-            makeself_header_path = 'tmp/makeself-header.sh'
-            with open(makeself_header_path, 'w', encoding='utf-8') as lf:
-                lf.write(makeself_header)
-
-            scmd = (f'''
-        makeself.sh {pmode} {add_opts} --header {makeself_header_path} --target "{self.spec.install_dir}" --tar-extra "--xattrs --xattrs-include=*" --untar-extra " --xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" {self.spec.install_dir}/install-me
-    ''' % vars()).replace('\n', ' ').strip()
-            if not self.cmd(scmd) == 0:
-                print(f'« {scmd} » failed!')    
-                return
-        os.chdir(self.curdir)
-        changelogfilename = filename + '.changelog.txt'
-
-        filepath = os.path.join(isodir, filename)
-        scmd = ('''
-    mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s
-    ''' % vars()).replace('\n', ' ').strip()
-        os.chdir(self.curdir)
-        self.cmd(scmd)
-        scmd = (f'''
-    md5sum {filepath}
-    ''').replace('\n', ' ').strip()
-        os.chdir(self.curdir)
-        md5s_ = subprocess.check_output(
-            scmd, shell=True).decode('utf-8').strip().split()[0]
-        lines_.insert(0, f';MD5: {md5s_}')
-
-        with suppress(Exception):
-            chp_ = os.path.join(isodir, changelogfilename)
-            open(chp_, 'w', encoding='utf-8').write('\n'.join(lines_))
-            open(f'{filepath}.md5', 'w', encoding='utf-8').write(md5s_)
-
-        os.chdir(isodir)
-        scmd = f'''ln -sf {filename} last.iso'''
-        self.cmd(scmd)
-        os.chdir(self.curdir)
-        print(filepath)
-
-
-
-
-    def make_packages(self):
-        from dateutil.relativedelta import relativedelta
-
-        os.chdir(self.curdir)
-
-        git_version = get_git_version()
-
-        nfpm_dir = os.path.join(self.curdir, 'tmp/nfpm')
-        mkdir_p(nfpm_dir)
-
-        current_time = datetime.datetime.now().replace(microsecond=0)
-        time_ = current_time.isoformat().replace(':', '').replace('-', '').replace('T', '')
-
+        package_modes = self.package_modes
+        if self.args.stage_make_packages:
+            package_modes = self.args.stage_make_packages.split(',')
 
         os.chdir(nfpm_dir)
         install_mod = ''            
@@ -2582,6 +2647,8 @@ overrides:
 {remove_mod}      
 ''')
         for packagetype in ['rpm', 'deb']:
+            if not packagetype in package_modes:
+                continue
             pkgdir = self.out_dir + '.'+ packagetype
             mkdir_p(pkgdir)
             scmd = f'''
@@ -2594,7 +2661,80 @@ overrides:
             os.chdir(self.curdir)
             os.chdir(package_dir)
             paths = sorted([f for f in Path('').glob(f'*.{packagetype}') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
-            filename = paths[-1]
-            scmd = f'''ln -sf {filename} last.{packagetype}'''
+            fname_ = paths[-1]
+            scmd = f'''ln -sf {fname_} last.{packagetype}'''
             self.cmd(scmd)
         pass
+
+
+        for packagetype in ['iso']:
+            if not packagetype in package_modes:
+                continue
+
+            os.chdir(self.curdir)
+
+            isodir = self.out_dir + '.iso'
+            mkdir_p(isodir)
+
+            installscript = "install-me.sh" % vars()
+            os.chdir(self.curdir)
+            installscriptpath = os.path.abspath(
+                os.path.join("tmp/", installscript))
+            if os.path.exists(installscriptpath):
+                os.unlink(installscriptpath)
+
+            pmode = ''
+            if shutil.which('pbzip2'):
+                pmode = ' --threads 8 --pbzip2 '
+            os.chdir(self.curdir)
+            self.cmd(f'chmod a+x {root_dir}/install-me')
+
+
+            res_ = list(self.installed_packages.filter(name='makeself'))
+            add_opts = ''
+            if len(res_) >= 0:
+                version_ = res_[0].version
+                if version.parse(version_) >= version.parse("2.4.5"):
+                    add_opts = ' --tar-format posix '
+
+                path_to_dir = Path(__file__).parent
+                makeself_header_template_path = path_to_dir / "ta-makeself-header.sh"
+                assert(makeself_header_template_path.exists())
+                makeself_header_template = ''
+                # with open(makeself_header_template_path, 'r', encoding='utf-8') as lf:
+                #     makeself_header_template = lf.read()
+
+                file_loader = FileSystemLoader(path_to_dir)
+                env = Environment(loader=file_loader)
+                env.trim_blocks = True
+                env.lstrip_blocks = True
+                env.rstrip_blocks = True
+
+                # makeself_header = makeself_header_template.format(vars())
+                template = env.get_template(makeself_header_template_path.name)
+                makeself_header = template.render(self.tvars)
+
+                makeself_header_path = 'tmp/makeself-header.sh'
+                with open(makeself_header_path, 'w', encoding='utf-8') as lf:
+                    lf.write(makeself_header)
+
+                scmd = (f'''
+            makeself.sh {pmode} {add_opts} --header {makeself_header_path} --target "{self.spec.install_dir}" --tar-extra "--xattrs --xattrs-include=*" --untar-extra " --xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" {self.spec.install_dir}/install-me
+        ''' % vars()).replace('\n', ' ').strip()
+                if not self.cmd(scmd) == 0:
+                    print(f'« {scmd} » failed!')    
+                    return
+            os.chdir(self.curdir)
+            scmd = f'''mkisofs -r -J -o  {isofilename}  {installscriptpath}'''.replace('\n', ' ').strip()
+            self.cmd(scmd)
+            scmd = f'''md5sum {isofilename}'''
+            os.chdir(self.curdir)
+            md5s_ = subprocess.check_output(
+                scmd, shell=True).decode('utf-8').strip().split()[0]
+            lines_.insert(0, f';MD5: {md5s_}')
+            open(f'{isodir}/{deployname}.md5', 'w', encoding='utf-8').write(md5s_)
+
+            os.chdir(isodir)
+            scmd = f'''ln -sf {isofilename} last.iso'''
+            self.cmd(scmd)
+            os.chdir(self.curdir)
