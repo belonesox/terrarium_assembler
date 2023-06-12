@@ -14,7 +14,6 @@ import stat
 import re
 import json
 import dataclasses as dc
-import dnf
 import datetime
 import tarfile
 import hashlib
@@ -22,6 +21,8 @@ import time
 import glob
 import csv
 import jinja2.exceptions
+import version_utils.rpm
+
 from jinja2 import Environment, FileSystemLoader, Template
 from tempfile import mkstemp
 
@@ -524,11 +525,19 @@ class TerrariumAssembler:
 
     @property
     def installed_packages(self):
+        # Later we made refreshing using atomic_transformation
         if not self.installed_packages_:
-            base = dnf.Base()
-            base.fill_sack()
-            q_ = base.sack.query()
-            self.installed_packages_ = q_.installed()
+            ip_file = './tmp/installed_packages'
+            self.cmd(f'rpm -qa > {ip_file}')
+            ps_ = []
+            with open(ip_file, 'r', encoding='utf-8') as lf:
+                ps_ = lf.read().strip().split('\n')
+            self.installed_packages_ = []    
+            for p_ in ps_:
+                try:
+                    self.installed_packages_.append(version_utils.rpm.package(p_))
+                except:
+                    pass              
         return self.installed_packages_
 
     def cmd(self, scmd):
@@ -950,13 +959,11 @@ popd
 
         rows_ = []
         for package_ in sorted(packages_set_):
-            res_ = list(self.installed_packages.filter(name=package_))
+            res_ = list(p_ for p_ in self.installed_packages if p_.name==package_)
             if len(res_) == 0:
                 continue
             name_ = res_[0].name
             version_ = res_[0].version
-            wtf = 1
-
             rows_.append([name_, version_])
             pass
 
@@ -1499,12 +1506,6 @@ terrarium_assembler "{self.args.specfile}"
         packages = []
         lines = []
 
-        # base = dnf.Base()
-        # base.fill_sack()
-        # q_ = base.sack.query()
-        # self.installed_packages = q_.installed()
-
-        lines = []
         lines_src = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
@@ -2398,145 +2399,6 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
                 version_ = versions_
         return version_        
 
-    # def make_isoexe(self):
-    #     from dateutil.relativedelta import relativedelta
-
-    #     os.chdir(self.curdir)
-    #     git_version = self.get_version()
-
-    #     root_dir = os.path.realpath(self.out_dir)
-    #     user_ = os.getlogin()            
-    #     scmd = f'sudo chown {user_} {root_dir} -R '
-    #     self.cmd(scmd)
-
-    #     isodir = self.out_dir + '.iso'
-    #     mkdir_p(isodir)
-
-    #     old_changelogs = sorted([f for f in Path('out.iso').glob(f'*.iso') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
-    #     # old_changelogs = [f_ for f_ in os.listdir(isodir) if f_.endswith('.iso')]
-
-    #     current_time = datetime.datetime.now().replace(microsecond=0)
-    #     prev_release_time = current_time + relativedelta(months=-1)
-
-    #     for iso_ in reversed(sorted(old_changelogs)):
-    #         try:
-    #             timedt_ = '-'.join(iso_.name.split('-')[2:])[:19]
-    #             prev_release_time = datetime.datetime.strptime(timedt_, '%Y-%m-%dT%H-%M-%S')
-    #             break
-    #         except:
-    #             # Temporary legacy mode
-    #             try:
-    #                 prev_release_time = datetime.datetime.strptime(
-    #                     iso_[:19], '%Y-%m-%dT%H-%M-%S')
-    #                 break
-    #             except:
-    #                 pass
-    #             pass
-
-    #     since_time_ = prev_release_time.isoformat()
-    #     gitlogcmd_ = f'git log --since="{since_time_}" --pretty --name-status '
-
-    #     lines_ = []
-    #     for git_url, git_branch, path_to_dir_ in self.get_all_sources():
-    #         os.chdir(self.curdir)
-    #         if os.path.exists(path_to_dir_):
-    #             os.chdir(path_to_dir_)
-    #             with suppress(Exception):
-    #                 change_ = subprocess.check_output(
-    #                     gitlogcmd_, shell=True).decode('utf-8').strip()
-    #                 if change_:
-    #                     lines_.append(
-    #                         f'----\n Changelog for {path_to_dir_} ({git_url} / {git_branch})')
-    #                     lines_.append(change_)
-
-    #     pass
-
-    #     # current_time = datetime.datetime.now().replace(microsecond=0)
-    #     time_prefix = current_time.isoformat().replace(':', '-')
-    #     label = 'disk'
-    #     if 'label' in self.spec:
-    #         label = self.spec.label
-    #     installscript = "install-me.sh" % vars()
-    #     os.chdir(self.curdir)
-    #     installscriptpath = os.path.abspath(
-    #         os.path.join("tmp/", installscript))
-    #     if os.path.exists(installscriptpath):
-    #         os.unlink(installscriptpath)
-
-    #     pmode = ''
-    #     if shutil.which('pbzip2'):
-    #         pmode = ' --threads 8 --pbzip2 '
-    #     os.chdir(self.curdir)
-    #     self.cmd(f'chmod a+x {root_dir}/install-me')
-
-    #     filename = f"{label.lower()}-{git_version}-{time_prefix}.iso" % vars()
-    #     # with suppress(Exception):
-    #     chp_ = os.path.join(root_dir, 'isodistr.txt')
-    #     open(chp_, 'w', encoding='utf-8').write(filename)
-
-    #     res_ = list(self.installed_packages.filter(name='makeself'))
-    #     add_opts = ''
-    #     if len(res_) >= 0:
-    #         version_ = res_[0].version
-    #         from packaging import version
-    #         if version.parse(version_) >= version.parse("2.4.5"):
-    #             add_opts = ' --tar-format posix '
-
-    #         path_to_dir = Path(__file__).parent
-    #         makeself_header_template_path = path_to_dir / "ta-makeself-header.sh"
-    #         assert(makeself_header_template_path.exists())
-    #         makeself_header_template = ''
-    #         # with open(makeself_header_template_path, 'r', encoding='utf-8') as lf:
-    #         #     makeself_header_template = lf.read()
-
-    #         file_loader = FileSystemLoader(path_to_dir)
-    #         env = Environment(loader=file_loader)
-    #         env.trim_blocks = True
-    #         env.lstrip_blocks = True
-    #         env.rstrip_blocks = True
-
-    #         # makeself_header = makeself_header_template.format(vars())
-    #         template = env.get_template(makeself_header_template_path.name)
-    #         makeself_header = template.render(self.tvars)
-
-    #         makeself_header_path = 'tmp/makeself-header.sh'
-    #         with open(makeself_header_path, 'w', encoding='utf-8') as lf:
-    #             lf.write(makeself_header)
-
-    #         scmd = (f'''
-    #     makeself.sh {pmode} {add_opts} --header {makeself_header_path} --target "{self.spec.install_dir}" --tar-extra "--xattrs --xattrs-include=*" --untar-extra " --xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" {self.spec.install_dir}/install-me
-    # ''' % vars()).replace('\n', ' ').strip()
-    #         if not self.cmd(scmd) == 0:
-    #             print(f'« {scmd} » failed!')    
-    #             return
-    #     os.chdir(self.curdir)
-    #     changelogfilename = filename + '.changelog.txt'
-
-    #     filepath = os.path.join(isodir, filename)
-    #     scmd = ('''
-    # mkisofs -r -J -o  %(filepath)s  %(installscriptpath)s
-    # ''' % vars()).replace('\n', ' ').strip()
-    #     os.chdir(self.curdir)
-    #     self.cmd(scmd)
-    #     scmd = (f'''
-    # md5sum {filepath}
-    # ''').replace('\n', ' ').strip()
-    #     os.chdir(self.curdir)
-    #     md5s_ = subprocess.check_output(
-    #         scmd, shell=True).decode('utf-8').strip().split()[0]
-    #     lines_.insert(0, f';MD5: {md5s_}')
-
-    #     with suppress(Exception):
-    #         chp_ = os.path.join(isodir, changelogfilename)
-    #         open(chp_, 'w', encoding='utf-8').write('\n'.join(lines_))
-    #         open(f'{filepath}.md5', 'w', encoding='utf-8').write(md5s_)
-
-    #     os.chdir(isodir)
-    #     scmd = f'''ln -sf {filename} last.iso'''
-    #     self.cmd(scmd)
-    #     os.chdir(self.curdir)
-    #     print(filepath)
-
 
     def make_packages(self):
         os.chdir(self.curdir)
@@ -2689,7 +2551,7 @@ overrides:
             self.cmd(f'chmod a+x {root_dir}/install-me')
 
 
-            res_ = list(self.installed_packages.filter(name='makeself'))
+            res_ = list(p for p in self.installed_packages if p.name=='makeself')
             add_opts = ''
             if len(res_) >= 0:
                 version_ = res_[0].version
