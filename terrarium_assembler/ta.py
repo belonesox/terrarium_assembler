@@ -380,12 +380,12 @@ class TerrariumAssembler:
 
         self.args = args = ap.parse_args()
         if self.args.stage_all:
-            self.args.stage_build_and_pack = self.args.stage_all
             self.args.stage_download_all = True
+            self.args.stage_build_and_pack = self.args.stage_all
+            self.args.stage_my_source_changed = self.args.stage_all
 
         if self.args.stage_build_and_pack:
             self.args.stage_install_rpms = True
-            # self.args.stage_preinstall_wheels = True
             self.args.stage_init_env = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
@@ -393,12 +393,17 @@ class TerrariumAssembler:
             self.args.stage_build_go = True
             self.args.stage_pack = self.args.stage_build_and_pack
 
+        if self.args.stage_download_all:
+            self.args.stage_install_repos = True
+            self.args.stage_download_rpms = True
+            self.args.stage_checkout = True
+            self.args.stage_download_base_wheels = True
+            self.args.stage_download_wheels = True
+
         if self.args.stage_my_source_changed:
-            # self.args.stage_checkout = True
             self.args.stage_download_base_wheels = True
             self.args.stage_init_env = True
             self.args.stage_download_wheels = True
-            # self.args.stage_preinstall_wheels = True
             self.args.stage_build_wheels = True
             self.args.stage_install_wheels = True
             self.args.stage_build_nuitka = True
@@ -406,12 +411,6 @@ class TerrariumAssembler:
             self.args.stage_pack = self.args.stage_my_source_changed
             self.args.stage_make_packages = 'default'
 
-        if self.args.stage_download_all:
-            self.args.stage_install_repos = True
-            self.args.stage_download_rpms = True
-            self.args.stage_checkout = True
-            self.args.stage_download_base_wheels = True
-            self.args.stage_download_wheels = True
 
         specfile_ = expandpath(args.specfile)
         self.start_dir = self.curdir = os.path.split(specfile_)[0]
