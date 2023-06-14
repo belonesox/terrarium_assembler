@@ -12,6 +12,8 @@ with open('HISTORY.rst') as history_file:
 
 requirements = [ 
     'easydict',
+    'version_utils',
+    'python-dateutil',
     'pytictoc',
     'file-magic',
     'python-magic',
