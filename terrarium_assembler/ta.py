@@ -1,21 +1,15 @@
 """Main module."""
 from typing import List
-import getpass
-import grp
-import pwd
 import argparse
-import io
 import os
 import subprocess
 import shutil
 import sys
-import magic
 import stat
 import re
 import json
 import dataclasses as dc
 import datetime
-import tarfile
 import hashlib
 import time
 import glob
@@ -23,12 +17,16 @@ import csv
 import jinja2.exceptions
 import version_utils.rpm
 
+from imohash import hashfile
+from simplekv.fs import FilesystemStore
+from itertools import islice
+
+
 from jinja2 import Environment, FileSystemLoader, Template
 from tempfile import mkstemp
 
 
 from contextlib import suppress
-from wheel_filename import parse_wheel_filename
 from pathlib import Path, PurePath
 from packaging import version
 
@@ -36,7 +34,7 @@ from .utils import *
 from dateutil.relativedelta import relativedelta
 
 # будет отключено
-from .nuitkaflags import *
+# from .nuitkaflags import *
 
 # новая ветка
 from .nuitkaprofiles import *
@@ -44,52 +42,6 @@ from .nuitkaprofiles import *
 from pytictoc import TicToc
 t = TicToc()
 
-
-def write_doc_table(filename, headers, rows):
-    with open(filename, 'w', encoding='utf-8') as lf:
-        lf.write(f"""
-<table class='wikitable' border=1>
-""")
-        lf.write(f"""<tr>""")
-        for col_ in headers:
-            lf.write(f"""<th>{col_}</th>""")
-        lf.write(f"""</tr>\n""")
-        for row_ in rows:
-            lf.write(f"""<tr>""")
-            for col_ in row_:
-                lf.write(f"""<td>{col_}</td>""")
-            lf.write(f"""</tr>\n""")
-        lf.write(f"""
-</table>
-""")
-    return
-
-
-def fucking_magic(f):
-    # m = magic.detect_from_filename(f)
-    if "ld.so" in f:
-        wtf = 1
-        pass
-
-    if not os.path.exists(f):
-        return ''
-
-    if not os.path.isfile(f):
-        return ''
-
-    m = magic.from_file(f)
-    # if m.mime_type in ['inode/symlink', 'text/plain']:
-    #     return
-    return m
-
-
-def get_git_version():
-    tags = subprocess.check_output("git tag --sort=-creatordate --merged", 
-                                    shell=True, universal_newlines=True)
-    for tag in tags.strip().split('\n'):
-        if tag.startswith('v'):
-            return tag[1:] 
-    return '1.0.0'
 
 @dc.dataclass
 class BinRegexps:
@@ -318,6 +270,8 @@ class TerrariumAssembler:
         # self.curdir = os.getcwd()
         self.root_dir = None
         self.toolbox_mode = True
+        self.build_mode = False
+
         self.container_info = None
         self.container_path = None        
 
@@ -326,6 +280,13 @@ class TerrariumAssembler:
 
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
         self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
+        self.pipdeptree_graph_dot = 'tmp/pipdeptree-graph.dot'
+        self.pipdeptree_graph_mw = 'tmp/pipdeptree-graph.mw'
+        self.pip_list = 'tmp/pip-list.txt'
+        self.pip_list_json = 'tmp/pip-list.json'
+
+        self.out_interpreter = "pbin/ld.so"
+        self.bin_files_name = "tmp/bin-files.txt"
 
         self.changelogdir= 'changelogs'
         mkdir_p(self.changelogdir)
@@ -341,85 +302,44 @@ class TerrariumAssembler:
         ap.add_argument('--docs', default=False, action='store_true',
                         help='Output documentation version')
 
-        self.stages = {
-            'download-rpms': 'download RPMs',
-            'download-sources-for-rpms': 'download SRPMs — sources packages for RPMS',
-            'checkout': 'checkout sources',
-            'download-base-wheels': 'download base WHL-python packages with fixed versions',
-            'init-box-and-repos': 'install RPM repositories',
-            'install-rpms': 'install downloaded RPMS',
-            'download-wheels': 'download needed WHL-python packages',
-            'init-env': 'Create  build environment with some bootstrapping',
-            'build-wheels': 'compile wheels for our python sources',
-            'install-wheels': 'Install our and external Python wheels',
-            'build-python-projects': 'Compile Python packages to executable',
-            'build-go': 'Compile Go projects to executable',
-            'make-packages': 'Make RPM/DEB/ISO packages from build folder',
-            'pack-me':  'Pack current dir to time prefixed tar.bz2'
-        }
+        self.stages_names = sorted([method_name for method_name in dir(self) if method_name.startswith('stage_')])
+        self.stage_methods = [getattr(self, stage_) for stage_ in self.stages_names]
+
+        self.stages = {}
+        for s_, sm_ in zip(self.stages_names, self.stage_methods):
+            self.stages[fname2stage(s_)] = sm_.__doc__.strip() 
+
 
         for stage, desc in self.stages.items():
-            if 'packages' in stage:
-                ap.add_argument('--stage-%s' % stage, default="",
-                                action='store', help='Stage for %s ' % desc)
-            else:
-                ap.add_argument('--stage-%s' % stage, default=False,
-                                action='store_true', help='Stage for %s ' % desc)
+            ap.add_argument(f'--{fname2option(stage)}', default=False,
+                            action='store_true', help=f'{desc}')
 
-        # ap.add_argument('--stage-download', default=False, action='store_true', help='Stage for download binary artifacts')
-        # ap.add_argument('--stage-build-wheels', default=False, action='store_true', help='Build Wheels for source packages')
-        # ap.add_argument('--stage-setupsystem', default=False, action='store_true', help='Stage for setup local OS')
-        # ap.add_argument('--stage-build-projects', default=False, action='store_true', help='Compile Nuitka packages')
-        ap.add_argument('--stage-build-and-pack', default='',
-                        type=str, help='Install, build and pack')
-        ap.add_argument('--stage-download-all', default=False,
-                        action='store_true', help='Download all — sources, packages')
-        ap.add_argument('--stage-my-source-changed', default='', type=str,
-                        help='Fast rebuild/repack if only pythonsourcechanged')
-        ap.add_argument('--stage-all', default='', type=str,
-                        help='Install, build and pack')
-        ap.add_argument('--stage-pack', default='', type=str,
-                        help='Stage pack to given destination directory')
-        ap.add_argument('--analyse', default='', type=str,
-                        help='Analyse resulting pack')
+        ap.add_argument('--analyse', default=False, action='store_true', help='Analyse resulting pack')
         ap.add_argument('--folder-command', default='', type=str,
                         help='Perform some shell command for all projects')
         ap.add_argument('--git-sync', default='', type=str,
                         help='Perform lazy git sync for all projects')
         ap.add_argument('specfile', type=str, help='Specification File')
 
+
+        complex_stages = {
+            "stage-all": lambda stage: fname2num(stage)<60,
+            "stage-rebuild": lambda stage: fname2num(stage)<60 and not 'checkout' in stage and not 'download' in stage,
+        }
+
+        for cs_, filter_ in complex_stages.items():
+            desc = []
+            selected_stages_ = [fname2stage(s_) for s_ in self.stages_names if filter_(s_)]
+            desc = ' + '.join(selected_stages_)
+            ap.add_argument(f'--{cs_}', default=False, action='store_true', help=f'{desc}')
+            
         self.args = args = ap.parse_args()
-        if self.args.stage_all:
-            self.args.stage_download_all = True
-            self.args.stage_build_and_pack = self.args.stage_all
-            self.args.stage_my_source_changed = self.args.stage_all
 
-        if self.args.stage_build_and_pack:
-            self.args.stage_install_rpms = True
-            self.args.stage_init_env = True
-            self.args.stage_build_wheels = True
-            self.args.stage_install_wheels = True
-            self.args.stage_build_python_projects = True
-            self.args.stage_build_go = True
-            self.args.stage_pack = self.args.stage_build_and_pack
-
-        if self.args.stage_download_all:
-            self.args.stage_init_box_and_repos = True
-            self.args.stage_download_rpms = True
-            self.args.stage_checkout = True
-            self.args.stage_download_base_wheels = True
-            self.args.stage_download_wheels = True
-
-        if self.args.stage_my_source_changed:
-            self.args.stage_download_base_wheels = True
-            self.args.stage_init_env = True
-            self.args.stage_download_wheels = True
-            self.args.stage_build_wheels = True
-            self.args.stage_install_wheels = True
-            self.args.stage_build_python_projects = True
-            self.args.stage_build_go = True
-            self.args.stage_pack = self.args.stage_my_source_changed
-            self.args.stage_make_packages = 'default'
+        for cs_, filter_ in complex_stages.items():
+            if vars(self.args)[cs_.replace('-','_')]:
+                for s_ in self.stages_names:
+                    if filter_(s_):
+                        setattr(self.args, fname2stage(s_).replace('-','_'), True)
 
 
         specfile_ = expandpath(args.specfile)
@@ -428,7 +348,17 @@ class TerrariumAssembler:
         terms = self.curdir.split(os.path.sep)
         terms.reverse()
         self.environ_name = '-'.join(terms[:2])
+        self.tb_mod = ''
+        if self.toolbox_mode:
+            self.tb_mod = f'toolbox run -c {self.environ_name}'
 
+        # self.common_cache_dir = Path('/tmp/ta_cache')
+        # self.common_cache_dir.mkdir(exist_ok=True, parents=True)
+        # now_ = time.time()
+        # delete_time = now_ + 3600
+        # for f in self.common_cache_dir.iterdir():
+        #     if f.stat().st_atime > delete_time:
+        #         f.unlink()
 
         os.environ['TERRA_SPECDIR'] = self.start_dir
         os.chdir(self.curdir)
@@ -483,7 +413,7 @@ class TerrariumAssembler:
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath',
                               'python3-wheel', 'python3-pip', 'python3-devel', 'python3-yaml',
-                              'genisoimage', 'makeself', 'dnf-utils', 'nfpm']
+                              'genisoimage', 'makeself', 'dnf-utils', 'yum', 'nfpm', 'pandoc']
 
         nflags_ = {}
         if 'nuitka' in spec:
@@ -506,12 +436,13 @@ class TerrariumAssembler:
             fs_ = spec.folders
         self.fs = FoldersSpec(folders=fs_)
 
-        self.in_bin = os.path.abspath('in/bin')
+        self.in_bin = 'in/bin'
         self.src_dir = 'in/src'
         if 'src_dir' in spec:
             self.src_dir = expandpath(self.src_dir)
         self.out_dir = 'out'
-        self.out_dir = expandpath(self.out_dir)
+        if 'output_folder' in self.spec:
+            self.out_dir = self.spec.output_folder
         mkdir_p(self.src_dir)
         mkdir_p(self.out_dir)
         mkdir_p(self.in_bin)
@@ -523,8 +454,14 @@ class TerrariumAssembler:
         self.ext_whl_path = os.path.join(self.in_bin, "extwheel")
         mkdir_p(self.ext_whl_path)
 
+        self.ext_pip_path = os.path.join(self.in_bin, "extpip")
+        mkdir_p(self.ext_whl_path)
+
         self.base_whl_path = os.path.join(self.in_bin, "basewheel")
         mkdir_p(self.base_whl_path)
+
+        self.rpms_path = os.path.join(self.in_bin, "rpms")
+        mkdir_p(self.rpms_path)
 
         os.environ['PATH'] = "/usr/lib64/ccache:" + os.environ['PATH']
 
@@ -538,12 +475,12 @@ class TerrariumAssembler:
 
         pass
 
-    def toolbox_run_mod(self):
-        if not self.toolbox_mode:
-            return ''
+    # def toolbox_run_mod(self):
+    #     if not self.toolbox_mode:
+    #         return ''
 
-        scmd = f'toolbox run -c {self.environ_name}'
-        return scmd
+    #     scmd = f'toolbox run -c {self.environ_name}'
+    #     return scmd
         
     def toolbox_create_line(self):
         if not self.toolbox_mode:
@@ -594,31 +531,41 @@ toolbox run --container {self.environ_name} sudo dnf install -y dnf-utils
 
     def lines2sh(self, name, lines, stage=None):
         os.chdir(self.curdir)
-        fname = name + '.sh'
 
-        toolbox_mod = ''
-        if name.startswith('00'):
-            toolbox_mod += self.toolbox_create_line()
-        # toolbox_mod += self.toolbox_enter_line()
+        fname = fname2shname(name)
+        if stage:
+            stage = fname2stage(stage)
+
+        if self.build_mode:
+            if stage:
+                option = stage.replace('-', '_')
+                dict_ = vars(self.args)
+                if option in dict_:
+                    if dict_[option]:
+                        print("*"*20)
+                        print("Executing ", fname)
+                        print("*"*20)
+                        res = self.cmd("./" + fname)
+                        failmsg = f'{fname} execution failed!'
+                        print(failmsg)
+                        assert res==0
+            return
 
         with open(os.path.join(fname), 'w', encoding="utf-8") as lf:
-            lf.write("#!/bin/sh\n#Generated %s \n " % name)
+            lf.write(f"#!/bin/sh\n# Generated {name} \n ")
             if stage:
-                desc = self.stages[stage]
+                desc = '# ' + '\n# '.join(self.stages[stage].splitlines())
                 stage_ = stage.replace('_', '-')
                 if 'packing' in stage_:
                     stage_ += f'={self.package_modes}' 
                 lf.write(f'''
-# Stage "{desc}"
+{desc}
 # Automatically called when terrarium_assembler --stage-{stage_} "{self.args.specfile}"
-{toolbox_mod}
 ''')
 
             lf.write('''
 export PIPENV_VENV_IN_PROJECT=1
 ''')
-
-# export TA_PIPENV_DIR=`python -m pipenv --venv`
 
             for k, v in self.tvars.items():
                 if isinstance(v, str) or isinstance(v, int):
@@ -627,38 +574,15 @@ export PIPENV_VENV_IN_PROJECT=1
             lf.write('''
 set -ex
 ''')
-            # lf.write("\n".join(lines))
-            toolboxmod = f'toolbox run --container {self.environ_name} '
-            for block in lines:
-                for line in block.strip().split('\n'):
-                    if (line.strip() 
-                            and not line.startswith('#') 
-                            and not line.startswith('export ') 
-                            and not line.startswith('popd') 
-                            and not line.startswith('pushd')
-                            and not ('="' in line and len(line.split('=')[0])<10)
-                            and not ('terrarium_assembler' in line)
-                            and not line.startswith("./build")
-                            ):
-                        line = toolboxmod + line.strip()
-                    lf.write(line + "\n")
-
+            lf.write("\n".join(lines))
         st = os.stat(fname)
         os.chmod(fname, st.st_mode | stat.S_IEXEC)
-
-        if stage:
-            param = stage.replace('-', '_')
-            option = "stage_" + param
-            dict_ = vars(self.args)
-            if option in dict_:
-                if dict_[option]:
-                    print("*"*20)
-                    print("Executing ", fname)
-                    print("*"*20)
-                    self.cmd("./" + fname)
         pass
 
-    def build_python_projects(self):
+    def stage_40_build_python_projects(self):
+        '''
+        Build/Compile Python packages to executables
+        '''
         # if not self.nuitkas:
         #     return
 
@@ -693,12 +617,17 @@ export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
                 lines.append(fR"""
-bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log'
+{bashash4folter('VENV', '.venv')}                
+{bashash4folter('SRC', src_dir)}                
+{read_old_hash(target_dir_)}            
+{bashash_stop_if_not_changed(['VENV', 'SRC'], f"Source for {build_name} not changed, skipping")}
+{self.tb_mod} bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log'
 # time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log || {{ echo 'Compilation failed' ; exit 1; }}
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
-python -m pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
-python -m pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
+{self.tb_mod} python -m pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
+{self.tb_mod} python -m pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
+{save_state_hash(target_dir_)}
     """)
                 self.fs.folders.append(target_dir)
                 lines.append(fR"""
@@ -740,42 +669,10 @@ mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
                         for src in srcs:        
                             scmd = f'''
 mkdir -p {target_dir_}/{dst_}                            
-rsync -ravm {src} {target_dir_}/{dst_} {filtermod} 
+{self.tb_mod} rsync -ravm {src} {target_dir_}/{dst_} {filtermod} 
                             '''
                             lines.append(scmd)
 
-
-#             if "modules" in target_:
-#                 force_modules = []
-#                 if 'force_modules' in target_:
-#                     force_modules = target_.force_modules
-
-#                 for it in target_.modules + force_modules:
-#                     mdir_ = None
-#                     try:
-#                         mdir_ = dir4module(it)
-#                         mdir__ = os.path.relpath(mdir_)
-#                         if len(mdir__)<len(mdir_):
-#                             mdir_ = mdir__
-#                     except:
-#                         pass
-
-#                     try:
-#                         mdir_ = module2build[it].folder
-#                     except:
-#                         pass
-
-#                     if mdir_:
-#                         lines.append(R"""
-# rsync -rav --exclude=*.py --exclude=*.pyc --exclude=__pycache__ --prune-empty-dirs %(mdir_)s %(target_dir_)s/
-# """ % vars())
-
-#                 force_modules = []
-#                 for it in target_.modules:
-#                     lines.append(R"""
-# rsync -av --include=*.so --include=*.bin --exclude=*  %(tmpdir_)s/modules/%(it)s/ %(target_dir_)s/.
-# rsync -rav  %(tmpdir_)s/modules/%(it)s/%(it)s.dist/ %(target_dir_)s/.
-# """ % vars())
                 self.lines2sh(build_name, lines, None)
                 bfiles.append(build_name)
 
@@ -790,10 +687,14 @@ rsync -ravm {src} {target_dir_}/{dst_} {filtermod}
         for b_ in bfiles:
             lines.append("./" + b_ + '.sh')
 
-        self.lines2sh("40-build-python-projects", lines, "build-python-projects")
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
         pass
 
-    def build_go(self):
+    def stage_41_build_go(self):
+        '''
+        Build / compile Go projects to executables
+        '''
         if not self.gp:
             return
 
@@ -822,8 +723,8 @@ rsync -ravm {src} {target_dir_}/{dst_} {filtermod}
                 build_name = 'build_' + outputname
                 lines.append(fR"""
 pushd {path_to_dir__}
-bash -c 'go mod download'
-bash -c 'CGO_ENABLED=0 go build -ldflags="-linkmode=internal -r" -o {target_dir_}/{outputname} 2>&1 > {log_dir_}/{build_name}.log'
+{self.tb_mod} bash -c 'go mod download'
+{self.tb_mod} bash -c 'CGO_ENABLED=0 go build -ldflags="-linkmode=internal -r" -o {target_dir_}/{outputname} 2>&1 > {log_dir_}/{build_name}.log'
 popd
     """)
                 self.fs.folders.append(target_dir)
@@ -833,8 +734,28 @@ popd
         lines = []
         for b_ in bfiles:
             lines.append("./" + b_ + '.sh')
-        self.lines2sh("42-build-go", lines, "build-go")
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
         pass
+
+
+    def stage_52_post_pack(self):
+        '''
+        Post pack processing
+        '''
+        if not 'post_pack' in self.spec:
+            return
+        
+        lines = []
+        lines.append(fR"""
+{self.spec.post_pack} 
+    """)
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
 
     def clear_shell_files(self):
         os.chdir(self.curdir)
@@ -1156,8 +1077,6 @@ popd
         if not os.path.exists(what):
             what = what_
 
-        if 'guile' in what:
-            dfsfsfdsf = 1
         try:
             if not to_:
                 to_ = what
@@ -1195,6 +1114,12 @@ popd
         '''
         Patch ELF file
         '''
+        # key_ = hashfile(path, hexdigest=True)
+        # cached_path = self.common_cache_dir / key_
+        # if cached_path.exists():
+        #     return cached_path.as_posix()
+
+        # patched_elf = cached_path.as_posix()
         fd_, patched_elf = mkstemp(dir=self.patching_dir)
         shutil.copy2(path, patched_elf)
         
@@ -1212,8 +1137,11 @@ popd
                 pass
 
         os.close(fd_)
-        os.chmod(patched_elf, orig_perm)         
+        os.chmod(patched_elf, orig_perm)
+
         self.optional_patch_binary(patched_elf)
+        # shutil.move(patched_elf, cached_path)
+        # self.cache.put_file(key_, open(patched_elf, 'rb'))        
         return patched_elf
 
 
@@ -1247,19 +1175,23 @@ popd
             self.interpreter = subprocess.check_output(['patchelf', '--print-interpreter', patched_binary], universal_newlines=True).splitlines()[0]
             patched_interpreter = self.fix_elf(os.path.realpath(self.interpreter))
             tb_patched_interpreter = self.toolbox_path(patched_interpreter)
-            self.add(patched_interpreter, os.path.join("pbin", "ld.so"))
+            self.add(patched_interpreter, self.out_interpreter)
+            self.bin_files.add( self.out_interpreter )
         # except Exception as ex_:
         #     print('Cannot get interpreter for binary', binpath)
         #     # raise ex_
         # pass
 
-        self.add(patched_binary, os.path.join("pbin", pyname))
+        new_path_for_binary = os.path.join("pbin", pyname)
+        self.add(patched_binary, new_path_for_binary)
+        self.bin_files.add( new_path_for_binary )
         os.remove(patched_binary)
 
     def fix_sharedlib(self, binpath, targetpath):
         relpath = os.path.join(os.path.relpath("lib64", targetpath), "lib64")
         patched_binary = self.fix_elf(binpath, '$ORIGIN/' + relpath)
         self.add(patched_binary, targetpath)
+        self.bin_files.add( targetpath )
         os.remove(patched_binary)
         pass
 
@@ -1332,10 +1264,9 @@ popd
                 os.chdir(self.curdir)
         pass
 
-    def checkout_sources(self):
+    def stage_07_checkout_sources(self):
         '''
-            Just checking out sources.
-            This stage should be done when we have authorization to check them out.
+            Checking out sources. We should have authorization to check them out.
         '''
         if not self.pp:
             return
@@ -1386,22 +1317,22 @@ popd
                 # Fucking https://www.virtualbox.org/ticket/19086 + https://www.virtualbox.org/ticket/8761
                 lines.append(f"""
 if [ -d "{newpath}" ]; then
-  echo 2 > /proc/sys/vm/drop_caches
-  find  "{path_to_dir}" -type f -delete;
-  find  "{path_to_dir}" -type f -exec rm -rf {{}} \;
-  rm -rf "{path_to_dir}"
-  mv "{newpath}" "{path_to_dir}"
+  echo 2 > /proc/sys/vm/drop_caches || true
+  find  "{path_to_dir}" -type f -delete || true;
+  find  "{path_to_dir}" -type f -exec rm -rf {{}} \ || true;
+  rm -rf "{path_to_dir}" || true
+  mv "{newpath}" "{path_to_dir}" || true
   rm -rf "{newpath}"
 fi
 """)
 
         lines.append(f"""
 # We need to update all shell files after checkout.
-terrarium_assembler "{self.args.specfile}"
+#terrarium_assembler "{self.args.specfile}"
 """)
 
-        self.lines2sh("05-checkout", lines, 'checkout')
-        # self.lines2sh("96-pullall", lines2)
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
         pass
 
     def explode_pp_node(self, td_):
@@ -1506,29 +1437,6 @@ terrarium_assembler "{self.args.specfile}"
             os.system(
                 f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
-        # if self.args.debug:
-        #     pl_ = self.get_wheel_list_to_install()
-        #     # pls_ = " ".join(pl_)
-        #     for pls_ in pl_:
-        #         if 'urllib3' in pls_:
-        #             wt_ = 1
-        #         scmd = '%(root_dir)s/ebin/python3 -m pip install  %(pls_)s --no-deps --force-reinstall --no-dependencies --ignore-installed ' % vars()
-        #         print(scmd)
-        #         os.system(scmd)
-        #         wtf_path = f'{root_dir}/local/lib/python3.8/site-packages/enum'
-        #         if os.path.exists(wtf_path):
-        #             print('Fucking enum34 here')
-        #             sys.exit(0)
-
-        # # ext_whl_path = os.path.join(self.in_bin, "extwheel")
-        # if self.pp.terra.pip:
-        #     for pip_ in self.pp.terra.pip:
-        #         self.pip_install_offline(pip_)
-        #         # scmd = f'{root_dir}/ebin/python3 -m pip install {pip_} --no-index --no-cache-dir --find-links="{ext_whl_path}"  --force-reinstall  --ignore-installed '
-        #         # print(scmd)
-        #         # os.system(scmd)
-        #         os.system(f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
-
         if self.pp.terra.projects:
             nodes_ = self.pp.terra.projects
             if self.args.debug:
@@ -1569,31 +1477,41 @@ terrarium_assembler "{self.args.specfile}"
         os.system(scmd)
         pass
 
-    def init_box_and_repos(self):
+    def stage_00_init_box_and_repos(self):
+        '''
+        Create building container/box and install RPM repositories
+        '''
         root_dir = self.root_dir
         args = self.args
         packages = []
-        lines = []
+        lines = [self.toolbox_create_line()]
 
         for rp_ in self.ps.repos or []:
             if rp_.lower().endswith('.gpg'):
-                lines.append(f'sudo rpm --import {rp_} ')
+                lines.append(f'{self.tb_mod} sudo rpm --import {rp_} ')
             elif rp_.endswith('.rpm'):
-                lines.append(f'sudo dnf install --nogpgcheck {rp_} -y ')
+                lines.append(f'{self.tb_mod} sudo dnf install --nogpgcheck {rp_} -y ')
             else:
-                lines.append(f'sudo dnf config-manager --add-repo {rp_} -y ')
+                lines.append(f'{self.tb_mod} sudo dnf config-manager --add-repo {rp_} -y ')
                 prp_ = rp_
                 if '://' in prp_:
                     prp_ = prp_.split('://')[1]
                 prp_ = prp_.replace('/', '_')
                 lines.append(
-                    f'sudo dnf config-manager --save --setopt={prp_}.gpgcheck=0 -y')
+                    f'{self.tb_mod} sudo dnf config-manager --save --setopt={prp_}.gpgcheck=0 -y')
             pass
 
-        self.lines2sh("00-init-box-and-repos", lines, "init-box-and-repos")
+        lines.append('')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
         pass
 
-    def download_packages(self):
+    def stage_03_download_packages(self):
+        '''
+        Download RPM packages.
+        '''
         root_dir = self.root_dir
         args = self.args
         packages = []
@@ -1602,63 +1520,73 @@ terrarium_assembler "{self.args.specfile}"
         lines_src = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
-        scmd = f"rm -rf '{in_bin}/rpms'"
-        lines.append(scmd)
-        scmd = "sudo yum-config-manager --enable remi"
-        lines.append(scmd)
+        # scmd = f"rm -rf '{in_bin}/rpms'"
+        # lines.append(scmd)
+        # scmd = "sudo yum-config-manager --enable remi"
+        # lines.append(scmd)
         pls_ = [p for p in self.need_packages +
                 self.ps.build + self.ps.terra if isinstance(p, str)]
         purls_ = [p.url for p in self.need_packages +
                   self.ps.build + self.ps.terra if not isinstance(p, str)]
 
-        terra_package_names = " ".join([p for p in self.ps.terra if isinstance(p, str)])
-
-
+        self.bin_files = set()
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
         # scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/rpms" --arch=x86_64  --arch=x86_64 --arch=noarch  %(packages)s -y ' % vars()
-        scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/rpms" --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  %(packages)s -y ' % vars()
-        lines.append(scmd)
-        scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --arch=noarch  --source %(packages)s -y ' % vars()
+        scmd = f'dnf download --skip-broken --downloaddir "{self.rpms_path}" --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '
+        lines.append(f'''
+{bashash4str('RPM_REQS', scmd)}
+{read_old_hash(self.rpms_path)}    
+{bashash_stop_if_not_changed(['RPM_REQS'], f"Looks required RPMs already downloaded")}
+rm -rf '{self.rpms_path}'
+{self.tb_mod} {scmd}
+{save_state_hash(self.rpms_path)}
+''')
+        scmd = f'{self.tb_mod} dnf download --skip-broken --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --arch=noarch  --source %(packages)s -y ' % vars()
         lines_src.append(scmd)
 
         for pack_ in self.ps.remove_from_download or []:
-            scmd = f'rm -f {in_bin}/rpms/{pack_}* '
+            scmd = f'rm -f {self.rpms_path}/{pack_}* '
             lines.append(scmd)
 
-        # for package in self.dependencies(pls_, local=False) + purls_:
-        #     # потом написать идемпотентность, проверки на установленность, пока пусть долго, по одному ставит
-        #     scmd = 'dnf download --downloaddir "%(in_bin)s/rpms" --arch=x86_64 "%(package)s" -y ' % vars()
-        #     lines.append(scmd)
-        #     scmd = 'dnf download --downloaddir "%(in_bin)s/src-rpms" --arch=x86_64 --source "%(package)s" -y ' % vars()
-        #     lines_src.append(scmd)
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        # self.lines2sh("90-download-sources-for-rpms",
+        #               lines_src, "download-sources-for-rpms")
 
-        self.lines2sh("01-download-rpms", lines, "download-rpms")
-        self.lines2sh("90-download-sources-for-rpms",
-                      lines_src, "download-sources-for-rpms")
 
-        shfilename = "02-install-rpms"
-        ilines = [
+    def stage_04_install_rpms(self):
+        '''
+        Install downloaded RPM packages
+        '''
+        terra_package_names = " ".join([p for p in self.ps.terra if isinstance(p, str)])
+        lines = [
             f"""
-sudo dnf install --nogpgcheck --skip-broken {in_bin}/rpms/*.rpm -y --allowerasing
-sudo repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {terra_package_names} > {self.file_list_from_rpms}
-sudo rpm -qd {terra_package_names} > {self.doc_list_from_rpms}
+{self.tb_mod} sudo dnf install --nogpgcheck --skip-broken {self.rpms_path}/*.rpm -y --allowerasing
+{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.file_list_from_rpms}
+{self.tb_mod} sudo rpm -qd {terra_package_names} > {self.doc_list_from_rpms}
 """ 
         ]
-        self.lines2sh("02-install-rpms", ilines, "install-rpms")
-
-        # self.lines2sh("03-download-rpms", lines, "download-rpms")
-        # self.lines2sh("04-install-rpms", ilines, "install-rpms")
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
         pass
 
-    def build_wheels(self):
+    def stage_08_build_wheels(self):
+        '''
+            Compile wheels for our python sources
+        '''
         os.chdir(self.curdir)
         bindir_ = os.path.abspath(self.in_bin)
         lines = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
         wheelpath = os.path.join(self.in_bin, "ourwheel")
         relwheelpath = os.path.relpath(wheelpath, start=self.curdir)
-        lines.append(R"rm -rf %(relwheelpath)s/*.*" % vars())
+        lines.append(fR'''
+{bashash4folter('SRC', self.src_dir)}                
+{read_old_hash(self.our_whl_path)}  
+{bashash_stop_if_not_changed(['SRC'], f"Looks like sources not changed, not need to rebuild WHLs for our sources")}
+rm -f {self.our_whl_path}/*
+''')
         for td_ in self.pp.projects():
             # , local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else [])]:
             git_url, git_branch, path_to_dir_, setup_path = self.explode_pp_node(
@@ -1668,48 +1596,41 @@ sudo rpm -qd {terra_package_names} > {self.doc_list_from_rpms}
             # scmd = "pushd %s" % (path_to_dir)
             # lines.append(scmd)
             scmd = f"""
-python -m pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup.py bdist_wheel -d {relwheelpath};popd"
+{self.tb_mod} python -m pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup.py bdist_wheel -d {relwheelpath};popd"
 """
             lines.append(scmd)
             pass
-        self.lines2sh("06-build-wheels", lines, "build-wheels")
+
+        lines.append(save_state_hash(self.our_whl_path))
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
 
 
-#     def preinstall_wheels(self):
-#         os.chdir(self.curdir)
-
-#         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
-
-#         lines = []
-#         scmd = f'''
-# pipenv --rm
-# rm -f Pipfile*
-# pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-# pipenv run python3 -m pip install ./in/bin/extwheel/*.whl --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
-# '''
-#         lines.append(scmd)
-#         self.lines2sh("08-preinstall-wheels", lines, "preinstall-wheels")
-#         pass
-
-
-    def init_env(self):
+    def stage_06_init_python_env(self):
+        '''
+        Create build environment with some bootstrapping
+        '''
         os.chdir(self.curdir)
 
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
 
         lines = []
         scmd = f'''
-python -m pipenv --rm
-rm -f Pipfile*
-touch Pipfile
-python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-python -m pipenv run python -m pip install ./in/bin/basewheel/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} python -m pipenv --rm
+{self.tb_mod} rm -f Pipfile*
+{self.tb_mod} touch Pipfile
+{self.tb_mod} python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+{self.tb_mod} python -m pipenv run python -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
         lines.append(scmd)
-        self.lines2sh("04-init-env", lines, "init-env")
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
         pass
 
-    def install_wheels(self):
+    def stage_15_install_wheels(self):
+        '''
+        Install our and external Python wheels
+        '''
         os.chdir(self.curdir)
         lines = []
 
@@ -1717,20 +1638,24 @@ python -m pipenv run python -m pip install ./in/bin/basewheel/*.whl --force-rein
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
 
         scmd = f'''
-pipenv --rm
-pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-pipenv run python -m pip install ./in/bin/ourwheel/*.whl ./in/bin/extwheel/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
-pipenv run pip-audit -o pip-audit-report.md -f markdown 
-pipenv run pipdeptree --graph-output dot > pipdeptree-graph.dot
-pandoc -w mediawiki pip-audit-report.md -o pip-audit-report.wiki
-bash -c "(echo '<graph>'; cat pipdeptree-graph.dot; echo '</graph>') > pipdeptree-graph.wiki"
+{self.tb_mod} pipenv --rm
+{self.tb_mod} pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+{self.tb_mod} pipenv run python -m pip install ./in/bin/ourwheel/*.whl ./{self.ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} pipenv run python -m pip list > {self.pip_list}
+{self.tb_mod} pipenv run python -m pip list --format json > {self.pip_list_json}
+{self.tb_mod} pipenv run pip-audit -o pip-audit-report.md -f markdown || true
+{self.tb_mod} pipenv run pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
+{self.tb_mod} pandoc -w mediawiki pip-audit-report.md -o pip-audit-report.wiki
+{self.tb_mod} bash -c "(echo '<graph>'; cat pipdeptree-graph.dot; echo '</graph>') > {self.pipdeptree_graph_mw}"
 '''
+
         lines.append(scmd)   # --no-cache-dir
 
         for scmd_ in self.pp.shell_commands or []:
             lines.append(scmd_)
 
-        self.lines2sh("15-install-wheels", lines, "install-wheels")
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
         pass
 
     def get_pip_targets_and_reqs_from_sources(self, terra=False):
@@ -1803,7 +1728,12 @@ bash -c "(echo '<graph>'; cat pipdeptree-graph.dot; echo '</graph>') > pipdeptre
         return f" {pip_reqs_} {pip_targets_} "
 
 
-    def download_base_wheels(self):
+    def base_wheels_string(self):
+        pip_targets, _ = self.get_pip_targets_and_reqs_from_sources(terra=False)
+        pip_targets_ = " ".join([r for r in pip_targets if '==' in r])
+        return pip_targets_
+
+    def stage_05_download_base_wheels(self):
         '''
         Consistent downloading only python packages with fixed versions.
         They should be downloaded before building our packages and creating pipenv environment.
@@ -1820,27 +1750,29 @@ bash -c "(echo '<graph>'; cat pipdeptree-graph.dot; echo '</graph>') > pipdeptre
 # x="$(readlink -f "$0")"
 # d="$(dirname "$x")"
 
-        lines.append('''
-rm -f %s/basewheel/*
-''' % bin_dir)
-
-        pip_targets, _ = self.get_pip_targets_and_reqs_from_sources(terra=False)
-        pip_targets_ = " ".join([r for r in pip_targets if '==' in r])
+        bws =  self.base_wheels_string()
 
         # pipenv environment does not exists we using regular python to download base packages.
-        scmd = f"python -m pip download  {pip_targets_} --dest {bin_dir}/basewheel "
-
-        lines.append(scmd)
-        self.lines2sh("03-download-base-wheels", lines, "download-base-wheels")
+        scmd = f"python -m pip download  {bws} --dest {self.base_whl_path} "
+        lines.append(f'''
+{bashash4str('REQS', bws)}              
+{read_old_hash(self.base_whl_path)}            
+{bashash_stop_if_not_changed(['REQS'], f"Looks required base wheels already downloaded")}
+rm -f {self.base_whl_path}/*
+{self.tb_mod} {scmd}
+{save_state_hash(self.base_whl_path)}
+''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
         pass
 
 
-    def download_pip(self):
+    def stage_09_download_wheels(self):
         '''
         Consistent downloading all needed pip wheel packages
         '''
         os.chdir(self.curdir)
-        os.chdir(self.out_dir)
+        # os.chdir(self.out_dir)
 
         root_dir = self.root_dir
         args = self.args
@@ -1848,20 +1780,21 @@ rm -f %s/basewheel/*
         bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
 
         lines = []
-        lines.append('''
+        lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 
-rm -f %s/extwheel/*
-''' % bin_dir)
+rm -f {self.ext_whl_path}/*
+''')
 
         pip_args_ = self.pip_args_from_sources()
 
-        scmd = f"python3 -m pipenv run python -m pip download wheel {pip_args_} --dest {bin_dir}/extwheel --find-links='{bin_dir}/ourwheel' --find-links='{bin_dir}/basewheel' "
+        scmd = f"{self.tb_mod} python -m pipenv run python -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
+        scmd_srcs = f"{self.tb_mod} python -m pipenv run python -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
         lines.append(scmd)
 
         for py_ in self.pp.remove_from_download or []:
-            scmd = f'rm -f {bin_dir}/extwheel/{py_}-*'
+            scmd = f'rm -f {self.ext_whl_path}/{py_}-*'
             lines.append(scmd)
 
         scmd = f"""
@@ -1871,22 +1804,33 @@ bash -c "unset PIPENV_VENV_IN_PROJECT"
 export PIPENV_PIPFILE=$d/Pipfile
 
 pushd {bin_dir}/extwheel
-bash -c "ls *.tar.* | xargs -i[] -t python3 -m pipenv run python -m pip wheel [] --no-deps"
+{self.tb_mod} bash -c "ls *.tar.* | xargs -i[] -t python -m pipenv run python -m pip wheel [] --no-deps"
 rm -f *.tar.*
 popd
-python3 -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
+{self.tb_mod} python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
 """
         lines.append(scmd)
-        self.lines2sh("07-download-wheels", lines, "download-wheels")
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        # self.lines2sh("12-download-pip-sources", [scmd_srcs], "download-pip-sources")
         pass
 
     def analyse(self):
         '''
         Analyse strace file to calculate unused files.
         '''
+        if not self.build_mode:
+            mn_ = get_method_name()
+            lines = [
+                f'''
+{sys.executable} {sys.argv[0]} "{self.args.specfile}" --stage-analyse > optimize_me.txt                
+                ''']
+            self.lines2sh(mn_, lines, mn_)
+            return
+
         args = self.args
         spec = self.spec
-        abs_path_to_out_dir = os.path.abspath(args.analyse)
+        abs_path_to_out_dir = os.path.abspath(self.out_dir)
         root_dir = self.root_dir
         lastdirs = os.path.sep.join(
             abs_path_to_out_dir.split(os.path.sep)[-2:])
@@ -1990,46 +1934,49 @@ python3 -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir
 
         pass
 
-    def pack_me(self):
-        time_prefix = datetime.datetime.now().replace(
-            microsecond=0).isoformat().replace(':', '-')
-        parentdir, curname = os.path.split(self.curdir)
-        disabled_suffix = curname + '.tar.bz2'
+    # def pack_me(self):
+    #     if self.args.stage_pack_me:
+    #         return
 
-        banned_ext = ['.old', '.iso', '.lock',
-                      disabled_suffix, '.dblite', '.tmp', '.log']
-        banned_start = ['tmp']
-        banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/key/',
-                      '/tmp/', '/src.', '/bin.',  '/cache_', 'cachefilelist_', '/tmp', '/.image', '/!']
+    #     time_prefix = datetime.datetime.now().replace(
+    #         microsecond=0).isoformat().replace(':', '-')
+    #     parentdir, curname = os.path.split(self.curdir)
+    #     disabled_suffix = curname + '.tar.bz2'
 
-        # there are regularly some files unaccessable for reading.
-        self.cmd('sudo chmod a+r /usr/lib/cups -R')
-        self.cmd('systemd-tmpfiles --remove dnf.conf')
+    #     banned_ext = ['.old', '.iso', '.lock',
+    #                   disabled_suffix, '.dblite', '.tmp', '.log']
+    #     banned_start = ['tmp']
+    #     banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/key/',
+    #                   '/tmp/', '/src.', '/bin.',  '/cache_', 'cachefilelist_', '/tmp', '/.image', '/!']
 
-        def filter_(tarinfo):
-            for s in banned_ext:
-                if tarinfo.name.endswith(s):
-                    print(tarinfo.name)
-                    return None
+    #     # there are regularly some files unaccessable for reading.
+    #     self.cmd('sudo chmod a+r /usr/lib/cups -R')
+    #     self.cmd('systemd-tmpfiles --remove dnf.conf')
 
-            for s in banned_start:
-                if tarinfo.name.startswith(s):
-                    print(tarinfo.name)
-                    return None
+    #     def filter_(tarinfo):
+    #         for s in banned_ext:
+    #             if tarinfo.name.endswith(s):
+    #                 print(tarinfo.name)
+    #                 return None
 
-            for s in banned_mid:
-                if s in tarinfo.name:
-                    print(tarinfo.name)
-                    return None
+    #         for s in banned_start:
+    #             if tarinfo.name.startswith(s):
+    #                 print(tarinfo.name)
+    #                 return None
 
-            return tarinfo
+    #         for s in banned_mid:
+    #             if s in tarinfo.name:
+    #                 print(tarinfo.name)
+    #                 return None
 
-        tbzname = os.path.join(self.curdir,
-                               "%(time_prefix)s-%(curname)s.tar.bz2" % vars())
-        tar = tarfile.open(tbzname, "w:bz2")
-        tar.add(self.curdir, "./sources-for-audit",
-                recursive=True, filter=filter_)
-        tar.close()
+    #         return tarinfo
+
+    #     tbzname = os.path.join(self.curdir,
+    #                            "%(time_prefix)s-%(curname)s.tar.bz2" % vars())
+    #     tar = tarfile.open(tbzname, "w:bz2")
+    #     tar.add(self.curdir, "./sources-for-audit",
+    #             recursive=True, filter=filter_)
+    #     tar.close()
 
     def remove_exclusions(self):
         '''
@@ -2050,14 +1997,28 @@ python3 -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir
 
         pass
 
-    def process(self):
+
+    def stage_50_pack(self):
         '''
-        Основная процедура генерации переносимого питон окружения.
+        Packing portable environment
         '''
+        if not self.build_mode:
+            lines = [
+                f'''
+{sys.executable} {sys.argv[0]} --stage-pack "{self.args.specfile}"
+                ''' ]
+            mn_ = get_method_name()
+            self.lines2sh(mn_, lines, mn_)
+            return
+
+        if not self.args.stage_pack:
+            return
 
         args = self.args
         spec = self.spec
-        root_dir = self.root_dir
+        # root_dir = os.path.realpath(self.out_dir)
+        root_dir = self.root_dir = expandpath(self.out_dir)
+
         t.tic()
 
         def install_templates(root_dir, args):
@@ -2178,210 +2139,178 @@ python3 -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir
 
             print("Install templates takes")
             t.toc()
-            pass
-
-        if self.args.folder_command:
-            self.folder_command()
-            return
-
-        if self.args.git_sync:
-            self.git_sync()
-            return
-
-        if self.args.analyse:
-            self.analyse()
-            return
-
-        if self.args.stage_pack_me:
-            self.pack_me()
-            return
-
-        # if self.args.stage_checkout:
-
-        self.clear_shell_files()
-        self.init_box_and_repos()
-        self.download_packages()
-        self.download_base_wheels()
-        self.init_env()
-        self.checkout_sources()
-        self.download_pip()
-        # self.preinstall_wheels()
-        self.build_wheels()
-        self.install_wheels()
-        self.build_python_projects()
-        self.build_go()
-        # self.install_packages()
-
-        # if self.args.stage_build_python_projects:
-        # self.install_localpythons()
-        # self.build_python_projects()
-        # return
 
         try:
-            output_ = subprocess.check_output(
-                'pipenv run python -m pip list --format json', shell=True)
-            json_ = json.loads(output_)
-
+            json_ = json.loads(open(self.pip_list_json))
             rows_ = []
             for r_ in json_:
                 rows_.append([r_['name'], r_['version']])
 
-            write_doc_table('doc-python-packages.htm',
-                            ['Package', 'Version'], sorted(rows_))
+            write_doc_table('doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
         except Exception as ex_:
             print(ex_)
             pass
 
-        specfile_ = self.args.specfile
-# sudo chown $USER . -R || true
-# sudo chmod a+rx /usr/lib/cups -R
-        self.lines2sh("50-pack", [
-            '''
-terrarium_assembler --stage-pack=./out "%(specfile_)s"
-            ''' % vars()])
+        # self.remove_exclusions()
 
-        self.lines2sh("52-make-packages", [
-            f'''
-terrarium_assembler {specfile_} --stage-make-packages={self.package_modes}
-            '''])
+        cloc_csv = 'tmp/cloc.csv'
+        if not os.path.exists(cloc_csv):
+            if shutil.which('cloc'):
+                os.system(
+                    'cloc ./in/src/ --csv  --report-file=tmp/cloc.csv --3')
+        if os.path.exists(cloc_csv):
+            table_csv = []
+            with open(cloc_csv, newline='') as csvfile:
+                csv_r = csv.reader(csvfile, delimiter=',', quotechar='|')
+                for row in list(csv_r)[1:]:
+                    row[-1] = int(float(row[-1]))
+                    table_csv.append(row)
 
-        self.lines2sh("91-pack-debug", [
-            f'''
-sudo chmod a+rx /usr/lib/cups -R
-terrarium_assembler --debug --stage-pack=./out-debug {specfile_}
-            '''])
+            table_csv[-1][-2], table_csv[-1][-1] = table_csv[-1][-1], table_csv[-1][-2]
+            write_doc_table('doc-cloc.htm', ['Файлов', 'Язык', 'Пустых', 'Комментариев', 'Строчек кода', 'Мощность языка', 'COCOMO строк'],
+                            table_csv)
 
-        self.lines2sh(
-            "93-analyse", [f"terrarium_assembler {specfile_} --analyse=./out > optimize_me.txt"])
+        # install_templates(root_dir, args)
 
-        self.lines2sh("94-install-last-nuitka", [
-            f'''
-export PIPENV_VENV_IN_PROJECT=1
-python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
-            '''])
+        packages_to_deploy = []
+        pips_to_deploy = []
+        if self.args.debug:
+            packages_to_deploy += self.ps.terra + self.ps.build
+            pips_to_deploy = self.pp.pip()
+        else:
+            packages_to_deploy = self.ps.terra
+            pips_to_deploy = self.pp.terra.pip or []
 
+        fs_ = self.generate_file_list_from_pips(pips_to_deploy)
 
-        root_dir = 'out'
-        if self.args.stage_pack:
-            root_dir = self.root_dir = expandpath(args.stage_pack)
-            # self.remove_exclusions()
+        # packages_ = []
+        # for p_ in (Path(self.in_bin) / rpms).glob('*.rpm'):
+        #     try:
+        #         vp_ = version_utils.rpm.package(p_)
+        #     except:
+        #         pass    
 
-            cloc_csv = 'tmp/cloc.csv'
-            if not os.path.exists(cloc_csv):
-                if shutil.which('cloc'):
-                    os.system(
-                        'cloc ./in/src/ --csv  --report-file=tmp/cloc.csv --3')
-            if os.path.exists(cloc_csv):
-                table_csv = []
-                with open(cloc_csv, newline='') as csvfile:
-                    csv_r = csv.reader(csvfile, delimiter=',', quotechar='|')
-                    for row in list(csv_r)[1:]:
-                        row[-1] = int(float(row[-1]))
-                        table_csv.append(row)
-
-                table_csv[-1][-2], table_csv[-1][-1] = table_csv[-1][-1], table_csv[-1][-2]
-                write_doc_table('doc-cloc.htm', ['Файлов', 'Язык', 'Пустых', 'Комментариев', 'Строчек кода', 'Мощность языка', 'COCOMO строк'],
-                                table_csv)
-
-            # install_templates(root_dir, args)
-
-            packages_to_deploy = []
-            pips_to_deploy = []
-            if self.args.debug:
-                packages_to_deploy += self.ps.terra + self.ps.build
-                pips_to_deploy = self.pp.pip()
-            else:
-                packages_to_deploy = self.ps.terra
-                pips_to_deploy = self.pp.terra.pip or []
-
-            fs_ = self.generate_file_list_from_pips(pips_to_deploy)
-
-            # packages_ = []
-            # for p_ in (Path(self.in_bin) / rpms).glob('*.rpm'):
-            #     try:
-            #         vp_ = version_utils.rpm.package(p_)
-            #     except:
-            #         pass    
-
-            file_list = None
-            if Path(self.file_list_from_rpms).exists() and Path(self.doc_list_from_rpms).exists():
-                all_list = open(self.file_list_from_rpms).readlines()
-                doc_list = open(self.doc_list_from_rpms).readlines()
-                file_list = [x.strip() for x in set(all_list) - set(doc_list) if self.should_copy(x)]
-            else:    
-                deps_packages = self.dependencies(packages_to_deploy)
-                file_list = self.generate_file_list_from_packages(deps_packages)
+        file_list = None
+        if Path(self.file_list_from_rpms).exists() and Path(self.doc_list_from_rpms).exists():
+            all_list = open(self.file_list_from_rpms).readlines()
+            doc_list = open(self.doc_list_from_rpms).readlines()
+            file_list = [x.strip() for x in set(all_list) - set(doc_list) if x.strip() and self.should_copy(x.strip())]
+        else:    
+            deps_packages = self.dependencies(packages_to_deploy)
+            file_list = self.generate_file_list_from_packages(deps_packages)
 
 
-            if '/lib/libpthread-2.31.so' in fs_:
-                dfsfdf = 1
-            if '/lib/libpthread-2.31.so' in file_list:
-                dfsfdf = 1
-            if 'java-11' in file_list:
-                fdsfsdfds = 1
-            file_list.extend(fs_)
+        if '/lib/libpthread-2.31.so' in fs_:
+            dfsfdf = 1
+        if '/lib/libpthread-2.31.so' in file_list:
+            dfsfdf = 1
+        if 'java-11' in file_list:
+            fdsfsdfds = 1
+        file_list.extend(fs_)
 
-            os.system('echo 2 > /proc/sys/vm/drop_caches ')
-            user_ = os.getlogin()            
-            scmd = f'sudo chown {user_} {root_dir} -R '
+        os.system('echo 2 > /proc/sys/vm/drop_caches ')
+        user_ = os.getlogin()            
+        scmd = f'sudo chown {user_} {root_dir} -R '
+        self.cmd(scmd)
+        old_root_dir = root_dir + ".old"
+        if os.path.exists(old_root_dir):
+            scmd = f'sudo chown {user_} {old_root_dir} -R '
             self.cmd(scmd)
-            old_root_dir = root_dir + ".old"
-            if os.path.exists(old_root_dir):
-                scmd = f'sudo chown {user_} {old_root_dir} -R '
-                self.cmd(scmd)
-                shutil.rmtree(old_root_dir, ignore_errors=True)
-            if os.path.exists(old_root_dir):
-                os.system("rm -rf " + old_root_dir)
-            if os.path.exists(root_dir):
-                shutil.move(root_dir, old_root_dir)
+            shutil.rmtree(old_root_dir, ignore_errors=True)
+        if os.path.exists(old_root_dir):
+            os.system("rm -rf " + old_root_dir)
+        if os.path.exists(root_dir):
+            shutil.move(root_dir, old_root_dir)
 
-            mkdir_p(root_dir)
+        mkdir_p(root_dir)
 
-            def copy_file_to_environment(f):
-                if not self.should_copy(f):
+        def copy_file_to_environment(f):
+            if not self.should_copy(f):
+                return
+
+            tf = self.toolbox_path(f)
+
+            if self.br.is_need_patch(f):
+                self.process_binary(f)
+                self.add(f)
+            elif self.br.is_just_copy(f):
+                self.add(f)
+            elif self.args.debug and f.startswith("/usr/include"):
+                self.add(f)
+            else:
+                libfile = f
+                # python tends  install in both /usr/lib and /usr/lib64, which doesn't mean it is
+                # a package for the wrong arch.
+                # So we need to handle both /lib and /lib64. Copying files
+                # blindly from /lib could be a problem, but we filtered out all the i686 packages during
+                # the dependency generation.
+                if libfile.startswith("/usr/local/"):
+                    libfile = libfile.replace("/usr/local/", "/", 1)
+
+                if libfile.startswith("/usr/"):
+                    libfile = libfile.replace("/usr/", "/", 1)
+
+                if libfile.startswith("/lib/"):
+                    libfile = libfile.replace("/lib/", "lib64/", 1)
+                elif libfile.startswith("/lib64/"):
+                    libfile = libfile.replace("/lib64/", "lib64/", 1)
+                else:
                     return
 
-                tf = self.toolbox_path(f)
-
-                if self.br.is_need_patch(f):
-                    self.process_binary(f)
-                    self.add(f)
-                elif self.br.is_just_copy(f):
-                    self.add(f)
-                elif self.args.debug and f.startswith("/usr/include"):
-                    self.add(f)
-                else:
-                    libfile = f
-                    # python tends  install in both /usr/lib and /usr/lib64, which doesn't mean it is
-                    # a package for the wrong arch.
-                    # So we need to handle both /lib and /lib64. Copying files
-                    # blindly from /lib could be a problem, but we filtered out all the i686 packages during
-                    # the dependency generation.
-                    if libfile.startswith("/usr/local/"):
-                        libfile = libfile.replace("/usr/local/", "/", 1)
-
-                    if libfile.startswith("/usr/"):
-                        libfile = libfile.replace("/usr/", "/", 1)
-
-                    if libfile.startswith("/lib/"):
-                        libfile = libfile.replace("/lib/", "lib64/", 1)
-                    elif libfile.startswith("/lib64/"):
-                        libfile = libfile.replace("/lib64/", "lib64/", 1)
-                    else:
+                # copy file instead of link unless we link to the current directory.
+                # links to the current directory are usually safe, but because we are manipulating
+                # the directory structure, very likely links that transverse paths will break.
+                # os.path.islink(f) and os.readlink(f) != os.path.basename(os.readlink(f)):
+                #     rp_ = os.path.realpath(f)
+                #     if os.path.exists(rp_):
+                #         add(os.path.realpath(f), libfile)
+                if 1:
+                    if not os.path.exists(tf) and os.path.splitext(f)[1] not in ['.rpmmoved', '.debug']:
+                        print("Missing %s" % f)
                         return
+                        # # assert(False)
+                    try:
+                        m = fucking_magic(tf)
+                    except Exception as ex_:
+                        print("Cannot detect Magic for ", tf)
+                        raise ex_
+                    if m.startswith('ELF') and 'shared' in m:
+                        # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
+                        try:
+                            self.fix_sharedlib(tf, libfile)
+                        except:
+                            print('Cannot optionally patch', tf)    
+                    else:
+                        # in case this is a directory that is listed, we don't want to include everything that is in that directory
+                        # for instance, the python3 package will own site-packages, but other packages that we are not packaging could have
+                        # filled it with stuff.
+                        self.add(f, libfile, recursive=False)
+                        # shutil.copy2(f, os.path.join(root_dir, libfile))
+                        # add(f, arcname=libfile, recursive=False)
+            pass
+            # if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
+            #     fsdfsdf = 1
 
-                    # copy file instead of link unless we link to the current directory.
-                    # links to the current directory are usually safe, but because we are manipulating
-                    # the directory structure, very likely links that transverse paths will break.
-                    # os.path.islink(f) and os.readlink(f) != os.path.basename(os.readlink(f)):
-                    #     rp_ = os.path.realpath(f)
-                    #     if os.path.exists(rp_):
-                    #         add(os.path.realpath(f), libfile)
-                    if 1:
-                        if not os.path.exists(tf) and os.path.splitext(f)[1] not in ['.rpmmoved', '.debug']:
-                            print("Missing %s" % f)
-                            return
-                            # # assert(False)
+        with open('file-list-from-packages.txt', 'w', encoding='utf-8') as lf:
+            lf.write('\n'.join(file_list))
+
+        self.cmd('sudo chmod a+r /usr/lib/cups -R')
+        for f in file_list:
+            copy_file_to_environment(f)
+
+        if self.fs:
+            for folder_ in self.fs.folders:
+                for dirpath, dirnames, filenames in os.walk(folder_):
+                    for filename in filenames:
+                        f = os.path.join(dirpath, filename)
+                        if self.br.is_need_patch(f):
+                            self.process_binary(f)
+                            continue
+                        libfile = os.path.join(
+                            self.root_dir, f.replace(folder_, 'pbin'))
+                        if 'java-11' in libfile:
+                            erwerew = 1
+                        m = ''
                         try:
                             m = fucking_magic(f)
                         except Exception as ex_:
@@ -2389,125 +2318,54 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
                             raise ex_
                         if m.startswith('ELF') and 'shared' in m:
                             # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
-                            try:
-                                self.fix_sharedlib(f, libfile)
-                            except:
-                                print('Cannot optionally patch', f)    
+                            self.fix_sharedlib(f, libfile)
                         else:
-                            # in case this is a directory that is listed, we don't want to include everything that is in that directory
-                            # for instance, the python3 package will own site-packages, but other packages that we are not packaging could have
-                            # filled it with stuff.
                             self.add(f, libfile, recursive=False)
-                            # shutil.copy2(f, os.path.join(root_dir, libfile))
-                            # add(f, arcname=libfile, recursive=False)
                 pass
-                # if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
-                #     fsdfsdf = 1
 
-            dfsfsdfsdf = 1
-            with open('file-list-from-packages.txt', 'w', encoding='utf-8') as lf:
-                lf.write('\n'.join(file_list))
+        install_templates(root_dir, args)
+        self.install_terra_pythons()
+        # install_templates(root_dir, args)
+        # self.install_terra_pythons()
 
-            self.cmd('sudo chmod a+r /usr/lib/cups -R')
-            for f in file_list:
-                if 'grafana-cli' in f:
-                    wtff = 1
-                copy_file_to_environment(f)
+        # if self.args.debug:
+        #     self.overwrite_mode = True
+        #     for f in file_list:
+        #         copy_file_to_environment(f)
 
-            # if os.path.exists('/home/stas/projects/deploy-for-audit/linux_distro/out/lib64/jvm/java-11-openjdk-11.0.11.0.9-4.fc33.x86_64-slowdebug/lib/modules'):
-            #     fsdfsdf = 1
+        os.chdir(root_dir)
+        if [_ for _ in Path(f'{root_dir}/pbin/').glob('python3.*')]:
+            scmd = "%(root_dir)s/ebin/python3 -m compileall -b . " % vars()
+            self.cmd(scmd)
 
-            if self.fs:
-                for folder_ in self.fs.folders:
-                    for dirpath, dirnames, filenames in os.walk(folder_):
-                        for filename in filenames:
-                            f = os.path.join(dirpath, filename)
-                            if '_multiarray_umath.so' in f:
-                                wtf = 1
-                                pass
-                            if 'cv2' in f:
-                                wtf = 1
-                                pass
-                            if 'pydantic' in f:
-                                wtf = 1
-                                pass
-                            # if self.br.is_need_exclude(f):
-                            #     continue
-                            # if not self.should_copy(f):
-                            #     continue
+        if 0 and not self.args.debug:
+            # Remove source files.
+            scmd = "shopt -s globstar; rm  **/*.py; rm  -r **/__pycache__"
+            print(scmd)
+            os.system(scmd)
+            pass
+        # size_ = sum(file.stat().st_size for file in Path(self.root_dir).rglob('*'))
+        # Postprocessing, removing not needed files after installing python modules, etc
+        self.remove_exclusions()
 
-                            if 'constance' in f:
-                                wtf = 1
-                                pass
+        with open(f'{self.curdir}/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
+            lf.write('obsoletes excludes \n')
+            for re_, cnt_ in self.br.need_exclude_re.items():
+                if cnt_ == 0:
+                    pat_ = re_.pattern
+                    lf.write(f'   {pat_} \n')
 
-                            if self.br.is_need_patch(f):
-                                self.process_binary(f)
-                                continue
+        bf_ = [os.path.abspath(f) for f in self.bin_files if os.path.isabs(f)] + [os.path.join(root_dir, f) for f in self.bin_files if not os.path.isabs(f)]
 
-                            if 'constance' in f:
-                                wtf = 1
-                                pass
+        with open(Path(self.curdir) / self.bin_files_name, 'wt') as lf:
+                for i, it in enumerate(split_seq([f for f in sorted(bf_) if os.path.exists(f)], 100)):
+                    with open(Path(self.curdir) / (self.bin_files_name + f'.chunk{i:02}'), 'wt') as lc:
+                        lc.write("\n".join(it))
+                    lf.write("\n".join(it))
 
-                            libfile = os.path.join(
-                                self.root_dir, f.replace(folder_, 'pbin'))
-                            if 'java-11' in libfile:
-                                erwerew = 1
-                            # if self.br.is_need_exclude(libfile):
-                            #     continue
+        size_ = folder_size(self.root_dir, follow_symlinks=False)
 
-                            m = ''
-                            try:
-                                m = fucking_magic(f)
-                            except Exception as ex_:
-                                print("Cannot detect Magic for ", f)
-                                raise ex_
-                            if m.startswith('ELF') and 'shared' in m:
-                                # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
-                                self.fix_sharedlib(f, libfile)
-                            else:
-                                self.add(f, libfile, recursive=False)
-                    pass
-
-            install_templates(root_dir, args)
-            self.install_terra_pythons()
-            # install_templates(root_dir, args)
-            # self.install_terra_pythons()
-
-            # if self.args.debug:
-            #     self.overwrite_mode = True
-            #     for f in file_list:
-            #         copy_file_to_environment(f)
-
-            os.chdir(root_dir)
-            if [_ for _ in Path(f'{root_dir}/pbin/').glob('python3.*')]:
-                scmd = "%(root_dir)s/ebin/python3 -m compileall -b . " % vars()
-                self.cmd(scmd)
-
-            if 0 and not self.args.debug:
-                # Remove source files.
-                scmd = "shopt -s globstar; rm  **/*.py; rm  -r **/__pycache__"
-                print(scmd)
-                os.system(scmd)
-                pass
-            # size_ = sum(file.stat().st_size for file in Path(self.root_dir).rglob('*'))
-            # Postprocessing, removing not needed files after installing python modules, etc
-            self.remove_exclusions()
-
-            with open(f'{self.curdir}/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
-                lf.write('obsoletes excludes \n')
-                for re_, cnt_ in self.br.need_exclude_re.items():
-                    if cnt_ == 0:
-                        pat_ = re_.pattern
-                        lf.write(f'   {pat_} \n')
-
-            size_ = folder_size(self.root_dir, follow_symlinks=False)
-
-            print("Size ", size_/1024/1024, 'Mb')
-
-        if self.args.stage_make_packages:
-            self.make_packages()
-
-        pass    
+        print("Size ", size_/1024/1024, 'Mb')
 
     def get_version(self):
         os.chdir(self.curdir)
@@ -2519,7 +2377,22 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         return version_        
 
 
-    def make_packages(self):
+    def stage_59_make_packages(self):
+        '''
+        Make DEB/RPM/ISO packages
+        '''
+        if not self.build_mode:
+            lines = [
+                f'''
+{sys.executable} {sys.argv[0]} {self.args.specfile} --stage-make-packages={self.package_modes}
+                ''']
+            mn_ = get_method_name()
+            self.lines2sh(mn_, lines, mn_)
+            return
+
+        if not self.args.stage_make_packages:
+            return
+        
         os.chdir(self.curdir)
 
         root_dir = os.path.realpath(self.out_dir)
@@ -2574,8 +2447,8 @@ python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@de
         open(chp_, 'w', encoding='utf-8').write(isofilename)
 
         package_modes = self.package_modes
-        if self.args.stage_make_packages:
-            package_modes = self.args.stage_make_packages.split(',')
+        # if self.args.stage_make_packages:
+        #     package_modes = self.args.stage_make_packages.split(',')
 
         os.chdir(nfpm_dir)
         install_mod = ''            
@@ -2632,7 +2505,7 @@ overrides:
             pkgdir = self.out_dir + '.'+ packagetype
             mkdir_p(pkgdir)
             scmd = f'''
-{self.toolbox_run_mod()} nfpm pkg --packager {packagetype} --target {pkgdir}        
+{self.tb_mod} nfpm pkg --packager {packagetype} --target {pkgdir}        
     '''.strip()
             os.chdir(nfpm_dir)
             self.cmd(scmd)
@@ -2645,7 +2518,6 @@ overrides:
             scmd = f'''ln -sf {fname_} last.{packagetype}'''
             self.cmd(scmd)
         pass
-
 
         for packagetype in ['iso']:
             if not packagetype in package_modes:
@@ -2681,8 +2553,6 @@ overrides:
                 makeself_header_template_path = path_to_dir / "ta-makeself-header.sh"
                 assert(makeself_header_template_path.exists())
                 makeself_header_template = ''
-                # with open(makeself_header_template_path, 'r', encoding='utf-8') as lf:
-                #     makeself_header_template = lf.read()
 
                 file_loader = FileSystemLoader(path_to_dir)
                 env = Environment(loader=file_loader)
@@ -2699,15 +2569,15 @@ overrides:
                     lf.write(makeself_header)
 
                 scmd = (f'''
-            makeself.sh {pmode} {add_opts} --header {makeself_header_path} --target "{self.spec.install_dir}" --tar-extra "--xattrs --xattrs-include=*" --untar-extra " --xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" {self.spec.install_dir}/install-me
+{self.tb_mod} makeself.sh {pmode} {add_opts} --header {makeself_header_path} --target "{self.spec.install_dir}" --tar-extra "--xattrs --xattrs-include=*" --untar-extra " --xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" {self.spec.install_dir}/install-me
         ''' % vars()).replace('\n', ' ').strip()
                 if not self.cmd(scmd) == 0:
                     print(f'« {scmd} » failed!')    
                     return
             os.chdir(self.curdir)
-            scmd = f'''mkisofs -r -J -o  {isofilename}  {installscriptpath}'''.replace('\n', ' ').strip()
+            scmd = f'''{self.tb_mod} mkisofs -r -J -o  {isofilename}  {installscriptpath}'''
             self.cmd(scmd)
-            scmd = f'''md5sum {isofilename}'''
+            scmd = f'''{self.tb_mod} md5sum {isofilename}'''
             os.chdir(self.curdir)
             md5s_ = subprocess.check_output(
                 scmd, shell=True).decode('utf-8').strip().split()[0]
@@ -2718,3 +2588,46 @@ overrides:
             scmd = f'''ln -sf {isofilename} last.iso'''
             self.cmd(scmd)
             os.chdir(self.curdir)
+
+
+    def process(self):
+        '''
+        Основная процедура генерации переносимого питон окружения.
+        '''
+
+        args = self.args
+        spec = self.spec
+
+        self.clear_shell_files()
+
+        if self.args.folder_command:
+            self.folder_command()
+            return
+
+        if self.args.git_sync:
+            self.git_sync()
+            return
+
+        if self.args.analyse:
+            self.analyse()
+            return
+
+        self.lines2sh("94-install-last-nuitka", [
+            f'''
+export PIPENV_VENV_IN_PROJECT=1
+{self.tb_mod} python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
+            '''])
+
+        self.build_mode = False
+        for stage_ in self.stage_methods:
+            stage_()
+
+        self.build_mode = True
+        for stage_ in self.stage_methods:
+            stage_()
+
+#         self.lines2sh("91-pack-debug", [
+#             f'''
+# sudo chmod a+rx /usr/lib/cups -R
+# terrarium_assembler --debug --stage-pack "{self.args.specfile}"
+#             '''])

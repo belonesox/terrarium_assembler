@@ -5,13 +5,74 @@ import os
 import magic
 import subprocess
 import shutil
-import stat
 import pathlib
 from easydict import EasyDict as edict
-# from elevate import elevate
 
 import hashlib
+import re
+import itertools
 
+import inspect
+
+
+def bashash4folter(var, folder):
+    scmd =f'''HASH_{var}=`tar cf - -C {folder} --mtime='1970-01-01' --mode='aou+rwx' --exclude=build  . | md5sum`
+'''
+    return scmd
+
+def read_old_hash(folder):
+    scmd =f'''OLD_HASH=$(cat {folder}/state.md5 || true)
+'''
+    return scmd
+
+def save_state_hash(folder):
+    scmd =f'''echo "$HASH_STATE" > {folder}/state.md5    
+'''
+    return scmd
+
+def bashash4str(var, msg):
+    scmd =f'''HASH_{var}=`echo "{msg}" | md5sum`
+'''
+    return scmd
+
+def bashash_stop_if_not_changed(listvar, msg):
+    complex_hash_ = ' + '.join([f'$HASH_{v}' for v in listvar])
+    scmd = f'''
+HASH_STATE="{complex_hash_}"    
+if [[ "$OLD_HASH" == "$HASH_STATE" ]] then
+    echo "{msg}"
+    exit 0
+fi
+'''
+    return scmd
+
+def get_method_name():
+    curframe = inspect.currentframe().f_back
+    (filename, line_number, function_name, lines, index) = inspect.getframeinfo(curframe)        
+    return function_name
+
+
+def fname2stage(fname):
+    return re.sub(r'''\d\d\_''', '', fname)
+
+def fname2shname(fname):
+    return fname.replace('stage_','').replace('_', '-') + '.sh'
+
+def fname2num(fname):
+    for m in re.findall(r'''\d\d''', fname):
+        return int(m)
+    return None
+
+def fname2option(fname):
+    return re.sub(r'''_''', '-', fname)
+
+
+def split_seq(iterable, size):
+    it = iter(iterable)
+    item = list(itertools.islice(it, size))
+    while item:
+        yield item
+        item = list(itertools.islice(it, size))
 
 def j2_hash_filter(value, hash_type="sha1"):
     """
@@ -210,3 +271,50 @@ def giturl2folder(git_url):
 
 def expandpath(path):
     return os.path.abspath(os.path.expanduser(os.path.expandvars(path)))
+
+
+def write_doc_table(filename, headers, rows):
+    with open(filename, 'w', encoding='utf-8') as lf:
+        lf.write(f"""
+<table class='wikitable' border=1>
+""")
+        lf.write(f"""<tr>""")
+        for col_ in headers:
+            lf.write(f"""<th>{col_}</th>""")
+        lf.write(f"""</tr>\n""")
+        for row_ in rows:
+            lf.write(f"""<tr>""")
+            for col_ in row_:
+                lf.write(f"""<td>{col_}</td>""")
+            lf.write(f"""</tr>\n""")
+        lf.write(f"""
+</table>
+""")
+    return
+
+
+def fucking_magic(f):
+    # m = magic.detect_from_filename(f)
+    if "ld.so" in f:
+        wtf = 1
+        pass
+
+    if not os.path.exists(f):
+        return ''
+
+    if not os.path.isfile(f):
+        return ''
+
+    m = magic.from_file(f)
+    # if m.mime_type in ['inode/symlink', 'text/plain']:
+    #     return
+    return m
+
+
+def get_git_version():
+    tags = subprocess.check_output("git tag --sort=-creatordate --merged", 
+                                    shell=True, universal_newlines=True)
+    for tag in tags.strip().split('\n'):
+        if tag.startswith('v'):
+            return tag[1:] 
+    return '1.0.0'
