@@ -80,7 +80,7 @@ def fname2stage(fname):
     return re.sub(r'''\d\d\_''', '', fname)
 
 def fname2shname(fname):
-    return fname.replace('stage_','').replace('_', '-') + '.sh'
+    return 'ta-' + fname.replace('stage_','').replace('_', '-') + '.sh'
 
 def fname2num(fname):
     for m in re.findall(r'''\d\d''', fname):
