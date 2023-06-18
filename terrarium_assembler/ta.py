@@ -1711,7 +1711,7 @@ rm -f {self.our_whl_path}/*
 {self.tb_mod} pipenv run pip-audit -o pip-audit-report.md -f markdown || true
 {self.tb_mod} pipenv run pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
 {self.tb_mod} pandoc -w mediawiki pip-audit-report.md -o pip-audit-report.wiki
-{self.tb_mod} bash -c "(echo '<graph>'; cat pipdeptree-graph.dot; echo '</graph>') > {self.pipdeptree_graph_mw}"
+{self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
 
 {save_state_hash('.venv')}
 '''
