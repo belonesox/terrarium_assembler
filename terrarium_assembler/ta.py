@@ -412,7 +412,7 @@ class TerrariumAssembler:
 
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath',
-                              'python3-wheel', 'python3-pip', 'python3-devel', 'python3-yaml',
+                            #   'python3-wheel', 'python3-pip', 'python3-devel', 'python3-yaml',
                               'genisoimage', 'makeself', 'dnf-utils', 'yum', 'nfpm', 'pandoc']
 
         nflags_ = {}
@@ -463,6 +463,9 @@ class TerrariumAssembler:
         self.rpms_path = os.path.join(self.in_bin, "rpms")
         mkdir_p(self.rpms_path)
 
+        self.base_rpms_path = os.path.join(self.in_bin, "base-rpms")
+        mkdir_p(self.base_rpms_path)
+
         os.environ['PATH'] = "/usr/lib64/ccache:" + os.environ['PATH']
 
         self.nuitka_plugins_dir = os.path.realpath(os.path.join(
@@ -489,9 +492,9 @@ class TerrariumAssembler:
         scmd = f'''
 toolbox rm -f {self.environ_name} -y || true
 toolbox create {self.environ_name} --distro fedora --release {self.spec.fc_version} -y;
-toolbox run --container {self.environ_name} sudo dnf install -y dnf-utils
 '''
         return scmd
+# toolbox run --container {self.environ_name} sudo dnf install -y dnf-utils
 
 
     @property
@@ -547,8 +550,9 @@ toolbox run --container {self.environ_name} sudo dnf install -y dnf-utils
                         print("*"*20)
                         res = self.cmd("./" + fname)
                         failmsg = f'{fname} execution failed!'
-                        print(failmsg)
-                        assert res==0
+                        if res != 0:
+                            print(failmsg)
+                        assert res==0, 'Execution of stage failed!'
             return
 
         with open(os.path.join(fname), 'w', encoding="utf-8") as lf:
@@ -617,10 +621,10 @@ export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
                 lines.append(fR"""
-{bashash4folter('VENV', '.venv')}                
-{bashash4folter('SRC', src_dir)}                
-{read_old_hash(target_dir_)}            
-{bashash_stop_if_not_changed(['VENV', 'SRC'], f"Source for {build_name} not changed, skipping")}
+{bashash_ok_folders_strings(target_dir_, ['.venv', src_dir], [],
+        f"Sources for {build_name} not changed, skipping"
+        )}
+
 {self.tb_mod} bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log'
 # time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log || {{ echo 'Compilation failed' ; exit 1; }}
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
@@ -986,6 +990,9 @@ popd
         if not path.startswith(os.path.sep):
             return path
 
+        if path.startswith('/home'):
+            return path
+
         if not self.container_path or not any(self.container_path.iterdir()):
             if not  self.container_info:
                 inspect_file = Path(self.curdir) / 'tmp/container.json'
@@ -1264,7 +1271,7 @@ popd
                 os.chdir(self.curdir)
         pass
 
-    def stage_07_checkout_sources(self):
+    def stage_10_checkout_sources(self):
         '''
             Checking out sources. We should have authorization to check them out.
         '''
@@ -1489,8 +1496,8 @@ fi
         for rp_ in self.ps.repos or []:
             if rp_.lower().endswith('.gpg'):
                 lines.append(f'{self.tb_mod} sudo rpm --import {rp_} ')
-            elif rp_.endswith('.rpm'):
-                lines.append(f'{self.tb_mod} sudo dnf install --nogpgcheck {rp_} -y ')
+            # elif rp_.endswith('.rpm'):
+            #     lines.append(f'{self.tb_mod} sudo dnf install --nogpgcheck {rp_} -y ')
             else:
                 lines.append(f'{self.tb_mod} sudo dnf config-manager --add-repo {rp_} -y ')
                 prp_ = rp_
@@ -1504,11 +1511,41 @@ fi
         lines.append('')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
-
-
         pass
 
-    def stage_03_download_packages(self):
+    def stage_02_download_base_packages(self):
+        '''
+        Download base RPM packages.
+        '''
+        root_dir = self.root_dir
+        args = self.args
+        packages = []
+        lines = []
+
+        lines_src = []
+        in_bin = os.path.relpath(self.in_bin, start=self.curdir)
+
+        pls_ = [p for p in self.need_packages]
+        for rp_ in self.ps.repos or []:
+            if rp_.endswith('.rpm'):
+                pls_.append(rp_)
+
+        # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
+        packages = " ".join(pls_)
+        scmd = f'''dnf download --skip-broken --downloaddir {self.base_rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        lines.append(f'''
+{bashash_ok_folders_strings(self.base_rpms_path, [], [scmd],
+        f"Looks required base RPMs already downloaded"
+        )}
+rm -rf '{self.base_rpms_path}'
+{self.tb_mod} {scmd}
+{save_state_hash(self.base_rpms_path)}
+''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
+    def stage_06_download_rpm_packages(self):
         '''
         Download RPM packages.
         '''
@@ -1533,11 +1570,11 @@ fi
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
         # scmd = 'dnf download --skip-broken --downloaddir "%(in_bin)s/rpms" --arch=x86_64  --arch=x86_64 --arch=noarch  %(packages)s -y ' % vars()
-        scmd = f'dnf download --skip-broken --downloaddir "{self.rpms_path}" --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '
+        scmd = f'''dnf download --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
         lines.append(f'''
-{bashash4str('RPM_REQS', scmd)}
-{read_old_hash(self.rpms_path)}    
-{bashash_stop_if_not_changed(['RPM_REQS'], f"Looks required RPMs already downloaded")}
+{bashash_ok_folders_strings(self.rpms_path, [], [scmd],
+        f"Looks required RPMs already downloaded"
+        )}
 rm -rf '{self.rpms_path}'
 {self.tb_mod} {scmd}
 {save_state_hash(self.rpms_path)}
@@ -1554,8 +1591,22 @@ rm -rf '{self.rpms_path}'
         # self.lines2sh("90-download-sources-for-rpms",
         #               lines_src, "download-sources-for-rpms")
 
+    def stage_03_install_base_rpms(self):
+        '''
+        Install downloaded base RPM packages
+        '''
+        terra_package_names = " ".join([p for p in self.ps.terra if isinstance(p, str)])
+        lines = [
+            f"""
+{self.tb_mod} sudo dnf install --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
+""" 
+        ]
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
 
-    def stage_04_install_rpms(self):
+
+    def stage_07_install_rpms(self):
         '''
         Install downloaded RPM packages
         '''
@@ -1571,7 +1622,7 @@ rm -rf '{self.rpms_path}'
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_08_build_wheels(self):
+    def stage_11_build_wheels(self):
         '''
             Compile wheels for our python sources
         '''
@@ -1582,9 +1633,9 @@ rm -rf '{self.rpms_path}'
         wheelpath = os.path.join(self.in_bin, "ourwheel")
         relwheelpath = os.path.relpath(wheelpath, start=self.curdir)
         lines.append(fR'''
-{bashash4folter('SRC', self.src_dir)}                
-{read_old_hash(self.our_whl_path)}  
-{bashash_stop_if_not_changed(['SRC'], f"Looks like sources not changed, not need to rebuild WHLs for our sources")}
+{bashash_ok_folders_strings(self.our_whl_path, [self.src_dir], [],
+f"Looks like sources not changed, not need to rebuild WHLs for our sources"
+)}
 rm -f {self.our_whl_path}/*
 ''')
         for td_ in self.pp.projects():
@@ -1606,7 +1657,7 @@ rm -f {self.our_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
 
 
-    def stage_06_init_python_env(self):
+    def stage_09_init_python_env(self):
         '''
         Create build environment with some bootstrapping
         '''
@@ -1638,6 +1689,10 @@ rm -f {self.our_whl_path}/*
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
 
         scmd = f'''
+{bashash_ok_folders_strings('.venv', [self.our_whl_path, self.ext_whl_path, self.base_whl_path], [],
+        f"Looks like dont need to update .venv"
+        )}
+
 {self.tb_mod} pipenv --rm
 {self.tb_mod} pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
 {self.tb_mod} pipenv run python -m pip install ./in/bin/ourwheel/*.whl ./{self.ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
@@ -1647,6 +1702,8 @@ rm -f {self.our_whl_path}/*
 {self.tb_mod} pipenv run pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
 {self.tb_mod} pandoc -w mediawiki pip-audit-report.md -o pip-audit-report.wiki
 {self.tb_mod} bash -c "(echo '<graph>'; cat pipdeptree-graph.dot; echo '</graph>') > {self.pipdeptree_graph_mw}"
+
+{save_state_hash('.venv')}
 '''
 
         lines.append(scmd)   # --no-cache-dir
@@ -1733,7 +1790,7 @@ rm -f {self.our_whl_path}/*
         pip_targets_ = " ".join([r for r in pip_targets if '==' in r])
         return pip_targets_
 
-    def stage_05_download_base_wheels(self):
+    def stage_08_download_base_wheels(self):
         '''
         Consistent downloading only python packages with fixed versions.
         They should be downloaded before building our packages and creating pipenv environment.
@@ -1755,9 +1812,9 @@ rm -f {self.our_whl_path}/*
         # pipenv environment does not exists we using regular python to download base packages.
         scmd = f"python -m pip download  {bws} --dest {self.base_whl_path} "
         lines.append(f'''
-{bashash4str('REQS', bws)}              
-{read_old_hash(self.base_whl_path)}            
-{bashash_stop_if_not_changed(['REQS'], f"Looks required base wheels already downloaded")}
+{bashash_ok_folders_strings(self.base_whl_path, [], [bws],
+        f"Looks required base wheels already downloaded"
+        )}
 rm -f {self.base_whl_path}/*
 {self.tb_mod} {scmd}
 {save_state_hash(self.base_whl_path)}
@@ -1767,7 +1824,7 @@ rm -f {self.base_whl_path}/*
         pass
 
 
-    def stage_09_download_wheels(self):
+    def stage_12_download_wheels(self):
         '''
         Consistent downloading all needed pip wheel packages
         '''
@@ -1784,22 +1841,25 @@ rm -f {self.base_whl_path}/*
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 
-rm -f {self.ext_whl_path}/*
 ''')
 
         pip_args_ = self.pip_args_from_sources()
 
-        scmd = f"{self.tb_mod} python -m pipenv run python -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
+        scmd = f"python -m pipenv run python -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
         scmd_srcs = f"{self.tb_mod} python -m pipenv run python -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
-        lines.append(scmd)
+        lines.append(f'''
+{bashash_ok_folders_strings(self.ext_whl_path, [self.src_dir], [scmd],
+        f"Looks required RPMs already downloaded"
+        )}
+               
+rm -f {self.ext_whl_path}/*
+{self.tb_mod} {scmd}
+''')
 
         for py_ in self.pp.remove_from_download or []:
             scmd = f'rm -f {self.ext_whl_path}/{py_}-*'
             lines.append(scmd)
-
-        scmd = f"""
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
+        lines.append(f'''
 bash -c "unset PIPENV_VENV_IN_PROJECT"
 export PIPENV_PIPFILE=$d/Pipfile
 
@@ -1808,8 +1868,8 @@ pushd {bin_dir}/extwheel
 rm -f *.tar.*
 popd
 {self.tb_mod} python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
-"""
-        lines.append(scmd)
+{save_state_hash(self.ext_whl_path)}
+''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         # self.lines2sh("12-download-pip-sources", [scmd_srcs], "download-pip-sources")
@@ -2141,7 +2201,7 @@ popd
             t.toc()
 
         try:
-            json_ = json.loads(open(self.pip_list_json))
+            json_ = json.loads(open(self.pip_list_json).read())
             rows_ = []
             for r_ in json_:
                 rows_.append([r_['name'], r_['version']])
@@ -2302,6 +2362,8 @@ popd
             for folder_ in self.fs.folders:
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
+                        if 'bulk' in filename:
+                            wrtf=1
                         f = os.path.join(dirpath, filename)
                         if self.br.is_need_patch(f):
                             self.process_binary(f)
@@ -2384,7 +2446,7 @@ popd
         if not self.build_mode:
             lines = [
                 f'''
-{sys.executable} {sys.argv[0]} {self.args.specfile} --stage-make-packages={self.package_modes}
+{sys.executable} {sys.argv[0]} {self.args.specfile} --stage-make-packages
                 ''']
             mn_ = get_method_name()
             self.lines2sh(mn_, lines, mn_)
@@ -2502,7 +2564,7 @@ overrides:
         for packagetype in ['rpm', 'deb']:
             if not packagetype in package_modes:
                 continue
-            pkgdir = self.out_dir + '.'+ packagetype
+            pkgdir = '../../' + self.out_dir + '.'+ packagetype
             mkdir_p(pkgdir)
             scmd = f'''
 {self.tb_mod} nfpm pkg --packager {packagetype} --target {pkgdir}        

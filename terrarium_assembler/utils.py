@@ -15,8 +15,8 @@ import itertools
 import inspect
 
 
-def bashash4folter(var, folder):
-    scmd =f'''HASH_{var}=`tar cf - -C {folder} --mtime='1970-01-01' --mode='aou+rwx' --exclude=build  . | md5sum`
+def bashash4folder(var, folder):
+    scmd =f'''HASH_{var}=`tar cf - -C {folder} --mtime='1970-01-01' --mode='aou+rwx' --exclude=build  --exclude=.eggs --exclude=.git  --exclude='*.egg-info'  . | md5sum`
 '''
     return scmd
 
@@ -30,8 +30,8 @@ def save_state_hash(folder):
 '''
     return scmd
 
-def bashash4str(var, msg):
-    scmd =f'''HASH_{var}=`echo "{msg}" | md5sum`
+def bashash4str(varn, msg):
+    scmd =f'''HASH_{varn}=`echo "{msg}" | md5sum`
 '''
     return scmd
 
@@ -45,6 +45,30 @@ if [[ "$OLD_HASH" == "$HASH_STATE" ]] then
 fi
 '''
     return scmd
+
+
+def bashash_ok_folders_strings(targetdir, folders, strs, msg):
+    lines = []
+    vars_ = []
+    for i, fld in enumerate(folders):
+        var_ = f'FLD{i:02}'
+        vars_.append(var_)
+        lines.append(f'''
+{bashash4folder(var_, fld)}        
+''')
+    for i, str_ in enumerate(strs):
+        var_ = f'REQ{i:02}'
+        vars_.append(var_)
+        lines.append(f'''
+{bashash4str(var_, str_)}        
+''')
+    lines.append(f'''
+{read_old_hash(targetdir)}  
+{bashash_stop_if_not_changed(vars_, msg)}
+''')
+    return "\n".join(lines)
+
+
 
 def get_method_name():
     curframe = inspect.currentframe().f_back
