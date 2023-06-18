@@ -278,8 +278,12 @@ class TerrariumAssembler:
         self.patching_dir = 'tmp/patching'
         mkdir_p(self.patching_dir)
 
+        self.file_list_from_terra_rpms = 'tmp/file-list-from-terra-rpms.txt'
+        self.doc_list_from_terra_rpms = 'tmp/doc-list-from-terra-rpms.txt'
+        self.file_list_from_deps_rpms = 'tmp/file-list-from-deps-rpms.txt'
+        self.doc_list_from_deps_rpms = 'tmp/doc-list-from-deps-rpms.txt'
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
-        self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
+        # self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
         self.pipdeptree_graph_dot = 'tmp/pipdeptree-graph.dot'
         self.pipdeptree_graph_mw = 'tmp/pipdeptree-graph.mw'
         self.pip_list = 'tmp/pip-list.txt'
@@ -677,19 +681,19 @@ mkdir -p {target_dir_}/{dst_}
                             '''
                             lines.append(scmd)
 
-                self.lines2sh(build_name, lines, None)
-                bfiles.append(build_name)
+                self.lines2sh(build_name, lines)
+                bfiles.append(fname2shname(build_name))
 
         if 'custombuilds' in self.spec:
             cbs = self.spec.custombuilds
             for cb in cbs:
                 build_name = 'build_' + cb.name
                 self.lines2sh(build_name, [cb.shell.strip()], None)
-                bfiles.insert(0, build_name)
+                bfiles.insert(0, fname2shname(build_name))
 
         lines = []
         for b_ in bfiles:
-            lines.append("./" + b_ + '.sh')
+            lines.append("./" + b_)
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -732,8 +736,9 @@ pushd {path_to_dir__}
 popd
     """)
                 self.fs.folders.append(target_dir)
-                self.lines2sh(build_name, lines, None)
-                bfiles.append(build_name)
+                bsh = 'ta-' + build_name.replace('_', '-')
+                self.lines2sh(bsh, lines, None)
+                bfiles.append(bsh)
 
         lines = []
         for b_ in bfiles:
@@ -763,7 +768,7 @@ popd
 
     def clear_shell_files(self):
         os.chdir(self.curdir)
-        re_ = re.compile('\d\d-.*\.sh')
+        re_ = re.compile('(\d\d-|ta-).*\.sh')
         for sh_ in Path(self.curdir).glob('*.sh'):
             if re_.match(sh_.name):
                 sh_.unlink()
@@ -1598,7 +1603,7 @@ rm -rf '{self.rpms_path}'
         terra_package_names = " ".join([p for p in self.ps.terra if isinstance(p, str)])
         lines = [
             f"""
-{self.tb_mod} sudo dnf install --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
+{self.tb_mod} sudo dnf install --nodocs --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
 """ 
         ]
         mn_ = get_method_name()
@@ -1613,10 +1618,15 @@ rm -rf '{self.rpms_path}'
         terra_package_names = " ".join([p for p in self.ps.terra if isinstance(p, str)])
         lines = [
             f"""
-{self.tb_mod} sudo dnf install --nogpgcheck --skip-broken {self.rpms_path}/*.rpm -y --allowerasing
-{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.file_list_from_rpms}
-{self.tb_mod} sudo rpm -qd {terra_package_names} > {self.doc_list_from_rpms}
+{self.tb_mod} sudo dnf install --nodocs --nogpgcheck --skip-broken {self.rpms_path}/*.rpm -y --allowerasing
+{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {terra_package_names} > {self.file_list_from_terra_rpms}
+{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.file_list_from_deps_rpms}
+{self.tb_mod} cat {self.file_list_from_terra_rpms} {self.file_list_from_deps_rpms} > {self.file_list_from_rpms}
 """ 
+#{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.doc_list_from_deps_rpms}
+#{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --cacheonly --list {terra_package_names} > {self.doc_list_from_terra_rpms}
+#{self.tb_mod} cat {self.doc_list_from_terra_rpms} {self.doc_list_from_deps_rpms} > {self.doc_list_from_rpms}
+# self.file_list_from_rpms}
         ]
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2251,10 +2261,12 @@ popd
         #         pass    
 
         file_list = None
-        if Path(self.file_list_from_rpms).exists() and Path(self.doc_list_from_rpms).exists():
+        if Path(self.file_list_from_rpms).exists(): 
+        # and Path(self.doc_list_from_rpms).exists():
             all_list = open(self.file_list_from_rpms).readlines()
-            doc_list = open(self.doc_list_from_rpms).readlines()
-            file_list = [x.strip() for x in set(all_list) - set(doc_list) if x.strip() and self.should_copy(x.strip())]
+            # doc_list = open(self.doc_list_from_rpms).readlines()
+            file_list = [x.strip() for x in set(all_list) if x.strip() and self.should_copy(x.strip())]
+            #- set(doc_list)
         else:    
             deps_packages = self.dependencies(packages_to_deploy)
             file_list = self.generate_file_list_from_packages(deps_packages)
