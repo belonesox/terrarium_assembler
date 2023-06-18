@@ -21,6 +21,7 @@ requirements = [
     'pyyaml',
     'prettytable',
     'pipenv',
+    'imohash',
     'wheel_filename',
 ]
 
