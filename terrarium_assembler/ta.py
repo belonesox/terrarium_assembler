@@ -1677,12 +1677,13 @@ rm -f {self.our_whl_path}/*
 
         lines = []
         scmd = f'''
-{self.tb_mod} python -m pipenv --rm
+{self.tb_mod} python -m pipenv --rm || true
 {self.tb_mod} rm -f Pipfile*
-{self.tb_mod} touch Pipfile
 {self.tb_mod} python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
 {self.tb_mod} python -m pipenv run python -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
+#{self.tb_mod} touch Pipfile
+
         lines.append(scmd)
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
