@@ -18,7 +18,7 @@ import jinja2.exceptions
 import version_utils.rpm
 
 from imohash import hashfile
-from simplekv.fs import FilesystemStore
+#from simplekv.fs import FilesystemStore
 from itertools import islice
 
 
