@@ -2201,7 +2201,7 @@ rm -f {self.ext_compiled_tar_path}/*
                                 if 'error' in fname_:
                                     wtf = 4
                                 out_fname_ = os.path.splitext(out_fname_)[0]
-                                path_ = open(fname_).read().strip()
+                                path_ = self.toolbox_path(open(fname_).read().strip())
                                 if not os.path.isabs(path_):
                                     path_ = os.path.join(self.curdir, path_)
                                 if path_.strip() and os.path.isdir(path_):
