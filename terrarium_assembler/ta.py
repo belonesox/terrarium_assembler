@@ -458,6 +458,9 @@ class TerrariumAssembler:
         self.ext_whl_path = os.path.join(self.in_bin, "extwheel")
         mkdir_p(self.ext_whl_path)
 
+        self.ext_compiled_tar_path = os.path.join(self.in_bin, "ext_compiled_tar")
+        mkdir_p(self.ext_compiled_tar_path)
+
         self.ext_pip_path = os.path.join(self.in_bin, "extpip")
         mkdir_p(self.ext_whl_path)
 
@@ -1379,7 +1382,9 @@ fi
         '''
         our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
-        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed '
+        ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
+        
+        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links"{ext_compiled_tar_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed '
         return scmd
 
     def pip_install_offline(self, target):
@@ -1423,21 +1428,25 @@ fi
 
         our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+        ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
+
+        findlinks_mod = f''' --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --find-links="{ext_compiled_tar_path}"  ''' 
+
 
         # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
 
         scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install setuptools --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location
+{self.root_dir}/ebin/python3 -m pip install setuptools {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
         '''
         self.cmd(scmd)
 
         if self.args.debug:
             scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install pip {our_whl_path}/*.whl {ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location
+{self.root_dir}/ebin/python3 -m pip install pip {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
             '''
         else:
             scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --force-reinstall --ignore-installed --no-warn-script-location
+{self.root_dir}/ebin/python3 -m pip install {pip_args_} {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
             '''
 
         os.chdir(self.curdir)
@@ -1445,9 +1454,9 @@ fi
         # не спрашивайте. Теоретически, должно ставится за прошлый раз, но иногда нет.
         self.cmd(scmd)
 
-        if self.tvars.fc_version == '32':
-            os.system(
-                f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
+        # if self.tvars.fc_version == '32':
+        #     os.system(
+        #         f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
         if self.pp.terra.projects:
             nodes_ = self.pp.terra.projects
@@ -1673,8 +1682,6 @@ rm -f {self.our_whl_path}/*
         '''
         os.chdir(self.curdir)
 
-        ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
-
         lines = []
         scmd = f'''
 {self.tb_mod} python -m pipenv --rm || true
@@ -1698,20 +1705,21 @@ rm -f {self.our_whl_path}/*
 
         our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+        ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
 
         scmd = f'''
-{bashash_ok_folders_strings('.venv', [self.our_whl_path, self.ext_whl_path, self.base_whl_path], [],
+{bashash_ok_folders_strings('.venv', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path], [],
         f"Looks like dont need to update .venv"
         )}
 
-{self.tb_mod} pipenv --rm
+{self.tb_mod} pipenv --rm || true
 {self.tb_mod} pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-{self.tb_mod} pipenv run python -m pip install ./in/bin/ourwheel/*.whl ./{self.ext_whl_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} pipenv run python -m pip install ./{our_whl_path}/*.whl ./{ext_whl_path}/*.whl ./{ext_compiled_tar_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 {self.tb_mod} pipenv run python -m pip list > {self.pip_list}
 {self.tb_mod} pipenv run python -m pip list --format json > {self.pip_list_json}
-{self.tb_mod} pipenv run pip-audit -o pip-audit-report.md -f markdown || true
+{self.tb_mod} pipenv run pip-audit -o tmp/pip-audit-report.md -f markdown || true
 {self.tb_mod} pipenv run pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
-{self.tb_mod} pandoc -w mediawiki pip-audit-report.md -o pip-audit-report.wiki
+{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report.md -o tmp/pip-audit-report.wiki
 {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
 
 {save_state_hash('.venv')}
@@ -1871,13 +1879,6 @@ rm -f {self.ext_whl_path}/*
             scmd = f'rm -f {self.ext_whl_path}/{py_}-*'
             lines.append(scmd)
         lines.append(f'''
-bash -c "unset PIPENV_VENV_IN_PROJECT"
-export PIPENV_PIPFILE=$d/Pipfile
-
-pushd {bin_dir}/extwheel
-{self.tb_mod} bash -c "ls *.tar.* | xargs -i[] -t python -m pipenv run python -m pip wheel [] --no-deps"
-rm -f *.tar.*
-popd
 {self.tb_mod} python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
 {save_state_hash(self.ext_whl_path)}
 ''')
@@ -1885,6 +1886,41 @@ popd
         self.lines2sh(mn_, lines, mn_)
         # self.lines2sh("12-download-pip-sources", [scmd_srcs], "download-pip-sources")
         pass
+
+    def stage_13_compile_pip_tars(self):
+        '''
+        Compile TAR python packages for which not exists WHL
+        '''
+        os.chdir(self.curdir)
+        # os.chdir(self.out_dir)
+
+        root_dir = self.root_dir
+        args = self.args
+
+        bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
+
+        lines = []
+        lines.append(f'''
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+
+''')
+
+        pip_args_ = self.pip_args_from_sources()
+
+        lines.append(f'''
+{bashash_ok_folders_strings(self.ext_compiled_tar_path, [self.ext_whl_path], [],
+        f"Looks like python tars already compiled"
+        )}
+               
+rm -f {self.ext_compiled_tar_path}/*
+{self.tb_mod} bash -c "find {self.ext_whl_path} -name '*.tar.*' | xargs -i[] -t python -m pipenv run python -m pip wheel [] --no-deps --wheel-dir {self.ext_compiled_tar_path}"
+{save_state_hash(self.ext_compiled_tar_path)}
+''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
 
     def analyse(self):
         '''
