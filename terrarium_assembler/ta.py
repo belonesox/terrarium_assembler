@@ -1713,7 +1713,7 @@ rm -f {self.our_whl_path}/*
 
 {self.tb_mod} pipenv --rm || true
 {self.tb_mod} pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
-{self.tb_mod} pipenv run python -m pip install ./{our_whl_path}/*.whl ./{ext_whl_path}/*.whl ./{ext_compiled_tar_path}/*.whl --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} pipenv run python -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 {self.tb_mod} pipenv run python -m pip list > {self.pip_list}
 {self.tb_mod} pipenv run python -m pip list --format json > {self.pip_list_json}
 {self.tb_mod} pipenv run pip-audit -o tmp/pip-audit-report.md -f markdown || true
