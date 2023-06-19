@@ -739,13 +739,12 @@ pushd {path_to_dir__}
 popd
     """)
                 self.fs.folders.append(target_dir)
-                bsh = 'ta-' + build_name.replace('_', '-')
-                self.lines2sh(bsh, lines, None)
-                bfiles.append(bsh)
+                self.lines2sh(build_name, lines, None)
+                bfiles.append(fname2shname(build_name))
 
         lines = []
         for b_ in bfiles:
-            lines.append("./" + b_ + '.sh')
+            lines.append("./" + b_)
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
