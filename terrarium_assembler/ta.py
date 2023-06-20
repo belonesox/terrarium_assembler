@@ -2154,7 +2154,7 @@ rm -f {self.ext_compiled_tar_path}/*
                     path_to_dir = os.path.join(path_to_dir, td_.subdir)
 
                 file_loader = FileSystemLoader(path_to_dir)
-                env = Environment(loader=file_loader)
+                env = Environment(loader=file_loader, keep_trailing_newline=True)
                 env.filters["hash"] = j2_hash_filter
                 env.trim_blocks = True
                 env.lstrip_blocks = True
@@ -2213,6 +2213,8 @@ rm -f {self.ext_compiled_tar_path}/*
                                 processed_ = True    
                             elif plain or fname_.endswith('.nj2'):
                                 try:
+                                    if fname_.endswith('compton.conf'):
+                                        wtf = 1
                                     template = env.get_template(fname_)
                                     output = template.render(self.tvars)
                                     try:
