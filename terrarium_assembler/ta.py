@@ -801,9 +801,7 @@ popd
                 dirsrc_, filesrc_ = os.path.split(src)
                 if not dir_ or dirsrc_ == dir_:
                     if not os.path.exists(dst):
-                        # if file_ == '/usr/lib/python3.7/site-packages/__pycache__/six.cpython-37.opt-1.pyc' or dst=='/home/stas/projects/docmarking/dm-deploy/envs/v013/lib64/python3.7/site-packages/urllib3/packages/__pycache__/six.cpython-37.opt-1.pyc':
-                        #     wtf_=1
-                        os.symlink(file_, dst)
+                        os.symlink(linkto, dst)
                 else:
                     pass
             else:
@@ -1862,11 +1860,13 @@ d="$(dirname "$x")"
 ''')
 
         pip_args_ = self.pip_args_from_sources()
+        remove_pips = self.pp.remove_from_download or []
+        remove_pips_str = " ".join(remove_pips)
 
         scmd = f"python -m pipenv run python -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
         scmd_srcs = f"{self.tb_mod} python -m pipenv run python -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
         lines.append(f'''
-{bashash_ok_folders_strings(self.ext_whl_path, [self.src_dir], [scmd],
+{bashash_ok_folders_strings(self.ext_whl_path, [self.src_dir], [scmd, remove_pips_str],
         f"Looks required RPMs already downloaded"
         )}
                
@@ -1874,7 +1874,7 @@ rm -f {self.ext_whl_path}/*
 {self.tb_mod} {scmd}
 ''')
 
-        for py_ in self.pp.remove_from_download or []:
+        for py_ in remove_pips:
             scmd = f'rm -f {self.ext_whl_path}/{py_}-*'
             lines.append(scmd)
         lines.append(f'''
@@ -2304,8 +2304,9 @@ rm -f {self.ext_compiled_tar_path}/*
             file_list = [x.strip() for x in set(all_list) if x.strip() and self.should_copy(x.strip())]
             #- set(doc_list)
         else:    
-            deps_packages = self.dependencies(packages_to_deploy)
-            file_list = self.generate_file_list_from_packages(deps_packages)
+            assert(False)
+            # deps_packages = self.dependencies(packages_to_deploy)
+            # file_list = self.generate_file_list_from_packages(deps_packages)
 
 
         if '/lib/libpthread-2.31.so' in fs_:
@@ -2333,6 +2334,7 @@ rm -f {self.ext_compiled_tar_path}/*
         mkdir_p(root_dir)
 
         def copy_file_to_environment(f):
+
             if not self.should_copy(f):
                 return
 
