@@ -2721,8 +2721,6 @@ overrides:
         args = self.args
         spec = self.spec
 
-        self.clear_shell_files()
-
         if self.args.folder_command:
             self.folder_command()
             return
@@ -2742,6 +2740,7 @@ export PIPENV_VENV_IN_PROJECT=1
             '''])
 
         self.build_mode = False
+        self.clear_shell_files()
         for stage_ in self.stage_methods:
             stage_()
 
