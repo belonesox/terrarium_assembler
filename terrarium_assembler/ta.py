@@ -324,6 +324,7 @@ class TerrariumAssembler:
         ap.add_argument('--git-sync', default='', type=str,
                         help='Perform lazy git sync for all projects')
         ap.add_argument('specfile', type=str, help='Specification File')
+        ap.add_argument('-o', '--override-spec', action='append', help='Override variable from SPEC file', default=[])
 
 
         complex_stages = {
@@ -388,6 +389,11 @@ class TerrariumAssembler:
         self.tvars = edict(vars_)
         spec = self.spec
 
+        for term in self.args.override_spec:
+            if '=' in term:
+                k_, v_ = term.split('=')
+                self.spec[k_.strip()] = v_.strip()
+
         # self.start_dir = os.getcwd()
 
         need_patch = just_copy = need_exclude = None
@@ -409,8 +415,11 @@ class TerrariumAssembler:
 
         self.package_modes = 'iso'
         if 'packaging' in self.spec:
-            self.package_modes = ','.join(self.spec.packaging)
-            
+            if isinstance(self.spec.packaging, list):
+                self.package_modes = ','.join(self.spec.packaging)
+            if isinstance(self.spec.packaging, str):
+                self.package_modes = self.spec.packaging
+
         if self.args.stage_make_packages == 'default':
             self.args.stage_make_packages = self.package_modes
 
