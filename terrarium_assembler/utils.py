@@ -13,7 +13,7 @@ import re
 import itertools
 
 import inspect
-
+import hashlib
 
 def bashash4folder(var, folder):
     scmd =f'''HASH_{var}=`tar cf - -C {folder} --mtime='1970-01-01' --mode='aou+rwx' --exclude=build  --exclude=.eggs --exclude=.git  --exclude='*.egg-info'  . | md5sum`
@@ -31,23 +31,28 @@ def save_state_hash(folder):
     return scmd
 
 def bashash4str(varn, msg):
-    scmd =f'''HASH_{varn}=`echo "{msg}" | md5sum`
+    hash_ = hashlib.md5(msg.encode('utf-8')).hexdigest()
+    scmd =f'''HASH_{varn}="{hash_}"
 '''
+    # scmd =f'''HASH_{varn}=`echo "{msg}" | md5sum`
     return scmd
 
-def bashash_stop_if_not_changed(listvar, msg):
+def bashash_stop_if_not_changed(listvar, msg, cont=False):
+    exit_mod = 'exit 0'
+    if cont:
+        exit_mod = 'continue'
     complex_hash_ = ' + '.join([f'$HASH_{v}' for v in listvar])
     scmd = f'''
 HASH_STATE="{complex_hash_}"    
 if [[ "$OLD_HASH" == "$HASH_STATE" ]] then
     echo "{msg}"
-    exit 0
+    {exit_mod}
 fi
 '''
     return scmd
 
 
-def bashash_ok_folders_strings(targetdir, folders, strs, msg):
+def bashash_ok_folders_strings(targetdir, folders, strs, msg, cont=False):
     lines = []
     vars_ = []
     for i, fld in enumerate(folders):
@@ -64,7 +69,7 @@ def bashash_ok_folders_strings(targetdir, folders, strs, msg):
 ''')
     lines.append(f'''
 {read_old_hash(targetdir)}  
-{bashash_stop_if_not_changed(vars_, msg)}
+{bashash_stop_if_not_changed(vars_, msg, cont)}
 ''')
     return "\n".join(lines)
 
@@ -79,8 +84,11 @@ def get_method_name():
 def fname2stage(fname):
     return re.sub(r'''\d\d\_''', '', fname)
 
-def fname2shname(fname):
-    return 'ta-' + fname.replace('stage_','').replace('_', '-') + '.sh'
+def fname2shname(fname, spy=False):
+    ext = '.sh'
+    if spy:
+        ext = '.spy'
+    return 'ta-' + fname.replace('stage_','').replace('_', '-') + ext
 
 def fname2num(fname):
     for m in re.findall(r'''\d\d''', fname):
