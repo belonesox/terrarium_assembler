@@ -1910,9 +1910,10 @@ done
         '''
         Install downloaded base RPM packages
         '''
+        # --disablerepo="*" ???? WTF!!!!
         lines = [
             f"""
-{self.tb_mod} sudo dnf install --disablerepo="*" --nodocs --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
+{self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
 {self.tb_mod} createrepo {self.rpmrepo_path}
 {self.tb_mod} createrepo {self.tarrepo_path}
 {self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[ta]\\nname=TA\\nbaseurl=file:///$d/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
