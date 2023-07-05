@@ -328,6 +328,7 @@ class TerrariumAssembler:
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
         self.file_package_list_from_rpms = 'tmp/file-package-list-from-rpm.txt'
         self.src_deps_packages = 'tmp/src_deps_packages.txt'
+        self.glibc_devel_packages = 'tmp/glibc_devel_packages.txt'
         self.files_source_path = 'tmp/files-source.txt'
         # self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
         self.pipdeptree_graph_dot = 'tmp/pipdeptree-graph.dot'
@@ -477,7 +478,7 @@ class TerrariumAssembler:
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath',
                               'python3-wheel', #'python3-pip', 'python3-devel', 'python3-yaml',
-                              'genisoimage', 'makeself', 'dnf-utils', 'createrepo', 'yum', 'nfpm', 'pandoc', 'rpm-build', 'python3-wheel', 'python3-devel']
+                              'genisoimage', 'libtool', 'makeself', 'dnf-utils', 'createrepo', 'yum', 'nfpm', 'pandoc', 'rpm-build', 'python3-wheel', 'python3-devel']
 
         nflags_ = {}
         if 'nuitka' in spec:
@@ -543,8 +544,8 @@ class TerrariumAssembler:
         self.build_deps_rpms = rpmrepo("build-deps-rpms")
         self.base_rpms_path = rpmrepo("base-rpms")
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
-        self.rpmbuild_path =  in_bin_fld("rebuilded-repo/rpmbuild")
-        self.rebuilded_rpms_path = in_bin_fld("rebuilded-rpms")
+        self.rpmbuild_path =  in_bin_fld("rpmbuild")
+        self.rebuilded_rpms_path = in_bin_fld("rebuilded-repo/rebuilded-rpms")
 
         # looks like we dont need it anymore
         # os.environ['PATH'] = "/usr/lib64/ccache:" + os.environ['PATH']
@@ -561,6 +562,8 @@ class TerrariumAssembler:
 
         self.packages_to_rebuild = [p for p in self.ps.terra if isinstance(p, str)] + [p for p in self.ps.rebuild if isinstance(p, str)]
 
+        self.create_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.rpmrepo_path}'
+        self.create_rebuilded_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.tarrepo_path}'
         pass
 
     def toolbox_create_line(self):
@@ -1682,7 +1685,7 @@ rm -rf '{self.base_rpms_path}'
         )}
 rm -rf '{self.rpms_path}'
 {self.tb_mod} {scmd}
-{self.tb_mod} createrepo {self.rpmrepo_path}
+{self.create_repo_cmd}
 {save_state_hash(self.rpms_path)}
 ''')
         for pack_ in self.ps.remove_from_download or []:
@@ -1706,9 +1709,14 @@ rm -rf '{self.rpms_path}'
         )}
 rm -rf '{self.srpms_path}'
 {self.tb_mod} {scmd}
-{self.tb_mod} createrepo {self.rpmrepo_path}
+{self.create_repo_cmd}
 {save_state_hash(self.srpms_path)}
 ''')
+
+        for pack_ in self.ps.exclude_prefix or []:
+            scmd = f'rm -f {self.srpms_path}/{pack_}* '
+            lines.append(scmd)
+
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -1736,10 +1744,14 @@ x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | egrep "noarch|x86_64" | grep -v "fedora-release" `
+GLIBC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --requires glibc-devel | grep -v "fedora-release" `
+GLIBC_PACKAGES=`toolbox run -c linux_distro-deploy-for-audit sudo dnf repoquery -y glibc-devel`
 echo $SRC_DEPS_PACKAGES > {self.src_deps_packages}
-{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64  --arch=noarch  -y  $SRC_DEPS_PACKAGES
+echo $GLIBC_PACKAGES > {self.glibc_devel_packages}
+{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch  -y  $SRC_DEPS_PACKAGES
+{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $GLIBC_DEPS_PACKAGES $GLIBC_PACKAGES
 {remove_unwanted_mod}
-{self.tb_mod} createrepo {self.rpmrepo_path}
+{self.create_repo_cmd}
 {save_state_hash(self.build_deps_rpms)}
 ''')
 # rm -rf '{self.build_deps_rpms}'
@@ -1793,7 +1805,7 @@ echo $SRC_DEPS_PACKAGES > {self.src_deps_packages}
         )}
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
-rm -rf {self.rpmbuild_path}/*
+#rm -rf {self.rpmbuild_path}/*
 SRPMS=`find {self.srpms_path} -name "*.src.rpm"`        
 for SRPM in `echo $SRPMS`
 do
@@ -1824,11 +1836,11 @@ do
     BASEDIR=`dirname $SPEC`/..
     {bashash_ok_folders_strings("$d/$BASEDIR/BUILD", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
-    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps --nodebuginfo --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps --nodebuginfo  --without gdb_hooks --without debug_build --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
     {save_state_hash("$d/$BASEDIR/BUILD")}
 done        
-{self.tb_mod} createrepo {self.rpmrepo_path}
+{self.create_rebuilded_repo_cmd}
 ''')
 
     # {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -delete
@@ -1850,12 +1862,13 @@ d="$(dirname "$x")"
 RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`        
 #for RPM in `echo $RPMS`
 #do
-{self.tb_mod} sudo rpm -ivh --force --nodeps $RPMS
+#{self.tb_mod} sudo rpm -ivh --force --nodeps $RPMS
+{self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y $RPMS
 #done
-#{self.tb_mod} sudo dnf reinstall --refresh --disablerepo="*" --enablerepo="tar" -y {packages}
+#{self.tb_mod} sudo dnf install --refresh --disablerepo="*" --enablerepo="tar" -y {packages}
 ''')
 # {self.tb_mod} sudo rpm install -ivh --excludedocs $RPMS  
-
+#--disablerepo="*"
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
@@ -1914,7 +1927,7 @@ done
         lines = [
             f"""
 {self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
-{self.tb_mod} createrepo {self.rpmrepo_path}
+{self.create_repo_cmd}
 {self.tb_mod} createrepo {self.tarrepo_path}
 {self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[ta]\\nname=TA\\nbaseurl=file:///$d/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
 {self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[tar]\\nname=TAR\\nbaseurl=file:///$d/{self.tarrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/tar.repo'
@@ -1961,6 +1974,7 @@ done
         lines = [
             f"""
 {self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
+{self.tb_mod} bash -c 'PACKAGES=`cat {self.glibc_devel_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
 """ 
         ]
 #{self.tb_mod} PACKAGES=`cat {self.src_deps_packages}`
@@ -2908,7 +2922,7 @@ rm -f {self.ext_compiled_tar_path}/*
                 lines.append(f'{file_} -< {source_} not in packages!')
             else:
                 pfr = file2package[source_]
-                if '.' in pfr.release and pfr.release.split('.')[1] == self.disttag:
+                if '.' in pfr.release and pfr.release.split('.')[-1] == self.disttag:
                     lines.append(f'{file_} <- {source_} from rebuilded package {pfr.package}')
                 else:
                     lines.append(f'{file_} <- {source_} from package {pfr.package}!')
