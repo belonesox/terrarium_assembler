@@ -451,7 +451,7 @@ class TerrariumAssembler:
                 k_, v_ = term.split('=')
                 self.spec[k_.strip()] = v_.strip()
 
-        self.disttag = self.spec.label + str(self.spec.fc_version)   # self.disttag
+        self.disttag = 'zzz' + str(self.spec.fc_version)   # self.disttag self.spec.label
 
         # self.start_dir = os.getcwd()
 
@@ -2299,7 +2299,28 @@ rm -f {self.ext_compiled_tar_path}/*
 
         spec = self.spec
         abs_path_to_out_dir = os.path.abspath(self.out_dir)
-        root_dir = self.root_dir
+
+        def cloc_for_files(clocname, filetemplate):
+            cloc_csv = f'tmp/{clocname}.csv'
+            if not os.path.exists(cloc_csv):
+                if shutil.which('cloc'):
+                    os.system(f'cloc {filetemplate} --csv  --report-file={cloc_csv} --3')
+            if os.path.exists(cloc_csv):
+                table_csv = []
+                with open(cloc_csv, newline='') as csvfile:
+                    csv_r = csv.reader(csvfile, delimiter=',', quotechar='|')
+                    for row in list(csv_r)[1:]:
+                        row[-1] = int(float(row[-1]))
+                        table_csv.append(row)
+
+                table_csv[-1][-2], table_csv[-1][-1] = table_csv[-1][-1], table_csv[-1][-2]
+                write_doc_table(f'tmp/{clocname}.htm', ['Файлов', 'Язык', 'Пустых', 'Комментариев', 'Строчек кода', 'Мощность языка', 'COCOMO строк'],
+                                table_csv)
+
+        # cloc ./in/bin/rpmbuild/*/BUILD/   ./in/src/
+        cloc_for_files('our-cloc', './in/src/')
+        cloc_for_files('deps-cloc', './in/bin/rpmbuild/*/BUILD/')
+
         lastdirs = os.path.sep.join(
             abs_path_to_out_dir.split(os.path.sep)[-2:])
 
@@ -2657,22 +2678,6 @@ rm -f {self.ext_compiled_tar_path}/*
 
         # self.remove_exclusions()
 
-        cloc_csv = 'tmp/cloc.csv'
-        if not os.path.exists(cloc_csv):
-            if shutil.which('cloc'):
-                os.system(
-                    'cloc ./in/src/ --csv  --report-file=tmp/cloc.csv --3')
-        if os.path.exists(cloc_csv):
-            table_csv = []
-            with open(cloc_csv, newline='') as csvfile:
-                csv_r = csv.reader(csvfile, delimiter=',', quotechar='|')
-                for row in list(csv_r)[1:]:
-                    row[-1] = int(float(row[-1]))
-                    table_csv.append(row)
-
-            table_csv[-1][-2], table_csv[-1][-1] = table_csv[-1][-1], table_csv[-1][-2]
-            write_doc_table('doc-cloc.htm', ['Файлов', 'Язык', 'Пустых', 'Комментариев', 'Строчек кода', 'Мощность языка', 'COCOMO строк'],
-                            table_csv)
 
         # install_templates(root_dir, args)
 
