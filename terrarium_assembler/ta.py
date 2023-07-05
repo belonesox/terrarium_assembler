@@ -1736,25 +1736,30 @@ rm -rf '{self.srpms_path}'
         #     remove_unwanted.append(scmd)
         remove_unwanted_mod = '\n'.join(remove_unwanted)
 
+        conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config'.split()
+        filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
+
         lines.append(f'''
-{bashash_ok_folders_strings(self.build_deps_rpms, [self.srpms_path], [str(self.ps.remove_from_download)],
+{bashash_ok_folders_strings(self.build_deps_rpms, [self.srpms_path], [str(self.ps.remove_from_download), filter_egrep_686],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
-SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | egrep "noarch|x86_64" | grep -v "fedora-release" `
+SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" {filter_egrep_686} `
 GLIBC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --requires glibc-devel | grep -v "fedora-release" `
-GLIBC_PACKAGES=`toolbox run -c linux_distro-deploy-for-audit sudo dnf repoquery -y glibc-devel`
+#GLIBC_PACKAGES=`toolbox run -c linux_distro-deploy-for-audit sudo dnf repoquery -y glibc`
 echo $SRC_DEPS_PACKAGES > {self.src_deps_packages}
-echo $GLIBC_PACKAGES > {self.glibc_devel_packages}
-{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch  -y  $SRC_DEPS_PACKAGES
-{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $GLIBC_DEPS_PACKAGES $GLIBC_PACKAGES
+#echo $GLIBC_PACKAGES > {self.glibc_devel_packages}
+#echo $GLIBC_DEPS_PACKAGES > tmp/GLIBC_DEPS_PACKAGES
+{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $SRC_DEPS_PACKAGES
+#{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $GLIBC_DEPS_PACKAGES $GLIBC_PACKAGES
 {remove_unwanted_mod}
 {self.create_repo_cmd}
 {save_state_hash(self.build_deps_rpms)}
 ''')
 # rm -rf '{self.build_deps_rpms}'
+# egrep "noarch|x86_64"
 # {self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.build_deps_rpms} --arch=x86_64  --arch=noarch  -y  $SRC_DEPS_PACKAGES
 
 # SRC_DEPS_PACKAGES2=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires {self.srpms_path}/*.src.rpm | egrep "noarch|x86_64" | grep -v "fedora-release" `
