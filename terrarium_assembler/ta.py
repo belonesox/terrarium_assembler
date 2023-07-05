@@ -1743,7 +1743,7 @@ rm -rf '{self.srpms_path}'
         #     remove_unwanted.append(scmd)
         remove_unwanted_mod = '\n'.join(remove_unwanted)
 
-        conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static'.split()
+        conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel'.split()
         filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
 
         lines.append(f'''
