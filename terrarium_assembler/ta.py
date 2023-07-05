@@ -373,6 +373,8 @@ class TerrariumAssembler:
                         help='Perform some shell command for all projects')
         ap.add_argument('--git-sync', default='', type=str,
                         help='Perform lazy git sync for all projects')
+        ap.add_argument('--step-from', type=int, default=0, help='Step from')
+        ap.add_argument('--step-to', type=int, default=0, help='Step from')
         ap.add_argument('specfile', type=str, help='Specification File')
         ap.add_argument('-o', '--override-spec', action='append', help='Override variable from SPEC file', default=[])
 
@@ -389,6 +391,11 @@ class TerrariumAssembler:
             ap.add_argument(f'--{cs_}', default=False, action='store_true', help=f'{desc}')
             
         self.args = args = ap.parse_args()
+
+        if args.step_from or args.step_to:
+            for s_ in self.stages_names:
+                if args.step_from <= fname2num(s_) <= args.step_to:
+                    setattr(self.args, fname2stage(s_).replace('-','_'), True)
 
         for cs_, filter_ in complex_stages.items():
             if vars(self.args)[cs_.replace('-','_')]:
@@ -1736,7 +1743,7 @@ rm -rf '{self.srpms_path}'
         #     remove_unwanted.append(scmd)
         remove_unwanted_mod = '\n'.join(remove_unwanted)
 
-        conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config'.split()
+        conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static'.split()
         filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
 
         lines.append(f'''
