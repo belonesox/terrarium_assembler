@@ -1720,9 +1720,9 @@ rm -rf '{self.srpms_path}'
 {save_state_hash(self.srpms_path)}
 ''')
 
-        for pack_ in self.ps.exclude_prefix or []:
-            scmd = f'rm -f {self.srpms_path}/{pack_}* '
-            lines.append(scmd)
+        # for pack_ in self.ps.exclude_prefix or []:
+        #     scmd = f'rm -f {self.srpms_path}/{pack_}* '
+        #     lines.append(scmd)
 
 
         mn_ = get_method_name()
