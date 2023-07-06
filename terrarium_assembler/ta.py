@@ -1871,6 +1871,7 @@ done
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 #RPMS=`find . -wholename "./{self.rpmbuild_path}/*/RPMS/*.{self.disttag}.*.rpm"`        
+{self.tb_mod} sudo rm /etc/dnf.protected/systemd.conf
 {self.tb_mod} sudo dnf remove -y "*.i686"
 RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`        
 #for RPM in `echo $RPMS`
