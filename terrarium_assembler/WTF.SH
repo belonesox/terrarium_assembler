@@ -1,0 +1,28 @@
+toolbox run -c dmr-building-projects dnf download --exclude 'fedora-release-*' --downloaddir in/bin/build-deps-rpms --arch=x86_64 --arch=noarch -y /usr/bin/bzr /usr/bin/git /usr/bin/hg /usr/bin/svn bash-completion ca-certificates python-setuptools-wheel python-wheel-wheel python3-cryptography python3-devel python3-freezegun python3-mock python3-myst-parser python3-pretend python3-pytest python3-pyyaml 'python3-rpm-generators>=11-8' python3-scripttest python3-setuptools python3-sphinx python3-sphinx-copybutton python3-sphinx-inline-tabs python3-virtualenv python3-werkzeug 'python3-wheel' 'gcc' 'pkgconfig(libpq)' postgresql-test-rpm-macros python3-debug python3-devel 'python3-setuptools'
+
+toolbox run -c dmr-building-projects dnf download --exclude 'fedora-release-*' --downloaddir in/bin/build-deps-rpms --arch=x86_64 --arch=noarch -y bash-completion ca-certificates python-setuptools-wheel python-wheel-wheel python3-cryptography python3-devel python3-freezegun python3-mock python3-myst-parser python3-pretend python3-pytest python3-pyyaml 'python3-rpm-generators>=11-8' python3-scripttest python3-setuptools python3-sphinx python3-sphinx-copybutton python3-sphinx-inline-tabs python3-virtualenv python3-werkzeug 'python3-wheel' 'gcc' 'pkgconfig(libpq)' postgresql-test-rpm-macros python3-debug python3-devel 'python3-setuptools'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+toolbox run -c dmr-building-projects dnf download --exclude 'fedora-release-*' --downloaddir in/bin/build-deps-rpms --arch=x86_64 --arch=noarch -
+y bash-completion ca-certificates python-setuptools-wheel python-wheel-wheel python3-crypt
+ography python3-devel python3-freezegun python3-mock python3-myst-parser python3-pretend python3-pytest python3-pyyaml python3-rpm-generators '>='
+11-8 python3-scripttest python3-setuptools python3-sphinx python3-sphinx-copybutton python3-sphinx-inline-tabs python3-virtualenv python3-werkzeug
+'python3-wheel' 'gcc' 'pkgconfig(libpq)' postgresql-test-rpm-macros python3-debug python3-devel 'python3-setuptools'

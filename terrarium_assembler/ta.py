@@ -2941,7 +2941,7 @@ rm -f {self.ext_compiled_tar_path}/*
                 lines.append(f'{file_} -< {source_} not in packages!')
             else:
                 pfr = file2package[source_]
-                if '.' in pfr.release and pfr.release.split('.')[-1] == self.disttag:
+                if '.' in pfr.release and self.disttag in pfr.release.split('.'):
                     lines.append(f'{file_} <- {source_} from rebuilded package {pfr.package}')
                 else:
                     lines.append(f'{file_} <- {source_} from package {pfr.package}!')
