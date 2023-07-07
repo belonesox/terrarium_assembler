@@ -328,6 +328,8 @@ class TerrariumAssembler:
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
         self.file_package_list_from_rpms = 'tmp/file-package-list-from-rpm.txt'
         self.src_deps_packages = 'tmp/src_deps_packages.txt'
+        self.src_deps_packages_main = 'tmp/src_deps_packages_main.txt'
+        self.src_deps_packages_add = 'tmp/src_deps_packages_add.txt'
         self.glibc_devel_packages = 'tmp/glibc_devel_packages.txt'
         self.files_source_path = 'tmp/files-source.txt'
         # self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
@@ -482,10 +484,11 @@ class TerrariumAssembler:
         if self.args.stage_make_packages == 'default':
             self.args.stage_make_packages = self.package_modes
 
+        self.minimal_packages = ['libtool', 'makeself', 'dnf-utils', 'createrepo', 'rpm-build']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath',
                               'python3-wheel', #'python3-pip', 'python3-devel', 'python3-yaml',
-                              'genisoimage', 'libtool', 'makeself', 'dnf-utils', 'createrepo', 'yum', 'nfpm', 'pandoc', 'rpm-build', 'python3-wheel', 'python3-devel']
+                              'genisoimage', 'libtool', 'makeself', 'dnf-utils', 'createrepo', 'yum', 'nfpm', 'pandoc', 'python3-wheel', 'python3-devel']
 
         nflags_ = {}
         if 'nuitka' in spec:
@@ -1643,7 +1646,7 @@ fi
         lines_src = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
-        pls_ = [p for p in self.need_packages]
+        pls_ = [p for p in self.minimal_packages]
         for rp_ in self.ps.repos or []:
             if rp_.endswith('.rpm'):
                 pls_.append(rp_)
@@ -1728,7 +1731,7 @@ rm -rf '{self.srpms_path}'
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_13_audit_download_build_deps_rpms(self):
+    def stage_09_audit_download_build_deps_rpms(self):
         '''
         Download Build Deps for SRPM packages.
         '''
@@ -1743,25 +1746,30 @@ rm -rf '{self.srpms_path}'
         #     remove_unwanted.append(scmd)
         remove_unwanted_mod = '\n'.join(remove_unwanted)
 
-        conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel unixODBC-devel'.split()
-        filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
-
+        # conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel unixODBC-devel'.split()
+        # conflicting_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel unixODBC-devel'.split()
+        # filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
+# SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
+# {filter_egrep_686}
         lines.append(f'''
-{bashash_ok_folders_strings(self.build_deps_rpms, [self.srpms_path], [str(self.ps.remove_from_download), filter_egrep_686],
+{bashash_ok_folders_strings(self.build_deps_rpms, [self.srpms_path], [str(self.ps.remove_from_download)],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
-SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
-SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" {filter_egrep_686} `
-GLIBC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --requires glibc-devel | grep -v "fedora-release" `
-#GLIBC_PACKAGES=`toolbox run -c linux_distro-deploy-for-audit sudo dnf repoquery -y glibc`
-echo $SRC_DEPS_PACKAGES > {self.src_deps_packages}
-#echo $GLIBC_PACKAGES > {self.glibc_devel_packages}
-#echo $GLIBC_DEPS_PACKAGES > tmp/GLIBC_DEPS_PACKAGES
-{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $SRC_DEPS_PACKAGES
-#{self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $GLIBC_DEPS_PACKAGES $GLIBC_PACKAGES
-{remove_unwanted_mod}
+# SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
+SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
+{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  $SRPMS -y 
+# SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
+# SRC_DEPS_PACKAGES_MAIN=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep -v i686 | tr '\\n' ' '`
+# SRC_DEPS_PACKAGES_ADD=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep i686 | tr '\\n' ' '`
+# echo $SRC_DEPS_PACKAGES_MAIN > tmp/src_deps_packages_main.txt
+# echo $SRC_DEPS_PACKAGES_ADD > tmp/src_deps_packages_add.txt
+# echo $SRC_DEPS_PACKAGES > {self.src_deps_packages}
+# echo $SRC_DEPS_PACKAGES_ADD > {self.src_deps_packages_add}
+# echo $SRC_DEPS_PACKAGES_MAIN > {self.src_deps_packages_main}
+# {self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $SRC_DEPS_PACKAGES 
+# {remove_unwanted_mod}
 {self.create_repo_cmd}
 {save_state_hash(self.build_deps_rpms)}
 ''')
@@ -1795,7 +1803,7 @@ echo $SRC_DEPS_PACKAGES > {self.src_deps_packages}
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_10_audit_unpack_srpms(self):
+    def stage_15_audit_unpack_srpms(self):
         '''
         Unpack SRPM packages.
         '''
@@ -1908,28 +1916,28 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         self.lines2sh(mn_, lines, mn_)
 
 
-    def stage_12_audit_build_srpms(self):
-        '''
-        Rebuild SRPM packages to SRPM
-        '''
-        lines = []
-# HOME=$d/tmp
-        lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
-SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
-for SPEC in `echo $SPECS`
-do
-    echo $SPEC
-    BASEDIR=`dirname $SPEC`/..
-    {bashash_ok_folders_strings("$d/$BASEDIR/SRPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [], f"Looks all here already build SRPMS from $BASEDIR", cont=True)}
-    {self.tb_mod} rpmbuild -bs --nocheck --nodeps --nodebuginfo --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
-    {save_state_hash("$d/$BASEDIR/SRPMS")}
-done        
-''')
+#     def stage_12_audit_build_srpms(self):
+#         '''
+#         Rebuild SRPM packages to SRPM
+#         '''
+#         lines = []
+# # HOME=$d/tmp
+#         lines.append(f'''
+# x="$(readlink -f "$0")"
+# d="$(dirname "$x")"
+# SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+# for SPEC in `echo $SPECS`
+# do
+#     echo $SPEC
+#     BASEDIR=`dirname $SPEC`/..
+#     {bashash_ok_folders_strings("$d/$BASEDIR/SRPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [], f"Looks all here already build SRPMS from $BASEDIR", cont=True)}
+#     {self.tb_mod} rpmbuild -bs --nocheck --nodeps --nodebuginfo --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+#     {save_state_hash("$d/$BASEDIR/SRPMS")}
+# done        
+# ''')
 
-        mn_ = get_method_name()
-        self.lines2sh(mn_, lines, mn_)
+#         mn_ = get_method_name()
+#         self.lines2sh(mn_, lines, mn_)
 
 
 
@@ -1974,7 +1982,7 @@ done
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_15_audit_install_build_deps_rpms(self):
+    def stage_10_audit_install_build_deps_rpms(self):
         '''
         Install downloaded RPM packages for building SRPMS
         '''
@@ -1987,10 +1995,16 @@ done
 
         lines = [
             f"""
-{self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
-{self.tb_mod} bash -c 'PACKAGES=`cat {self.glibc_devel_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
+
+SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
+{self.tb_mod} sudo dnf builddep --nodocs --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
+
+# {self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages_main}`; sudo dnf install --refresh --nodocs --skip-broken --best  --allowerasing --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
+# {self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages_add}`; sudo dnf install --refresh --nodocs --skip-broken --best --allowerasing --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
 """ 
         ]
+# {self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
+# {self.tb_mod} bash -c 'PACKAGES=`cat {self.glibc_devel_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
 #{self.tb_mod} PACKAGES=`cat {self.src_deps_packages}`
 #--skip-broken         
 # {self.tb_mod} sudo rpm -ivh --excludedocs ./{self.build_deps_rpms}/*.rpm
