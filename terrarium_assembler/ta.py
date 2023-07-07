@@ -1759,7 +1759,8 @@ x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
-{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  $SRPMS -y 
+#{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  $SRPMS -y 
+{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
 # SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
 # SRC_DEPS_PACKAGES_MAIN=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep -v i686 | tr '\\n' ' '`
 # SRC_DEPS_PACKAGES_ADD=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep i686 | tr '\\n' ' '`
@@ -1894,7 +1895,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_39_save_file_package_info(self):
+    def stage_29_save_file_package_info(self):
         '''
         Install rebuild SRPM packages.
         '''
