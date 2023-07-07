@@ -1848,7 +1848,7 @@ do
     BASEDIR=`dirname $SPEC`/..
     {bashash_ok_folders_strings("$d/$BASEDIR/BUILD", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
-    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps --nodebuginfo  --without gdb_hooks --without debug_build --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps --nodebuginfo  --without gdb_hooks --without java --without debug_build --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
     {save_state_hash("$d/$BASEDIR/BUILD")}
 done        
@@ -2944,6 +2944,8 @@ rm -f {self.ext_compiled_tar_path}/*
                 if '.' in pfr.release and self.disttag in pfr.release.split('.'):
                     lines.append(f'{file_} <- {source_} from rebuilded package {pfr.package}')
                 else:
+                    if 'pcre' in pfr.package:
+                        wtf = 1
                     lines.append(f'{file_} <- {source_} from package {pfr.package}!')
                     packages_recommended_for_rebuild.add(pfr.package)
 
