@@ -251,6 +251,7 @@ class PackagesSpec:
     build:  list
     terra:  list
     rebuild:  list
+    rebuild_disable_features: list
     terra_exclude: list    
     exclude_prefix: list
     exclude_suffix: list
@@ -269,9 +270,6 @@ class PackagesSpec:
 
         if not self.terra:
             self.terra = []
-
-        if not self.rebuild_disable_features:
-            self.rebuild_disable_features = ['tests', 'doc']
 
         if not self.terra_exclude:
             self.terra_exclude = []
@@ -507,6 +505,10 @@ class TerrariumAssembler:
             spec.packages.rebuild = []
         if not 'terra_exclude' in spec.packages:
             spec.packages.terra_exclude = []
+
+        if not 'rebuild_disable_features' in spec.packages:
+            spec.packages.rebuild_disable_features = ['tests', 'doc']
+
         self.ps = PackagesSpec(**spec.packages)
         self.pp = PythonPackages(**spec.python_packages)
         self.gp = None
