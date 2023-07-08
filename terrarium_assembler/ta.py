@@ -270,6 +270,9 @@ class PackagesSpec:
         if not self.terra:
             self.terra = []
 
+        if not self.rebuild_disable_features:
+            self.rebuild_disable_features = ['tests', 'doc']
+
         if not self.terra_exclude:
             self.terra_exclude = []
 
@@ -1847,6 +1850,8 @@ done
         '''
         lines = []
 # HOME=$d/tmp
+        rebuild_mod = ' --without '.join([''] + self.rebuild_disable_features)
+
         lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
@@ -1855,9 +1860,9 @@ for SPEC in `echo $SPECS`
 do
     echo $SPEC
     BASEDIR=`dirname $SPEC`/..
-    {bashash_ok_folders_strings("$d/$BASEDIR/BUILD", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
+    {bashash_ok_folders_strings("$d/$BASEDIR/BUILD", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
-    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps --nodebuginfo  --without gdb_hooks --without java --without debug_build --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps --nodebuginfo  {rebuild_mod} --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
     {save_state_hash("$d/$BASEDIR/BUILD")}
 done        
