@@ -21,7 +21,9 @@ def bashash4folder(var, folder):
     return scmd
 
 def read_old_hash(folder):
-    scmd =f'''OLD_HASH=$(cat {folder}/state.md5 || true)
+    scmd =f'''
+mkdir -p {folder}    
+OLD_HASH=$(cat {folder}/state.md5 || true)
 '''
     return scmd
 

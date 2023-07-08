@@ -1736,7 +1736,7 @@ rm -rf '{self.srpms_path}'
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_09_audit_download_build_deps_rpms(self):
+    def stage_09_audit_download_build_deps_rpms1(self):
         '''
         Download Build Deps for SRPM packages.
         '''
@@ -1749,15 +1749,16 @@ rm -rf '{self.srpms_path}'
         # for pack_ in self.ps.remove_from_download or []:
         #     scmd = f'rm -f {self.build_deps_rpms}/{pack_}* '
         #     remove_unwanted.append(scmd)
-        remove_unwanted_mod = '\n'.join(remove_unwanted)
+        #remove_unwanted_mod = '\n'.join(remove_unwanted)
 
         # conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel unixODBC-devel'.split()
         # conflicting_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel unixODBC-devel'.split()
         # filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 # {filter_egrep_686}
+        state_dir = self.rpmbuild_path + '/build_deps1'
         lines.append(f'''
-{bashash_ok_folders_strings(self.build_deps_rpms, [self.srpms_path], [str(self.ps.remove_from_download)],
+{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 x="$(readlink -f "$0")"
@@ -1775,9 +1776,8 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
 # echo $SRC_DEPS_PACKAGES_ADD > {self.src_deps_packages_add}
 # echo $SRC_DEPS_PACKAGES_MAIN > {self.src_deps_packages_main}
 # {self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $SRC_DEPS_PACKAGES 
-# {remove_unwanted_mod}
 {self.create_repo_cmd}
-{save_state_hash(self.build_deps_rpms)}
+{save_state_hash(state_dir)}
 ''')
 # rm -rf '{self.build_deps_rpms}'
 # egrep "noarch|x86_64"
@@ -1809,7 +1809,32 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_15_audit_unpack_srpms(self):
+    def stage_13_audit_download_build_deps_rpms2(self):
+        '''
+        Download Build Deps for SRPM packages.
+        '''
+        lines = []
+        lines_src = []
+        in_bin = os.path.relpath(self.in_bin, start=self.curdir)
+        pls_ = [p for p in self.ps.terra if isinstance(p, str)]
+
+        state_dir = self.rpmbuild_path + '/build_deps2'
+
+        lines.append(f'''
+{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
+        f"Looks required RPMs for building SRPMs already downloaded"
+        )}
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
+{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPECS -y 
+{self.create_repo_cmd}
+{save_state_hash(state_dir)}
+''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+    def stage_12_audit_unpack_srpms(self):
         '''
         Unpack SRPM packages.
         '''
@@ -1969,7 +1994,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
 # {self.tb_mod} sudo dnf config-manager --add-repo file://$d/{self.rpmrepo_path}/ -y 
 
 
-    def stage_14_install_rpms(self):
+    def stage_07_install_rpms(self):
         '''
         Install downloaded RPM packages
         '''
@@ -1990,32 +2015,34 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_10_audit_install_build_deps_rpms(self):
+
+    def stage_14_audit_install_build_deps_rpms2(self):
+        '''
+        Install downloaded RPM packages for building SRPMS
+        '''
+        lines = [
+            f"""
+SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
+{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SPECS
+""" 
+        ]
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+    def stage_10_audit_install_build_deps_rpms1(self):
         '''
         Install downloaded RPM packages for building SRPMS
         '''
 
-# # {self.tb_mod} sudo dnf install --nodocs  --cacheonly --nogpgcheck {self.build_deps_rpms}/*.rpm -y --allowerasing
-
-# {self.tb_mod} sudo rpm install -ivh --excludedocs $RPMS
-# ''')
-# # {self.tb_mod} sudo dnf install -y $RPMS
 
         lines = [
             f"""
 
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
-{self.tb_mod} sudo dnf builddep --nodocs --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
-
-# {self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages_main}`; sudo dnf install --refresh --nodocs --skip-broken --best  --allowerasing --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
-# {self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages_add}`; sudo dnf install --refresh --nodocs --skip-broken --best --allowerasing --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
+{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
 """ 
         ]
-# {self.tb_mod} bash -c 'PACKAGES=`cat {self.src_deps_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
-# {self.tb_mod} bash -c 'PACKAGES=`cat {self.glibc_devel_packages}`; sudo dnf install --refresh --skip-broken --nodocs  --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $PACKAGES'
-#{self.tb_mod} PACKAGES=`cat {self.src_deps_packages}`
-#--skip-broken         
-# {self.tb_mod} sudo rpm -ivh --excludedocs ./{self.build_deps_rpms}/*.rpm
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
