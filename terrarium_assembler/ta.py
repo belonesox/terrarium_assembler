@@ -1852,7 +1852,7 @@ done
         '''
         lines = []
 # HOME=$d/tmp
-        rebuild_mod = ' --without '.join([''] + self.rebuild_disable_features)
+        rebuild_mod = ' --without '.join([''] + self.ps.rebuild_disable_features)
 
         lines.append(f'''
 x="$(readlink -f "$0")"
