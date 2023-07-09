@@ -1,8 +1,0 @@
-#!/bin/bash
-if [[ $EUID -ne 0 ]];
-then
-#    echo "Инсталляцию нужно запустить под root."
-    read -rsp $'Инсталляцию нужно запустить под root. \n' -n1 key
-    exit 1
-fi
-sudo ./ebin/python3 install{{py_ext}}      

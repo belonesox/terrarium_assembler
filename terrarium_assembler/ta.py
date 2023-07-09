@@ -328,6 +328,7 @@ class TerrariumAssembler:
         self.file_list_from_deps_rpms = 'tmp/file-list-from-deps-rpms.txt'
         self.doc_list_from_deps_rpms = 'tmp/doc-list-from-deps-rpms.txt'
         self.so_files_from_venv = 'tmp/so-files-from-venv.txt'
+        self.so_files_from_rebuilded_pips = 'tmp/so-files-from-rebuilded-pips.txt'
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
         self.file_package_list_from_rpms = 'tmp/file-package-list-from-rpm.txt'
         self.src_deps_packages = 'tmp/src_deps_packages.txt'
@@ -557,6 +558,7 @@ class TerrariumAssembler:
         self.rpmrepo_path = in_bin_fld("rpmrepo")
         self.our_whl_path = in_bin_fld("ourwheel")
         self.ext_whl_path = in_bin_fld("extwheel")
+        self.rebuilded_whl_path = in_bin_fld("rebuilded_whls")
         self.pip_source_dir = in_bin_fld("pip_source_to_rebuild")
         self.ext_compiled_tar_path = in_bin_fld("ext_compiled_tar")
         self.ext_pip_path = in_bin_fld("extpip")
@@ -2019,7 +2021,7 @@ find .venv -name "*.so.*"  > {self.so_files_from_venv}
         '''
         Install downloaded RPM packages
         '''
-        packages = " ".join(self.ps.build + self.ps.terra)
+        packages = " ".join(self.ps.build + self.need_packages + self.ps.terra)
         lines = [
             f"""
 {self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta" --skip-broken -y --allowerasing {packages}
@@ -2161,6 +2163,26 @@ rm -f {self.our_whl_path}/*
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
+
+
+    def stage_30_install_rebuilded_whls(self):
+        '''
+        Install our and external Python wheels
+        '''
+        os.chdir(self.curdir)
+        lines = []
+
+        scmd = f'''
+{self.tb_mod} pipenv run python -m pip install `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+'''
+
+        lines.append(scmd)   # --no-cache-dir
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+
 
     def get_pip_targets_and_reqs_from_sources(self, terra=False):
         '''
@@ -2308,6 +2330,36 @@ done
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
+
+
+    def stage_29_audit_build_pip_sources(self):
+        '''
+        Download PIP sources.
+        '''
+        os.chdir(self.curdir)
+
+        lines = []
+        if not self.ps.rebuild:
+            return 
+        pps = " ".join([''] + self.pp.rebuild)
+
+        lines.append(f'''
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+
+PACKAGEDIRS=`ls -d {self.pip_source_dir}/*/`        
+for PP in `echo $PACKAGEDIRS`
+do
+    echo $PP
+    {self.tb_mod} bash -c "cd $PP; python setup.py bdist_wheel" 
+    {self.tb_mod} find $PP -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
+done        
+find {self.pip_source_dir} -name "*.so.*"  > {self.so_files_from_rebuilded_pips}
+        ''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
 
     def stage_25_download_wheels(self):
         '''
