@@ -181,6 +181,7 @@ class PythonPackages:
     '''
     build: PythonPackagesSpec
     terra: PythonPackagesSpec
+    rebuild: list = None
     remove_from_download: list = None
     shell_commands: list = None
 
@@ -326,6 +327,7 @@ class TerrariumAssembler:
         self.doc_list_from_terra_rpms = 'tmp/doc-list-from-terra-rpms.txt'
         self.file_list_from_deps_rpms = 'tmp/file-list-from-deps-rpms.txt'
         self.doc_list_from_deps_rpms = 'tmp/doc-list-from-deps-rpms.txt'
+        self.so_files_from_venv = 'tmp/so-files-from-venv.txt'
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
         self.file_package_list_from_rpms = 'tmp/file-package-list-from-rpm.txt'
         self.src_deps_packages = 'tmp/src_deps_packages.txt'
@@ -485,11 +487,11 @@ class TerrariumAssembler:
         if self.args.stage_make_packages == 'default':
             self.args.stage_make_packages = self.package_modes
 
-        self.minimal_packages = ['libtool', 'makeself', 'dnf-utils', 'createrepo', 'rpm-build']
+        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build']
 
-        self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath',
-                              'python3-wheel', #'python3-pip', 'python3-devel', 'python3-yaml',
-                              'genisoimage', 'libtool', 'makeself', 'dnf-utils', 'createrepo', 'yum', 'nfpm', 'pandoc', 'python3-wheel', 'python3-devel']
+        self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
+                              'python3-wheel', 
+                              'genisoimage', 'libtool', 'makeself', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
 
         nflags_ = {}
         if 'nuitka' in spec:
@@ -508,6 +510,10 @@ class TerrariumAssembler:
 
         if not 'rebuild_disable_features' in spec.packages:
             spec.packages.rebuild_disable_features = ['tests', 'doc']
+
+        if not 'rebuild' in spec.python_packages:
+            spec.python_packages.rebuild = []
+
 
         self.ps = PackagesSpec(**spec.packages)
         self.pp = PythonPackages(**spec.python_packages)
@@ -551,6 +557,7 @@ class TerrariumAssembler:
         self.rpmrepo_path = in_bin_fld("rpmrepo")
         self.our_whl_path = in_bin_fld("ourwheel")
         self.ext_whl_path = in_bin_fld("extwheel")
+        self.pip_source_dir = in_bin_fld("pip_source_to_rebuild")
         self.ext_compiled_tar_path = in_bin_fld("ext_compiled_tar")
         self.ext_pip_path = in_bin_fld("extpip")
         self.base_whl_path = in_bin_fld("basewheel")
@@ -1694,8 +1701,9 @@ rm -rf '{self.base_rpms_path}'
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
         scmd = f'''dnf download --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        #str(self.ps.remove_from_download)
         lines.append(f'''
-{bashash_ok_folders_strings(self.rpms_path, [str(self.ps.remove_from_download)], [scmd],
+{bashash_ok_folders_strings(self.rpms_path, [], [scmd],
         f"Looks required RPMs already downloaded"
         )}
 rm -rf '{self.rpms_path}'
@@ -1703,9 +1711,9 @@ rm -rf '{self.rpms_path}'
 {self.create_repo_cmd}
 {save_state_hash(self.rpms_path)}
 ''')
-        for pack_ in self.ps.remove_from_download or []:
-            scmd = f'rm -f {self.rpms_path}/{pack_}* '
-            lines.append(scmd)
+        # for pack_ in self.ps.remove_from_download or []:
+        #     scmd = f'rm -f {self.rpms_path}/{pack_}* '
+        #     lines.append(scmd)
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -1927,7 +1935,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_29_save_file_package_info(self):
+    def stage_19_save_file_rpmpackage_info(self):
         '''
         Install rebuild SRPM packages.
         '''
@@ -1944,6 +1952,19 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
 # {self.tb_mod} sudo rpm install -ivh --excludedocs $RPMS
 # toolbox run -c linux_distro-deploy-for-audit sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list onnxruntime python3-gobject-base python3-shapely python3-cups python3-pytest libX11-devel libXrandr-devel cups-filters nss nss-util poppler-utils tesseract tesseract-langpack-rus tesseract-script-cyrillic libwnck3 bash clickhouse-client zbar-devel gtk2-devel > tmp/file-list-from-deps-rpms.txt
 
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
+    def stage_49_save_sofiles_from_env(self):
+        '''
+        Save information about all SO-files in .venv
+        '''
+        lines = []
+        lines.append(f'''
+find .venv -name "*.so.*"  > {self.so_files_from_venv}
+''')
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2249,6 +2270,44 @@ rm -f {self.base_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
         pass
 
+    def stage_28_audit_download_pip_sources(self):
+        '''
+        Download PIP sources.
+        '''
+        os.chdir(self.curdir)
+
+        lines = []
+        if not self.ps.rebuild:
+            return 
+        pps = " ".join([''] + self.pp.rebuild)
+
+        lines.append(f'''
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+PIP_SOURCE_DIR={self.pip_source_dir}
+mkdir -p $PIP_SOURCE_DIR
+for PP in {pps}
+do
+    echo $PP
+    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
+    FILENAME=$PP-$VERSION
+    if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
+        echo **$FILENAME--
+        URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select((.filename|test(\\"$FILENAME\\")) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
+        echo $URL
+        wget --secure-protocol=TLSv1_2 -c -P $PIP_SOURCE_DIR/ $URL
+        if [ -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ]; then
+            tar xf $PIP_SOURCE_DIR/$FILENAME.tar.gz -C $PIP_SOURCE_DIR
+        fi
+        if [ -f "$PIP_SOURCE_DIR/$FILENAME.zip" ]; then
+            unzip -d $PIP_SOURCE_DIR $PIP_SOURCE_DIR/$FILENAME.zip
+        fi
+    fi    
+done        
+        ''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
 
     def stage_25_download_wheels(self):
         '''
@@ -2593,7 +2652,20 @@ rm -f {self.ext_compiled_tar_path}/*
 
         t.tic()
 
-        file_package_list, file2package = self.load_file_package_list_from_rpms()
+        file_package_list, file2rpmpackage = self.load_file_package_list_from_rpms()
+
+        so_files_from_venv_filename2path = {}
+        so_files_from_venv_path2package = {}
+        so_files_from_venv_set = {}
+        with open(self.so_files_from_venv, 'r') as lf:
+            for i, line in enumerate(lf.readlines()):
+                line = line.strip('\n')
+                fname = os.path.split(line)[-1]
+                so_files_from_venv_filename2path[fname] = line
+                package_ = 'unknown'
+                if 'site-packages' in line:
+                    package_ = line.split('site-packages')[-1].split(os.path.sep)[1]
+                so_files_from_venv_path2package[line] = package_
 
         def install_templates(root_dir, args):
             if 'copy_folders' in self.spec:
@@ -2881,9 +2953,13 @@ rm -f {self.ext_compiled_tar_path}/*
             for folder_ in self.fs.folders:
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
-                        if '_opcode.so' in filename:
+                        if 'libgfortran' in filename:
                             wrtf=1
                         f = os.path.join(dirpath, filename)
+                        if filename in so_files_from_venv_filename2path:
+                            f = so_files_from_venv_filename2path[filename]
+                            # changin path to 
+                            wrtf=1
                         if self.br.is_need_patch(f):
                             relname = self.process_binary(f)
                             if os.path.isabs(relname):
@@ -2903,7 +2979,13 @@ rm -f {self.ext_compiled_tar_path}/*
                             else:
                                 relname = f.replace(folder_, 'pbin')    
                             if relname not in file_source_table:
-                                file_source_table[relname] = FileInBuild(relname, 'folder', folder_, f)
+                                type_ = 'folder'
+                                what_ = folder_ 
+                                if f in so_files_from_venv_path2package:
+                                    type_ = 'python_package'
+                                    what_ = so_files_from_venv_path2package[f]
+                                file_source_table[relname] = FileInBuild(relname, type_, what_, f)
+                                self.bin_files_sources[relname] = f
                                 self.fix_sharedlib(f, relname)
                         else:
                             relname = f.replace(folder_, 'pbin')
@@ -2983,23 +3065,32 @@ rm -f {self.ext_compiled_tar_path}/*
 
         print("Size ", size_/1024/1024, 'Mb')
 
-        packages_recommended_for_rebuild = set()
+        rpm_packages_recommended_for_rebuild = set()
+        python_packages_recommended_for_rebuild = set()
         lines = []
         for file_, source_ in self.bin_files_sources.items():
-            if source_ not in file2package:
-                lines.append(f'{file_} -< {source_} not in packages!')
-            else:
-                pfr = file2package[source_]
+            if source_ in file2rpmpackage:
+                pfr = file2rpmpackage[source_]
                 if '.' in pfr.release and self.disttag in pfr.release.split('.'):
                     lines.append(f'{file_} <- {source_} from rebuilded package {pfr.package}')
                 else:
                     if 'pcre' in pfr.package:
                         wtf = 1
                     lines.append(f'{file_} <- {source_} from package {pfr.package}!')
-                    packages_recommended_for_rebuild.add(pfr.package)
+                    rpm_packages_recommended_for_rebuild.add(pfr.package)
+            elif source_ in so_files_from_venv_path2package:
+                pp_ = so_files_from_venv_path2package[source_]
+                lines.append(f'{file_} <- {source_} from python package {pp_}!')
+                python_packages_recommended_for_rebuild.add(pp_)
+            else:
+                lines.append(f'{file_} -< {source_} not known!!!')
 
-        lines.append(f'Packages recommended for rebuild')
-        lines.append('\n - '.join([''] + sorted(packages_recommended_for_rebuild)))
+        lines.append(f'\nRPM packages recommended for rebuild')
+        lines.append('\n - '.join([''] + sorted(rpm_packages_recommended_for_rebuild)))
+
+        lines.append(f'\nPython packages recommended for rebuild')
+        lines.append('\n - '.join([''] + sorted(python_packages_recommended_for_rebuild)))
+
         with open(os.path.join(self.curdir, 'binary-files-report.txt'), 'w') as lf:
             lf.write('\n'.join(lines))
 
