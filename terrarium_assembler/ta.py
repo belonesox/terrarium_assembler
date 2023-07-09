@@ -1706,7 +1706,7 @@ rm -rf '{self.base_rpms_path}'
 {bashash_ok_folders_strings(self.rpms_path, [], [scmd],
         f"Looks required RPMs already downloaded"
         )}
-rm -rf '{self.rpms_path}'
+# rm -rf '{self.rpms_path}'
 {self.tb_mod} {scmd}
 {self.create_repo_cmd}
 {save_state_hash(self.rpms_path)}
