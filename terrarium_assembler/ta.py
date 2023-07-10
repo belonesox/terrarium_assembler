@@ -1959,13 +1959,14 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         self.lines2sh(mn_, lines, mn_)
 
 
-    def stage_49_save_sofiles_from_env(self):
+    def stage_49_save_sofiles(self):
         '''
         Save information about all SO-files in .venv
         '''
         lines = []
         lines.append(f'''
-find .venv -name "*.so.*"  > {self.so_files_from_venv}
+find .venv -name "*.so*"  > {self.so_files_from_venv}
+find {self.pip_source_dir} -name "*.so*"  > {self.so_files_from_rebuilded_pips}
 ''')
 
         mn_ = get_method_name()
@@ -2354,7 +2355,6 @@ do
     {self.tb_mod} bash -c "cd $PP; python setup.py bdist_wheel" 
     {self.tb_mod} find $PP -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
 done        
-find {self.pip_source_dir} -name "*.so.*"  > {self.so_files_from_rebuilded_pips}
         ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2705,6 +2705,10 @@ rm -f {self.ext_compiled_tar_path}/*
         t.tic()
 
         file_package_list, file2rpmpackage = self.load_file_package_list_from_rpms()
+        sofile2rpmfile = {}
+        for f_ in file2rpmpackage:
+            if '.so' in f_:
+                sofile2rpmfile[os.path.split(f_)[-1]] = f_
 
         so_files_from_venv_filename2path = {}
         so_files_from_venv_path2package = {}
@@ -2718,6 +2722,18 @@ rm -f {self.ext_compiled_tar_path}/*
                 if 'site-packages' in line:
                     package_ = line.split('site-packages')[-1].split(os.path.sep)[1]
                 so_files_from_venv_path2package[line] = package_
+
+
+        so_files_rpips_filename2path = {}
+        so_files_rpips_path2package = {}
+        split_ = os.path.split(self.pip_source_dir)[-1]
+        with open(self.so_files_from_rebuilded_pips, 'r') as lf:
+            for i, line in enumerate(lf.readlines()):
+                line = line.strip('\n')
+                fname = os.path.split(line)[-1]
+                so_files_rpips_filename2path[fname] = line
+                package_name = line.split(split_)[1].split(os.path.sep)[1]
+                so_files_rpips_path2package[line] = package_name
 
         def install_templates(root_dir, args):
             if 'copy_folders' in self.spec:
@@ -3008,10 +3024,23 @@ rm -f {self.ext_compiled_tar_path}/*
                         if 'libgfortran' in filename:
                             wrtf=1
                         f = os.path.join(dirpath, filename)
-                        if filename in so_files_from_venv_filename2path:
+                        if filename in so_files_rpips_filename2path:
+                            f = so_files_rpips_filename2path[filename]
+                        elif filename in so_files_from_venv_filename2path:
                             f = so_files_from_venv_filename2path[filename]
                             # changin path to 
                             wrtf=1
+                        elif filename in sofile2rpmfile:    
+                            f = sofile2rpmfile[filename]
+                            tf = self.toolbox_path(f)
+                            ptf = Path(tf)
+                            if ptf.is_symlink():
+                                liblink = os.path.join(root_dir, 'lib64', filename)
+                                if not os.path.exists(liblink):
+                                    os.symlink(Path(tf).resolve().name, liblink)
+                            libname = Path(tf).resolve().name
+                            filename = libname
+                            f = sofile2rpmfile[libname]
                         if self.br.is_need_patch(f):
                             relname = self.process_binary(f)
                             if os.path.isabs(relname):
@@ -3020,25 +3049,37 @@ rm -f {self.ext_compiled_tar_path}/*
                             continue
                         m = ''
                         try:
-                            m = fucking_magic(f)
+                            tf = self.toolbox_path(f)
+                            m = fucking_magic(tf)
                         except Exception as ex_:
                             print("Cannot detect Magic for ", f)
                             raise ex_
                         if m.startswith('ELF') and 'shared' in m:
                             # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
-                            if filename.startswith('lib') and dirpath == folder_:
+                            if Path(tf).is_absolute():
+                                relname = f'lib64/' + filename
+                            elif filename.startswith('lib') and dirpath == folder_:
                                 relname = f.replace(folder_, 'lib64')
                             else:
                                 relname = f.replace(folder_, 'pbin')    
                             if relname not in file_source_table:
                                 type_ = 'folder'
                                 what_ = folder_ 
-                                if f in so_files_from_venv_path2package:
+                                source_ = f
+                                if filename in sofile2rpmfile:
+                                    type_ = 'package'
+                                    source_ = sofile2rpmfile[filename]
+                                    package_ = file2rpmpackage[source_]
+                                    file_source_table[relpath] = FileInBuild(relpath, 'package', package_.package, source_)
+                                if f in so_files_rpips_path2package:
+                                    type_ = 'rebuilded_python_package'
+                                    what_ = so_files_rpips_path2package[f]
+                                elif f in so_files_from_venv_path2package:
                                     type_ = 'python_package'
                                     what_ = so_files_from_venv_path2package[f]
-                                file_source_table[relname] = FileInBuild(relname, type_, what_, f)
-                                self.bin_files_sources[relname] = f
-                                self.fix_sharedlib(f, relname)
+                                file_source_table[relname] = FileInBuild(relname, type_, what_, source_)
+                                self.bin_files_sources[relname] = source_
+                                self.fix_sharedlib(tf, relname)
                         else:
                             relname = f.replace(folder_, 'pbin')
                             self.add(f, relname, recursive=False)
@@ -3124,12 +3165,15 @@ rm -f {self.ext_compiled_tar_path}/*
             if source_ in file2rpmpackage:
                 pfr = file2rpmpackage[source_]
                 if '.' in pfr.release and self.disttag in pfr.release.split('.'):
-                    lines.append(f'{file_} <- {source_} from rebuilded package {pfr.package}')
+                    lines.append(f'{file_} <- {source_} from rebuilded RPM package {pfr.package}')
                 else:
                     if 'pcre' in pfr.package:
                         wtf = 1
                     lines.append(f'{file_} <- {source_} from package {pfr.package}!')
                     rpm_packages_recommended_for_rebuild.add(pfr.package)
+            elif source_ in so_files_rpips_path2package:
+                pp_ = so_files_rpips_path2package[source_]
+                lines.append(f'{file_} <- {source_} from rebuilded RPM package {pp_}')
             elif source_ in so_files_from_venv_path2package:
                 pp_ = so_files_from_venv_path2package[source_]
                 lines.append(f'{file_} <- {source_} from python package {pp_}!')
