@@ -1897,6 +1897,7 @@ done
         lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
+chmod u+w {self.rpmbuild_path} -R
 SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
 for SPEC in `echo $SPECS`
 do
