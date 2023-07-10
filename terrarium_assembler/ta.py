@@ -1837,7 +1837,12 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
-{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPECS -y 
+for SPEC in `echo $SPECS`
+do
+    BASEDIR=`dirname $SPEC`/..
+    echo $BASEDIR
+    {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
+done        
 {self.create_repo_cmd}
 {save_state_hash(state_dir)}
 ''')
@@ -2046,8 +2051,17 @@ find {self.pip_source_dir} -name "*.so*"  > {self.so_files_from_rebuilded_pips}
         '''
         lines = [
             f"""
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+{self.tb_mod} sudo dnf --refresh --disablerepo="*" --enablerepo="ta" update -y 
 SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
-{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SPECS
+for SPEC in `echo $SPECS`
+do
+    BASEDIR=`dirname $SPEC`/..
+    echo $BASEDIR
+    {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken $SPEC -y 
+done        
+#{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SPECS
 """ 
         ]
         mn_ = get_method_name()
