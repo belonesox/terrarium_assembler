@@ -724,6 +724,7 @@ set -ex
                 outputname = target_.utility
                 nflags = np_.get_flags(tmpdir, target_)
                 target_dir = os.path.join(tmpdir, outputname + '.dist')
+                build_dir = os.path.join(tmpdir, outputname + '.build')
                 target_dir_ = os.path.relpath(target_dir, start=self.curdir)
                 src_dir = os.path.relpath(self.src_dir, start=self.curdir)
                 src = os.path.join(src_dir, target_.folder,
@@ -741,7 +742,7 @@ export PATH="/usr/lib64/ccache:$PATH"
         f"Sources for {build_name} not changed, skipping"
         )}
 
-{self.tb_mod} bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log'
+{self.tb_mod} bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > {build_name}.log'
 # time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log || {{ echo 'Compilation failed' ; exit 1; }}
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
@@ -2190,11 +2191,22 @@ rm -f {self.our_whl_path}/*
         os.chdir(self.curdir)
         lines = []
 
-        scmd = f'''
-{self.tb_mod} pipenv run python -m pip install `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
-'''
+        pps = " ".join([''] + self.pp.rebuild)
 
-        lines.append(scmd)   # --no-cache-dir
+        lines.append(f'''
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+PIP_SOURCE_DIR={self.pip_source_dir}
+mkdir -p $PIP_SOURCE_DIR
+
+{self.tb_mod} pipenv run python -m pip install --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+
+for PP in {pps}
+do
+    echo $PP
+    {self.tb_mod} ln -s /usr/lib64 .venv/lib64/python3.10/site-packages/$PP.libs
+done        
+''')
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
