@@ -507,7 +507,7 @@ class TerrariumAssembler:
         if 'nuitka_profiles' in spec:
             self.nuitka_profiles = NuitkaProfiles(spec.nuitka_profiles)
 
-        self.python_rebuild_profiles = {}
+        self.python_rebuild_profiles = PythonRebuildProfiles({})
         if 'python_rebuild_profiles' in spec:
             self.python_rebuild_profiles = PythonRebuildProfiles(spec.python_rebuild_profiles)
 
