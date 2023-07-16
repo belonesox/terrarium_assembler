@@ -38,6 +38,8 @@ from dateutil.relativedelta import relativedelta
 
 # новая ветка
 from .nuitkaprofiles import *
+from .python_rebuild_profiles import *
+
 
 from pytictoc import TicToc
 t = TicToc()
@@ -329,6 +331,7 @@ class TerrariumAssembler:
         self.doc_list_from_deps_rpms = 'tmp/doc-list-from-deps-rpms.txt'
         self.so_files_from_venv = 'tmp/so-files-from-venv.txt'
         self.so_files_from_rebuilded_pips = 'tmp/so-files-from-rebuilded-pips.txt'
+        self.so_files_from_our_packages = 'tmp/so-files-from-our-packages.txt'
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
         self.file_package_list_from_rpms = 'tmp/file-package-list-from-rpm.txt'
         self.src_deps_packages = 'tmp/src_deps_packages.txt'
@@ -503,6 +506,11 @@ class TerrariumAssembler:
         self.nuitka_profiles = {}
         if 'nuitka_profiles' in spec:
             self.nuitka_profiles = NuitkaProfiles(spec.nuitka_profiles)
+
+        self.python_rebuild_profiles = {}
+        if 'python_rebuild_profiles' in spec:
+            self.python_rebuild_profiles = PythonRebuildProfiles(spec.python_rebuild_profiles)
+
 
         if not 'rebuild' in spec.packages:
             spec.packages.rebuild = []
@@ -1494,7 +1502,7 @@ fi
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
         ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
         
-        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links"{ext_compiled_tar_path}" --find-links="{our_whl_path}"  --force-reinstall  --ignore-installed '
+        scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links"{ext_compiled_tar_path}" --find-links="{our_whl_path}"  --force-reinstall --no-deps --ignore-installed '
         return scmd
 
     def pip_install_offline(self, target):
@@ -1976,6 +1984,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         lines.append(f'''
 find .venv -name "*.so*"  > {self.so_files_from_venv}
 find {self.pip_source_dir} -name "*.so*"  > {self.so_files_from_rebuilded_pips}
+find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 ''')
 
         mn_ = get_method_name()
@@ -2191,7 +2200,10 @@ rm -f {self.our_whl_path}/*
         os.chdir(self.curdir)
         lines = []
 
-        pps = " ".join([''] + self.pp.rebuild)
+        # pps = " ".join([''] + [p.replace('-','_') for p in self.pp.rebuild])
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages()
+        if not pps.strip():
+            return 
 
         lines.append(f'''
 x="$(readlink -f "$0")"
@@ -2204,6 +2216,8 @@ mkdir -p $PIP_SOURCE_DIR
 for PP in {pps}
 do
     echo $PP
+
+    {self.tb_mod} rm -rf .venv/lib64/python3.10/site-packages/$PP.libs
     {self.tb_mod} ln -s /usr/lib64 .venv/lib64/python3.10/site-packages/$PP.libs
 done        
 ''')
@@ -2329,9 +2343,13 @@ rm -f {self.base_whl_path}/*
         os.chdir(self.curdir)
 
         lines = []
-        if not self.ps.rebuild:
+        # if not self.ps.rebuild:
+        #     return 
+        # pps = " ".join([''] + self.pp.rebuild)
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages()
+        if not pps.strip():
             return 
-        pps = " ".join([''] + self.pp.rebuild)
+
 
         lines.append(f'''
 x="$(readlink -f "$0")"
@@ -2369,22 +2387,31 @@ done
         os.chdir(self.curdir)
 
         lines = []
-        if not self.ps.rebuild:
+        # if not self.ps.rebuild:
+        #     return 
+        # pps = " ".join([''] + self.pp.rebuild)
+
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages()
+        if not pps.strip():
             return 
-        pps = " ".join([''] + self.pp.rebuild)
 
         lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
-
-PACKAGEDIRS=`ls -d {self.pip_source_dir}/*/`        
-for PP in `echo $PACKAGEDIRS`
-do
-    echo $PP
-    {self.tb_mod} bash -c "cd $PP; python setup.py bdist_wheel" 
-    {self.tb_mod} find $PP -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
-done        
+PIP_SOURCE_DIR={self.pip_source_dir}
+mkdir -p $PIP_SOURCE_DIR
         ''')
+
+        for pp, command in self.python_rebuild_profiles.get_commands_to_build_packages():
+            lines.append(f'''
+PP={pp}
+VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
+FILENAME=$PP-$VERSION
+PPDIR=$PIP_SOURCE_DIR/$FILENAME
+{self.tb_mod} bash -c "cd $PPDIR; {command}" 
+{self.tb_mod} find $PPDIR -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
+        ''')
+
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
@@ -2563,7 +2590,9 @@ rm -f {self.ext_compiled_tar_path}/*
         file_source, _ = self.load_files_source()
 
         # terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra + self.ps.rebuild)
-        terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra + self.ps.rebuild)
+        # pps = self.python_rebuild_profiles.get_list_of_pip_packages().strip().split()
+
+        # terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra)
         file_source_from_packages = [r for r in file_source if r.source_type=='package']
         packages_from_build = set([r.source for r in file_source_from_packages])
         not_used_packages = set()
@@ -2763,6 +2792,19 @@ rm -f {self.ext_compiled_tar_path}/*
                 so_files_rpips_filename2path[fname] = line
                 package_name = line.split(split_)[1].split(os.path.sep)[1]
                 so_files_rpips_path2package[line] = package_name
+
+        so_files_from_src_filename2path = {}
+        so_files_from_src_path2folder = {}
+        split_ = self.src_dir
+        with open(self.so_files_from_our_packages, 'r') as lf:
+            for i, line in enumerate(lf.readlines()):
+                line = line.strip('\n')
+                fname = os.path.split(line)[-1]
+                so_files_from_src_filename2path[fname] = line
+                folder_name = line.split(split_)[1].split(os.path.sep)[1]
+                so_files_from_src_path2folder[line] = folder_name
+
+
 
         def install_templates(root_dir, args):
             if 'copy_folders' in self.spec:
@@ -3045,31 +3087,58 @@ rm -f {self.ext_compiled_tar_path}/*
                     if relpath:
                         file_source_table[relpath] = FileInBuild(relpath, 'package', fpl_.package, f)
 
-
         if self.fs:
             for folder_ in self.fs.folders:
+                nuitka_report = {}
+                map2source = {}
+                if '.dist' in folder_:
+                    bfolder_ = folder_.replace('.dist', '.build')
+                    report_xml = Path(bfolder_) / 'report.xml'
+                    if report_xml.exists():
+                        import xmltodict
+                        with open(report_xml, 'r', encoding='utf8') as lf:
+                            nuitka_report = xmltodict.parse(lf.read())['nuitka-compilation-report']
+                            for ie_ in nuitka_report['included_extension'] + nuitka_report['included_dll']:
+                                sp_ = ie_['@source_path']
+                                dp_ = ie_['@dest_path']
+                                spr_ = Path(sp_.replace('${sys.prefix}', '.venv').replace('${sys.real_prefix}', '')).resolve()
+                                if '.venv/lib64' in spr_.as_posix():
+                                    wtf = 1
+                                assert(spr_.exists())
+                                map2source[dp_] = spr_.as_posix()
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
-                        if 'libgfortran' in filename:
-                            wrtf=1
                         f = os.path.join(dirpath, filename)
-                        if filename in so_files_rpips_filename2path:
-                            f = so_files_rpips_filename2path[filename]
-                        elif filename in so_files_from_venv_filename2path:
-                            f = so_files_from_venv_filename2path[filename]
+                        if 'Shapely.libs' in f:
+                            wtf  = 1
+                        sfilename = filename
+                        rf = os.path.relpath(f, start=folder_)
+                        # if rf in map2source:
+                        #     f = map2source[rf]
+                        #     if '.venv/lib64' in f:
+                        #         wtf = 1
+                        #     sfilename = os.path.split(f)[-1]
+                        if 'dm_ort.cpython-310-x86_64-linux-gnu.so' in f:
+                            wrtf=1
+                        if sfilename in so_files_from_src_filename2path:
+                            f = so_files_from_src_filename2path[sfilename]
+                        elif sfilename in so_files_rpips_filename2path:
+                            f = so_files_rpips_filename2path[sfilename]
+                        elif sfilename in so_files_from_venv_filename2path:
+                            f = so_files_from_venv_filename2path[sfilename]
                             # changin path to 
                             wrtf=1
-                        elif filename in sofile2rpmfile:    
-                            f = sofile2rpmfile[filename]
-                            tf = self.toolbox_path(f)
-                            ptf = Path(tf)
-                            if ptf.is_symlink():
-                                liblink = os.path.join(root_dir, 'lib64', filename)
-                                if not os.path.exists(liblink):
-                                    os.symlink(Path(tf).resolve().name, liblink)
-                            libname = Path(tf).resolve().name
-                            filename = libname
-                            f = sofile2rpmfile[libname]
+                        # elif filename in sofile2rpmfile:    
+                        #     f = sofile2rpmfile[filename]
+                        #     tf = self.toolbox_path(f)
+                        #     ptf = Path(tf)
+                        #     if ptf.is_symlink():
+                        #         liblink = os.path.join(root_dir, 'lib64', filename)
+                        #         if not os.path.exists(liblink):
+                        #             os.symlink(Path(tf).resolve().name, liblink)
+                        #     libname = Path(tf).resolve().name
+                        #     filename = libname
+                        #     f = sofile2rpmfile[libname]
                         if self.br.is_need_patch(f):
                             relname = self.process_binary(f)
                             if os.path.isabs(relname):
@@ -3085,12 +3154,25 @@ rm -f {self.ext_compiled_tar_path}/*
                             raise ex_
                         if m.startswith('ELF') and 'shared' in m:
                             # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
-                            if Path(tf).is_absolute():
-                                relname = f'lib64/' + filename
-                            elif filename.startswith('lib') and dirpath == folder_:
-                                relname = f.replace(folder_, 'lib64')
-                            else:
-                                relname = f.replace(folder_, 'pbin')    
+                            if '_random.so' in filename:
+                                wtf = 1
+                            if '.libs' in rf:
+                                wtf = 1
+                            relname = 'pbin/' + filename
+                            if '/' in rf and not '..' in rf:
+                                relname = 'pbin/' + rf
+                            elif filename.startswith('lib'):
+                                 relname = 'lib64/' + filename
+                            # if Path(tf).is_absolute():
+                            #     relname = f'lib64/' + filename
+                            # elif self.src_dir in f:
+                            #     relname = 'lib64/' + filename
+                            # elif f.startswith('.venv/lib'):
+                            #     relname = 'lib64/' + filename
+                            # elif filename.startswith('lib') and dirpath == folder_:
+                            #     relname = f.replace(folder_, 'lib64')
+                            # else:
+                            #     relname = f.replace(folder_, 'pbin')    
                             if relname not in file_source_table:
                                 type_ = 'folder'
                                 what_ = folder_ 
@@ -3100,7 +3182,10 @@ rm -f {self.ext_compiled_tar_path}/*
                                     source_ = sofile2rpmfile[filename]
                                     package_ = file2rpmpackage[source_]
                                     file_source_table[relpath] = FileInBuild(relpath, 'package', package_.package, source_)
-                                if f in so_files_rpips_path2package:
+                                elif f in so_files_from_src_path2folder:
+                                    type_ = 'our_package'
+                                    what_ = so_files_from_src_path2folder[f]
+                                elif f in so_files_rpips_path2package:
                                     type_ = 'rebuilded_python_package'
                                     what_ = so_files_rpips_path2package[f]
                                 elif f in so_files_from_venv_path2package:
@@ -3191,7 +3276,12 @@ rm -f {self.ext_compiled_tar_path}/*
         python_packages_recommended_for_rebuild = set()
         lines = []
         for file_, source_ in self.bin_files_sources.items():
-            if source_ in file2rpmpackage:
+            if 'dm_ort.cpython-310-x86_64-linux-gnu.so' in source_:
+                wtf = 1
+            if source_ in so_files_from_src_filename2path:
+                pp_ = so_files_from_src_filename2path[source_]
+                lines.append(f'{file_} <- {source_} from our project {pp_}')
+            elif source_ in file2rpmpackage:
                 pfr = file2rpmpackage[source_]
                 if '.' in pfr.release and self.disttag in pfr.release.split('.'):
                     lines.append(f'{file_} <- {source_} from rebuilded RPM package {pfr.package}')
