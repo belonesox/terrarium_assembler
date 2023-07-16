@@ -3113,21 +3113,23 @@ rm -f {self.ext_compiled_tar_path}/*
                             wtf  = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
-                        # if rf in map2source:
-                        #     f = map2source[rf]
-                        #     if '.venv/lib64' in f:
-                        #         wtf = 1
-                        #     sfilename = os.path.split(f)[-1]
+                        if rf in map2source:
+                            if '_random.so' in f:
+                                wtf  = 1
+                            f = map2source[rf]
+                            if '.venv/lib64' in f:
+                                wtf = 1
+                            sfilename = os.path.split(f)[-1]
                         if 'dm_ort.cpython-310-x86_64-linux-gnu.so' in f:
                             wrtf=1
                         if sfilename in so_files_from_src_filename2path:
                             f = so_files_from_src_filename2path[sfilename]
                         elif sfilename in so_files_rpips_filename2path:
                             f = so_files_rpips_filename2path[sfilename]
-                        elif sfilename in so_files_from_venv_filename2path:
-                            f = so_files_from_venv_filename2path[sfilename]
-                            # changin path to 
-                            wrtf=1
+                        # elif sfilename in so_files_from_venv_filename2path:
+                        #     f = so_files_from_venv_filename2path[sfilename]
+                        #     # changin path to 
+                        #     wrtf=1
                         # elif filename in sofile2rpmfile:    
                         #     f = sofile2rpmfile[filename]
                         #     tf = self.toolbox_path(f)
