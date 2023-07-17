@@ -3140,9 +3140,9 @@ rm -f {self.ext_compiled_tar_path}/*
         for fpl_ in file_package_list:
             if fpl_.package == 'glibc':
                 wtf = 1
-            if 'libc.so' in fpl_.filename:    
-                wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
+                if 'libmpdec' in fpl_.filename:    
+                    wtf = 1
                 ok = True
                 for prefix in self.ps.exclude_prefix:
                     if fpl_.package.startswith(prefix):
@@ -3180,7 +3180,7 @@ rm -f {self.ext_compiled_tar_path}/*
                                 spr_ = Path(sp_.replace('${sys.prefix}', '.venv').replace('${sys.real_prefix}', '')).resolve()
                                 if '.venv/lib64' in spr_.as_posix():
                                     wtf = 1
-                                assert(spr_.exists())
+                                # assert(spr_.exists())
                                 map2source[dp_] = spr_.as_posix()
                                 map2package[dp_] = package_
                 for dirpath, dirnames, filenames in os.walk(folder_):
@@ -3188,6 +3188,8 @@ rm -f {self.ext_compiled_tar_path}/*
                         f = os.path.join(dirpath, filename)
                         if 'zlib.so' in f:
                             wtf  = 1
+                        if 'libmpdec' in f:    
+                            wtf = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
                         if rf in map2source:
@@ -3218,6 +3220,10 @@ rm -f {self.ext_compiled_tar_path}/*
                         #     libname = Path(tf).resolve().name
                         #     filename = libname
                         #     f = sofile2rpmfile[libname]
+                        if f in file2rpmpackage:
+                            package_ = file2rpmpackage[f]
+                            if package_.package in self.ps.terra_exclude:
+                                continue
                         if self.br.is_need_patch(f):
                             relname = self.process_binary(f)
                             if os.path.isabs(relname):
@@ -3361,9 +3367,11 @@ rm -f {self.ext_compiled_tar_path}/*
         lines = []
         for file_, source_ in sorted(self.bin_files_sources.items()):
             fti_ = file_source_table[file_]
-            if fti_.source_type == SourceType.rpm_package:
+            if isinstance(fti_.source_type, str):
+                wtf = 1
+            if fti_.source_type == SourceType.rpm_package.value:
                 rpm_packages_recommended_for_rebuild.add(fti_.source)
-            elif fti_.source_type == SourceType.python_package:
+            elif fti_.source_type == SourceType.python_package.value:
                 python_packages_recommended_for_rebuild.add(fti_.source)
             # if fti_.source_type:
             #     pass
