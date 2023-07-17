@@ -22,6 +22,7 @@ requirements = [
     'prettytable',
     'pipenv',
     'imohash',
+    'pydantic',
     'wheel_filename',
 ]
 
