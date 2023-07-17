@@ -16,10 +16,32 @@ import glob
 import csv
 import jinja2.exceptions
 import version_utils.rpm
+import yaml
+
+from typing import List
+from pydantic import BaseModel, constr, validator
+from pydantic.dataclasses import dataclass
+
+
+class MyBaseModel(BaseModel):
+    """ 
+    Base Pydantic Model
+    """
+    class Config:
+        validate_assignment = True
+        use_enum_values = True
+
+class Config:
+    validate_assignment = True
+    use_enum_values = True
+
+# from mashumaro.mixins.yaml import DataClassYAMLMixin
+# from mashumaro import DataClassDictMixin
 
 from imohash import hashfile
 #from simplekv.fs import FilesystemStore
 from itertools import islice
+from enum import Enum
 
 
 from jinja2 import Environment, FileSystemLoader, Template
@@ -46,6 +68,25 @@ t = TicToc()
 
 ROW_SPLIT = ' ||| '
 
+
+class SourceType(Enum):
+    rpm_package = 'rpm_package'
+    rebuilded_rpm_package = 'rebuilded_rpm_package'
+    file_from_folder = 'file_from_folder'
+    python_package = 'python_package'
+    rebuilded_python_package = 'rebuilded_python_package'
+    our_source = 'our_source'
+
+    @classmethod
+    def value_of(cls, value):
+        for k, v in cls.__members__.items():
+            if k == value:
+                return v
+        else:
+            raise ValueError(f"'{cls.__name__}' enum not found for '{value}'")
+
+
+
 @dc.dataclass
 class PackageFileRow:
     '''
@@ -59,22 +100,29 @@ class PackageFileRow:
     filename: str
 
 
-@dc.dataclass
+# @dc.dataclass
+@dataclass(config=Config)
 class FileInBuild:
     '''
     Info about file in out build
     '''
     relname: str
-    source_type: str
+    source_type: SourceType
     source: str
     source_path: str
 
     def __post_init__(self):
         assert(self.relname)
         assert(not self.relname.startswith('/'))
-        assert(self.source_type)
         assert(self.source)
         assert(self.source_path)
+        if isinstance(self.source_type, str):
+            self.source_type = SourceType.value_of(self.source_type)
+        pass    
+
+class FileSource(dict):
+    pass
+
 
 @dc.dataclass
 class BinRegexps:
@@ -338,7 +386,8 @@ class TerrariumAssembler:
         self.src_deps_packages_main = 'tmp/src_deps_packages_main.txt'
         self.src_deps_packages_add = 'tmp/src_deps_packages_add.txt'
         self.glibc_devel_packages = 'tmp/glibc_devel_packages.txt'
-        self.files_source_path = 'tmp/files-source.txt'
+        self.files_source_path = 'tmp/files-source.yaml'
+        # self.files_source_path = 'tmp/files-source.txt'
         # self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
         self.pipdeptree_graph_dot = 'tmp/pipdeptree-graph.dot'
         self.pipdeptree_graph_mw = 'tmp/pipdeptree-graph.mw'
@@ -1315,8 +1364,8 @@ popd
         self.add(patched_binary, new_path_for_binary)
         self.bin_files.add( new_path_for_binary )
         self.bin_files_sources[new_path_for_binary] = binpath
-        if binpath.startswith('/'):
-            dfsdsdf = 1
+        if 'libgcc_s.so.1' in new_path_for_binary:
+            wtf = 1
         os.remove(patched_binary)
         return new_path_for_binary
 
@@ -1325,6 +1374,8 @@ popd
         patched_binary = self.fix_elf(binpath, '$ORIGIN/' + relpath)
         self.add(patched_binary, targetpath)
         self.bin_files.add( targetpath )
+        if 'libgcc_s.so.1' in targetpath:
+            wtf = 1
         os.remove(patched_binary)
         pass
 
@@ -2537,7 +2588,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
         # cloc ./in/bin/rpmbuild/*/BUILD/   ./in/src/
         cloc_for_files('our-cloc', './in/src/')
-        cloc_for_files('deps-cloc', './in/bin/rpmbuild/*/BUILD/')
+        # cloc_for_files('deps-cloc', './in/bin/rpmbuild/*/BUILD/')
 
         lastdirs = os.path.sep.join(
             abs_path_to_out_dir.split(os.path.sep)[-2:])
@@ -2557,6 +2608,11 @@ rm -f {self.ext_compiled_tar_path}/*
         for i_ in range(len(tracefiles)):
             tracefiles[i_] = str(Path(tracefiles[i_]).resolve())
             tracefiles[i_] = os.path.expandvars(tracefiles[i_])
+
+        file_source_table = yaml.unsafe_load(open(self.files_source_path, 'r'))
+        file_source = list(file_source_table.values())
+        # ToDo — pydantic, enums, etc
+        file_source_from_packages = [r for r in file_source if r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value]
 
         used_files = set()
         for trace_file_glob in tracefiles:
@@ -2587,13 +2643,18 @@ rm -f {self.ext_compiled_tar_path}/*
                                 used_files.add(os.path.abspath(fname))
 
         file_package_list, file2package = self.load_file_package_list_from_rpms()
-        file_source, _ = self.load_files_source()
+        # file_source, _ = self.load_files_source()
+
+
+        # with open(os.path.join(self.curdir, self.files_source_path), 'w') as lf:
+        #     # lf.write('\n'.join(lines))
+        #     lf.write(yaml.dump(file_source_table))
+
 
         # terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra + self.ps.rebuild)
         # pps = self.python_rebuild_profiles.get_list_of_pip_packages().strip().split()
 
         # terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra)
-        file_source_from_packages = [r for r in file_source if r.source_type=='package']
         packages_from_build = set([r.source for r in file_source_from_packages])
         not_used_packages = set()
         for p_ in packages_from_build:
@@ -2768,18 +2829,18 @@ rm -f {self.ext_compiled_tar_path}/*
             if '.so' in f_:
                 sofile2rpmfile[os.path.split(f_)[-1]] = f_
 
-        so_files_from_venv_filename2path = {}
-        so_files_from_venv_path2package = {}
-        so_files_from_venv_set = {}
-        with open(self.so_files_from_venv, 'r') as lf:
-            for i, line in enumerate(lf.readlines()):
-                line = line.strip('\n')
-                fname = os.path.split(line)[-1]
-                so_files_from_venv_filename2path[fname] = line
-                package_ = 'unknown'
-                if 'site-packages' in line:
-                    package_ = line.split('site-packages')[-1].split(os.path.sep)[1]
-                so_files_from_venv_path2package[line] = package_
+        # so_files_from_venv_filename2path = {}
+        # so_files_from_venv_path2package = {}
+        # so_files_from_venv_set = {}
+        # with open(self.so_files_from_venv, 'r') as lf:
+        #     for i, line in enumerate(lf.readlines()):
+        #         line = line.strip('\n')
+        #         fname = os.path.split(line)[-1]
+        #         so_files_from_venv_filename2path[fname] = line
+        #         package_ = 'unknown'
+        #         if 'site-packages' in line:
+        #             package_ = line.split('site-packages')[-1].split(os.path.sep)[1]
+        #         so_files_from_venv_path2package[line] = package_
 
 
         so_files_rpips_filename2path = {}
@@ -3065,7 +3126,15 @@ rm -f {self.ext_compiled_tar_path}/*
 
         self.cmd(f'{self.tb_mod} sudo chmod a+r /usr/lib/cups -R')
 
-        file_source_table = {}        
+        # file_source_table = {}      
+        file_source_table = FileSource()  
+        def register_rpmpackage_file(relpath, f, pfr):
+            if not relpath:
+                return                        
+            if '.' in pfr.release and self.disttag in pfr.release.split('.'):
+                file_source_table[relpath] = FileInBuild(relpath, SourceType.rebuilded_rpm_package, pfr.package, f)
+            else:                
+                file_source_table[relpath] = FileInBuild(relpath, SourceType.rpm_package, pfr.package, f)
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
@@ -3084,13 +3153,15 @@ rm -f {self.ext_compiled_tar_path}/*
                     if not self.should_copy(f):
                         continue
                     relpath = copy_file_to_environment(f)
-                    if relpath:
-                        file_source_table[relpath] = FileInBuild(relpath, 'package', fpl_.package, f)
+                    register_rpmpackage_file(relpath, f, fpl_)
+                    # # if relpath:
+                    #     file_source_table[relpath] = FileInBuild(relpath, 'package', fpl_.package, f)
 
         if self.fs:
             for folder_ in self.fs.folders:
                 nuitka_report = {}
                 map2source = {}
+                map2package = {}
                 if '.dist' in folder_:
                     bfolder_ = folder_.replace('.dist', '.build')
                     report_xml = Path(bfolder_) / 'report.xml'
@@ -3101,21 +3172,27 @@ rm -f {self.ext_compiled_tar_path}/*
                             for ie_ in nuitka_report['included_extension'] + nuitka_report['included_dll']:
                                 sp_ = ie_['@source_path']
                                 dp_ = ie_['@dest_path']
+                                package_ = ie_['@package']
+                                if '' == package_:
+                                    package_ = 'basicpython'
+                                if '.' in package_:
+                                    package_ = package_.split('.')[0]
                                 spr_ = Path(sp_.replace('${sys.prefix}', '.venv').replace('${sys.real_prefix}', '')).resolve()
                                 if '.venv/lib64' in spr_.as_posix():
                                     wtf = 1
                                 assert(spr_.exists())
                                 map2source[dp_] = spr_.as_posix()
+                                map2package[dp_] = package_
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
-                        if 'Shapely.libs' in f:
+                        if 'zlib.so' in f:
                             wtf  = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
                         if rf in map2source:
-                            if '_random.so' in f:
-                                wtf  = 1
+                            # if '_random.so' in f:
+                            #     wtf  = 1
                             f = map2source[rf]
                             if '.venv/lib64' in f:
                                 wtf = 1
@@ -3145,7 +3222,7 @@ rm -f {self.ext_compiled_tar_path}/*
                             relname = self.process_binary(f)
                             if os.path.isabs(relname):
                                 wtf = 1
-                            file_source_table[relname] = FileInBuild(relname, 'folder', folder_, f)
+                            file_source_table[relname] = FileInBuild(relname, SourceType.file_from_folder, folder_, f)
                             continue
                         m = ''
                         try:
@@ -3156,7 +3233,7 @@ rm -f {self.ext_compiled_tar_path}/*
                             raise ex_
                         if m.startswith('ELF') and 'shared' in m:
                             # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
-                            if '_random.so' in filename:
+                            if 'zlib.so' in filename:
                                 wtf = 1
                             if '.libs' in rf:
                                 wtf = 1
@@ -3176,24 +3253,29 @@ rm -f {self.ext_compiled_tar_path}/*
                             # else:
                             #     relname = f.replace(folder_, 'pbin')    
                             if relname not in file_source_table:
-                                type_ = 'folder'
-                                what_ = folder_ 
+                                if 'libgcc_s.so.1' in relname:
+                                    wtf = 1
                                 source_ = f
-                                if filename in sofile2rpmfile:
-                                    type_ = 'package'
-                                    source_ = sofile2rpmfile[filename]
+                                if source_ in file2rpmpackage:
                                     package_ = file2rpmpackage[source_]
-                                    file_source_table[relpath] = FileInBuild(relpath, 'package', package_.package, source_)
-                                elif f in so_files_from_src_path2folder:
-                                    type_ = 'our_package'
-                                    what_ = so_files_from_src_path2folder[f]
-                                elif f in so_files_rpips_path2package:
-                                    type_ = 'rebuilded_python_package'
-                                    what_ = so_files_rpips_path2package[f]
-                                elif f in so_files_from_venv_path2package:
-                                    type_ = 'python_package'
-                                    what_ = so_files_from_venv_path2package[f]
-                                file_source_table[relname] = FileInBuild(relname, type_, what_, source_)
+                                    register_rpmpackage_file(relname, source_, package_)
+                                # if filename in sofile2rpmfile:
+                                #     source_ = sofile2rpmfile[filename]
+                                #     package_ = file2rpmpackage[source_]
+                                #     register_rpmpackage_file(relname, source_, package_)
+                                else:    
+                                    type_ = SourceType.file_from_folder
+                                    what_ = folder_ 
+                                    if f in so_files_from_src_path2folder:
+                                        type_ = SourceType.our_source
+                                        what_ = so_files_from_src_path2folder[f]
+                                    elif f in so_files_rpips_path2package:
+                                        type_ = SourceType.rebuilded_python_package
+                                        what_ = so_files_rpips_path2package[f]
+                                    elif rf in map2package:
+                                        type_ = SourceType.python_package
+                                        what_ = map2package[rf]
+                                    file_source_table[relname] = FileInBuild(relname, type_, what_, source_)
                                 self.bin_files_sources[relname] = source_
                                 self.fix_sharedlib(tf, relname)
                         else:
@@ -3277,30 +3359,37 @@ rm -f {self.ext_compiled_tar_path}/*
         rpm_packages_recommended_for_rebuild = set()
         python_packages_recommended_for_rebuild = set()
         lines = []
-        for file_, source_ in self.bin_files_sources.items():
-            if 'dm_ort.cpython-310-x86_64-linux-gnu.so' in source_:
-                wtf = 1
-            if source_ in so_files_from_src_filename2path:
-                pp_ = so_files_from_src_filename2path[source_]
-                lines.append(f'{file_} <- {source_} from our project {pp_}')
-            elif source_ in file2rpmpackage:
-                pfr = file2rpmpackage[source_]
-                if '.' in pfr.release and self.disttag in pfr.release.split('.'):
-                    lines.append(f'{file_} <- {source_} from rebuilded RPM package {pfr.package}')
-                else:
-                    if 'pcre' in pfr.package:
-                        wtf = 1
-                    lines.append(f'{file_} <- {source_} from package {pfr.package}!')
-                    rpm_packages_recommended_for_rebuild.add(pfr.package)
-            elif source_ in so_files_rpips_path2package:
-                pp_ = so_files_rpips_path2package[source_]
-                lines.append(f'{file_} <- {source_} from rebuilded RPM package {pp_}')
-            elif source_ in so_files_from_venv_path2package:
-                pp_ = so_files_from_venv_path2package[source_]
-                lines.append(f'{file_} <- {source_} from python package {pp_}!')
-                python_packages_recommended_for_rebuild.add(pp_)
-            else:
-                lines.append(f'{file_} -< {source_} not known!!!')
+        for file_, source_ in sorted(self.bin_files_sources.items()):
+            fti_ = file_source_table[file_]
+            if fti_.source_type == SourceType.rpm_package:
+                rpm_packages_recommended_for_rebuild.add(fti_.source)
+            elif fti_.source_type == SourceType.python_package:
+                python_packages_recommended_for_rebuild.add(fti_.source)
+            # if fti_.source_type:
+            #     pass
+            # if 'dm_ort.cpython-310-x86_64-linux-gnu.so' in source_:
+            #     wtf = 1
+            # if source_ in so_files_from_src_filename2path:
+            #     pp_ = so_files_from_src_filename2path[source_]
+            #     lines.append(f'{file_} <- {source_} from our project {pp_}')
+            # elif source_ in file2rpmpackage:
+            #     pfr = file2rpmpackage[source_]
+            #     if '.' in pfr.release and self.disttag in pfr.release.split('.'):
+            #         lines.append(f'{file_} <- {source_} from rebuilded RPM package {pfr.package}')
+            #     else:
+            #         if 'pcre' in pfr.package:
+            #             wtf = 1
+            #         lines.append(f'{file_} <- {source_} from package {pfr.package}!')
+            #         rpm_packages_recommended_for_rebuild.add(pfr.package)
+            # elif source_ in so_files_rpips_path2package:
+            #     pp_ = so_files_rpips_path2package[source_]
+            #     lines.append(f'{file_} <- {source_} from rebuilded RPM package {pp_}')
+            # elif source_ in so_files_from_venv_path2package:
+            #     pp_ = so_files_from_venv_path2package[source_]
+            #     lines.append(f'{file_} <- {source_} from python package {pp_}!')
+            #     python_packages_recommended_for_rebuild.add(pp_)
+            # else:
+            #     lines.append(f'{file_} -< {source_} not known!!!')
 
         lines.append(f'\nRPM packages recommended for rebuild')
         lines.append('\n - '.join([''] + sorted(rpm_packages_recommended_for_rebuild)))
@@ -3312,11 +3401,16 @@ rm -f {self.ext_compiled_tar_path}/*
             lf.write('\n'.join(lines))
 
         lines = []
-        for relpath, fpl_ in file_source_table.items():
-            lines.append(f'{fpl_.relname} {ROW_SPLIT} {fpl_.source_type} {ROW_SPLIT} {fpl_.source} {ROW_SPLIT} {fpl_.source_path} ')
+        # for relpath, fpl_ in file_source_table.items():
+        #     lines.append(f'{fpl_.relname} {ROW_SPLIT} {fpl_.source_type} {ROW_SPLIT} {fpl_.source} {ROW_SPLIT} {fpl_.source_path} ')
 
         with open(os.path.join(self.curdir, self.files_source_path), 'w') as lf:
-            lf.write('\n'.join(lines))
+            # lf.write('\n'.join(lines))
+            # lf.write(yaml.dump(file_source_table))
+            # lf.write(file_source_table.to_yaml())
+            lf.write(yaml.dump(file_source_table))
+            # lf.write(json.dumps(file_source_table))
+            
 
         unique_packages = set([row.source for row in file_source_table.values() if row.source_type == 'package'])
         not_need_packages_to_rebuild = []
