@@ -23,6 +23,7 @@ requirements = [
     'pipenv',
     'imohash',
     'pydantic',
+    'xmltodict',
     'wheel_filename',
 ]
 
