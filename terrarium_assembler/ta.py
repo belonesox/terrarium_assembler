@@ -738,6 +738,7 @@ toolbox create {self.environ_name} --distro fedora --release {self.spec.fc_versi
                 lf.write(f'''
 {desc}
 # Automatically called when terrarium_assembler --{stage_} "{self.args.specfile}"
+date
 ''')
 
             bash_line('''export PIPENV_VENV_IN_PROJECT=1\n''')
@@ -752,6 +753,9 @@ toolbox create {self.environ_name} --distro fedora --release {self.spec.fc_versi
 set -ex
 ''')
             lf.write("\n".join(lines))
+            lf.write('''
+date
+''')
         st = os.stat(fname)
         os.chmod(fname, st.st_mode | stat.S_IEXEC)
         pass
@@ -780,6 +784,7 @@ set -ex
                 srcname = target_.utility
                 outputname = target_.utility
                 nflags = np_.get_flags(tmpdir, target_)
+                ok_dir = os.path.join(tmpdir, outputname + '.ok')
                 target_dir = os.path.join(tmpdir, outputname + '.dist')
                 build_dir = os.path.join(tmpdir, outputname + '.build')
                 target_dir_ = os.path.relpath(target_dir, start=self.curdir)
@@ -795,22 +800,19 @@ export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
                 lines.append(fR"""
-{bashash_ok_folders_strings(target_dir_, ['.venv', src_dir], [],
+{bashash_ok_folders_strings(ok_dir, ['.venv', src_dir], [],
         f"Sources for {build_name} not changed, skipping"
         )}
 
-{self.tb_mod} bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > {build_name}.log'
+        {self.tb_mod} bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > {build_name}.log'
 # time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log || {{ echo 'Compilation failed' ; exit 1; }}
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 {self.tb_mod} python -m pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
 {self.tb_mod} python -m pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
-{save_state_hash(target_dir_)}
-    """)
-                self.fs.folders.append(target_dir)
-                lines.append(fR"""
 mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
-""")
+    """)
+                self.fs.folders.append(ok_dir)
                 if "outputname" in target_:
                     srcname = target_.outputname
                     if srcname != outputname:
@@ -850,6 +852,13 @@ mkdir -p {target_dir_}/{dst_}
 {self.tb_mod} rsync -ravm {src} {target_dir_}/{dst_} {filtermod} 
                             '''
                             lines.append(scmd)
+
+                lines.append(fR"""
+mv {ok_dir} {ok_dir}.old || true
+mv {target_dir_} {ok_dir}
+rm -rf {ok_dir}.old
+{save_state_hash(ok_dir)}
+    """)
 
                 self.lines2sh(build_name, lines)
                 bfiles.append(fname2shname(build_name))
@@ -2092,9 +2101,10 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         Install downloaded RPM packages
         '''
         packages = " ".join(self.ps.build + self.need_packages + self.ps.terra)
+        #--skip-broken
         lines = [
             f"""
-{self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta" --skip-broken -y --allowerasing {packages}
+{self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {packages}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
 {self.tb_mod} cat {self.file_list_from_terra_rpms} {self.file_list_from_deps_rpms} > {self.file_list_from_rpms}
@@ -2264,12 +2274,21 @@ mkdir -p $PIP_SOURCE_DIR
 
 {self.tb_mod} pipenv run python -m pip install --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 
+mkdir -p tmp/syslibs
+{self.tb_mod} bash -c "sudo ln -sf /usr/lib64/lib*.so* tmp/syslibs/"
+
 for PP in {pps}
 do
     echo $PP
+    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
+    FILENAME=$PP-$VERSION
+    if [ -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
 
-    {self.tb_mod} rm -rf .venv/lib64/python3.10/site-packages/$PP.libs
-    {self.tb_mod} ln -s /usr/lib64 .venv/lib64/python3.10/site-packages/$PP.libs
+#{self.tb_mod} pipenv run python -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
+{self.tb_mod} rm -rf .venv/lib64/python3.10/site-packages/$PP.libs
+{self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python3.10/site-packages/$PP.libs
+
+    fi
 done        
 ''')
 
