@@ -1685,17 +1685,13 @@ fi
         packages = []
         lines = [self.toolbox_create_line()]
 
-#         lines.append([f'''
-# x="$(readlink -f "$0")"
-# d="$(dirname "$x")"
+        lines.append([f'''
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
 
-# {self.tb_mod} echo "[ta]
-# name=TA
-# baseurl=file:///$d/{self.rpmrepo_path}/
-# enabled=0
-# gpgcheck=0
-# repo_gpgcheck=0 " > /etc/yum.repos.d/ta.repo
-# '''])
+{self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
+
+'''])
 
         for rp_ in self.ps.repos or []:
             if rp_.lower().endswith('.gpg'):
