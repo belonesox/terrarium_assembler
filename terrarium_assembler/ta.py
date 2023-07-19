@@ -2096,7 +2096,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         '''
         Install downloaded RPM packages
         '''
-        packages = " ".join(self.ps.build + self.need_packages + self.ps.terra)
+        packages = " ".join(self.ps.build + self.need_packages + self.ps.terra + self.minimal_packages)
         #--skip-broken
         lines = [
             f"""
