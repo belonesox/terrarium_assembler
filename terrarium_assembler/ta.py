@@ -1685,13 +1685,13 @@ fi
         packages = []
         lines = [self.toolbox_create_line()]
 
-        lines.append([f'''
+        lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
 
-'''])
+''')
 
         for rp_ in self.ps.repos or []:
             if rp_.lower().endswith('.gpg'):
