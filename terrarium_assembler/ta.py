@@ -1760,10 +1760,9 @@ rm -rf '{self.base_rpms_path}'
         # lines.append(scmd)
         # scmd = "sudo yum-config-manager --enable remi"
         # lines.append(scmd)
-        pls_ = [p for p in self.need_packages +
-                self.ps.build + self.ps.terra if isinstance(p, str)]
-        purls_ = [p.url for p in self.need_packages +
-                  self.ps.build + self.ps.terra if not isinstance(p, str)]
+        np_ = self.need_packages + self.minimal_packages + self.ps.build + self.ps.terra
+        pls_ = [p for p in np_ if isinstance(p, str)]
+        purls_ = [p.url for p in np_  if not isinstance(p, str)]
 
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
