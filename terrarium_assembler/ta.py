@@ -1767,7 +1767,7 @@ rm -rf '{self.base_rpms_path}'
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
             #--arch=x86_64  --arch=x86_64 --arch=noarch         
-        scmd = f'''dnf download --skip-broken --downloaddir {self.rpms_path} --alldeps --resolve  {packages} -y '''
+        scmd = f'''dnf download --skip-broken --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
         #str(self.ps.remove_from_download)
         lines.append(f'''
 {bashash_ok_folders_strings(self.rpms_path, [], [scmd],
