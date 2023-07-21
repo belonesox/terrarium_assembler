@@ -2253,7 +2253,7 @@ rm -f {self.our_whl_path}/*
         pass
 
 
-    def stage_30_install_rebuilded_whls(self):
+    def stage_30_audit_install_rebuilded_whls(self):
         '''
         Install our and external Python wheels
         '''
