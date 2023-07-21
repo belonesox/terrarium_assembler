@@ -191,7 +191,7 @@ class BinRegexps:
         return False
 
     def is_need_exclude(self, f):
-        if 'libtorch_cuda.so' in f:
+        if 'extract' in f:
             wtf = 34342
         for re_ in self.ignore_re:
             if re_.match(f):
@@ -206,8 +206,7 @@ class BinRegexps:
         return False
 
     def is_needed(self, f):
-        return (self.is_just_copy(f) or self.is_need_patch(f))
-        # and not self.is_need_exclude(f)
+        return (self.is_just_copy(f) or self.is_need_patch(f))  and not self.is_need_exclude(f)
 
     pass
 
@@ -643,7 +642,10 @@ class TerrariumAssembler:
 
         self.packages_to_rebuild = [p for p in self.ps.terra if isinstance(p, str)] + [p for p in self.ps.rebuild if isinstance(p, str)]
 
-        self.create_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.rpmrepo_path}'
+        self.create_repo_cmd = f'''
+{self.tb_mod} chmod aou-w {self.rpms_path}/*.rpm ||  true
+{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.rpmrepo_path}
+'''
         self.create_rebuilded_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.tarrepo_path}'
         pass
 
@@ -1337,20 +1339,21 @@ popd
         Фиксим бинарник.
         '''
         tb_binpath = self.toolbox_path(binpath)
+        pyname = os.path.basename(binpath)
+        new_path_for_binary = os.path.join("pbin", pyname)
 
         for wtf_ in ['libldap']:
             if wtf_ in binpath:
-                return
+                return binpath
 
         # m = magic.detect_from_filename(binpath)
         m = fucking_magic(tb_binpath)
         if m in ['inode/symlink', 'text/plain']:
-            return
+            return new_path_for_binary
 
         if not 'ELF' in m:
-            return
+            return new_path_for_binary
 
-        pyname = os.path.basename(binpath)
         try:
             patched_binary = self.fix_elf(tb_binpath, '$ORIGIN/../lib64/')
         except Exception as ex_:
@@ -1369,7 +1372,6 @@ popd
         #     # raise ex_
         # pass
 
-        new_path_for_binary = os.path.join("pbin", pyname)
         self.add(patched_binary, new_path_for_binary)
         self.bin_files.add( new_path_for_binary )
         self.bin_files_sources[new_path_for_binary] = binpath
@@ -1689,6 +1691,7 @@ fi
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 
+{self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs en/g' /usr/lib/rpm/macros
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
 
 ''')
@@ -1737,7 +1740,7 @@ d="$(dirname "$x")"
 {bashash_ok_folders_strings(self.base_rpms_path, [], [scmd],
         f"Looks required base RPMs already downloaded"
         )}
-rm -rf '{self.base_rpms_path}'
+#rm -rf '{self.base_rpms_path}'
 {self.tb_mod} {scmd}
 {save_state_hash(self.base_rpms_path)}
 ''')
@@ -2429,7 +2432,7 @@ do
     FILENAME=$PP-$VERSION
     if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
         echo **$FILENAME--
-        URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select((.filename|test(\\"$FILENAME\\")) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
+        URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select( ((.filename|test(\"$FILENAME.tar.gz\")) or (.filename|test(\"$FILENAME.zip\"))) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
         echo $URL
         wget --secure-protocol=TLSv1_2 -c -P $PIP_SOURCE_DIR/ $URL
         if [ -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ]; then
@@ -3165,10 +3168,13 @@ rm -f {self.ext_compiled_tar_path}/*
                     break
                 if ok:    
                     f = fpl_.filename
+                    if 'extract' in f:
+                        wtf = 1
                     if not self.should_copy(f):
                         continue
                     relpath = copy_file_to_environment(f)
-                    register_rpmpackage_file(relpath, f, fpl_)
+                    if relpath and not relpath.startswith('/'):
+                        register_rpmpackage_file(relpath, f, fpl_)
                     # # if relpath:
                     #     file_source_table[relpath] = FileInBuild(relpath, 'package', fpl_.package, f)
 
@@ -3239,6 +3245,8 @@ rm -f {self.ext_compiled_tar_path}/*
                             package_ = file2rpmpackage[f]
                             if package_.package in self.ps.terra_exclude:
                                 continue
+                        if 'tmp/ta/clickhouse-bulk.build/clickhouse-bulk' in f: 
+                            wtf = 1   
                         if self.br.is_need_patch(f):
                             relname = self.process_binary(f)
                             if os.path.isabs(relname):
@@ -3274,7 +3282,7 @@ rm -f {self.ext_compiled_tar_path}/*
                             # else:
                             #     relname = f.replace(folder_, 'pbin')    
                             if relname not in file_source_table:
-                                if 'libgcc_s.so.1' in relname:
+                                if 'extract' in relname:
                                     wtf = 1
                                 source_ = f
                                 if source_ in file2rpmpackage:
