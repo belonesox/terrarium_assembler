@@ -16,7 +16,7 @@ import inspect
 import hashlib
 
 def bashash4folder(var, folder):
-    scmd =f'''HASH_{var}=`tar cf - -C {folder} --mtime='1970-01-01' --mode='aou+rwx' --exclude=build  --exclude=.eggs --exclude=.git  --exclude='*.egg-info'  . | md5sum`
+    scmd =f'''HASH_{var}=`tar cf - -C {folder} --mtime='1970-01-01' --format=pax --pax-option="exthdr.name=%d/PaxHeaders.0/%f,delete=atime,delete=ctime"  --numeric-owner --owner=0 --group=0 --mode='aou+rwx' --exclude=build  --exclude=.eggs --exclude=.git  --exclude='*.egg-info'  . | md5sum`
 '''
     return scmd
 
