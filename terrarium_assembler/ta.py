@@ -630,6 +630,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
         self.build_deps_rpms = rpmrepo("build-deps-rpms")
         self.base_rpms_path = rpmrepo("base-rpms")
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
+        self.states_path =  in_bin_fld("states")
         self.rpmbuild_path =  in_bin_fld("rpmbuild")
         self.rebuilded_rpms_path = in_bin_fld("rebuilded-repo/rebuilded-rpms")
 
@@ -1840,7 +1841,7 @@ rm -rf '{self.srpms_path}'
         # filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 # {filter_egrep_686}
-        state_dir = self.rpmbuild_path + '/build_deps1'
+        state_dir = self.states_path + '/build_deps1'
         lines.append(f'''
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
         f"Looks required RPMs for building SRPMs already downloaded"
@@ -1902,7 +1903,7 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
         pls_ = [p for p in self.ps.terra if isinstance(p, str)]
 
-        state_dir = self.rpmbuild_path + '/build_deps2'
+        state_dir = self.states_path + '/build_deps2'
 
         lines.append(f'''
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
@@ -3190,14 +3191,17 @@ rm -f {self.ext_compiled_tar_path}/*
                 nuitka_report = {}
                 map2source = {}
                 map2package = {}
-                if '.dist' in folder_:
-                    bfolder_ = folder_.replace('.dist', '.build')
+                if '.ok' in folder_:
+                    bfolder_ = folder_.replace('.ok', '.build')
                     report_xml = Path(bfolder_) / 'report.xml'
                     if report_xml.exists():
                         import xmltodict
                         with open(report_xml, 'r', encoding='utf8') as lf:
                             nuitka_report = xmltodict.parse(lf.read())['nuitka-compilation-report']
-                            for ie_ in nuitka_report['included_extension'] + nuitka_report['included_dll']:
+                            ies_ = nuitka_report['included_extension']
+                            if 'included_dll' in nuitka_report:
+                                ies_ += nuitka_report['included_dll']
+                            for ie_ in ies_:
                                 sp_ = ie_['@source_path']
                                 dp_ = ie_['@dest_path']
                                 package_ = ie_['@package']
@@ -3216,7 +3220,7 @@ rm -f {self.ext_compiled_tar_path}/*
                         f = os.path.join(dirpath, filename)
                         if 'zlib.so' in f:
                             wtf  = 1
-                        if 'libmpdec' in f:    
+                        if '_qpdf.so' in f:    
                             wtf = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
@@ -3393,14 +3397,25 @@ rm -f {self.ext_compiled_tar_path}/*
         print("Size ", size_/1024/1024, 'Mb')
 
         rpm_packages_recommended_for_rebuild = set()
+        rbs_ = set(self.ps.rebuild)
+        rpm_packages_not_need_to_be_rebuilded = set(self.ps.rebuild)
+        rpm_packages_rebuilded_but_not_declared = set()
         python_packages_recommended_for_rebuild = set()
         lines = []
         for file_, source_ in sorted(self.bin_files_sources.items()):
             fti_ = file_source_table[file_]
-            if isinstance(fti_.source_type, str):
+            if fti_.source == 'geos':
                 wtf = 1
             if fti_.source_type == SourceType.rpm_package.value:
-                rpm_packages_recommended_for_rebuild.add(fti_.source)
+                if not fti_.source in rbs_:
+                    rpm_packages_recommended_for_rebuild.add(fti_.source)
+                if fti_.source in rpm_packages_not_need_to_be_rebuilded:
+                    rpm_packages_not_need_to_be_rebuilded.remove(fti_.source)
+            elif fti_.source_type == SourceType.rebuilded_rpm_package.value:
+                if fti_.source in rpm_packages_not_need_to_be_rebuilded:
+                    rpm_packages_not_need_to_be_rebuilded.remove(fti_.source)
+                if fti_.source not in rbs_:
+                    rpm_packages_rebuilded_but_not_declared.add(fti_.source)    
             elif fti_.source_type == SourceType.python_package.value:
                 python_packages_recommended_for_rebuild.add(fti_.source)
             # if fti_.source_type:
@@ -3431,6 +3446,12 @@ rm -f {self.ext_compiled_tar_path}/*
 
         lines.append(f'\nRPM packages recommended for rebuild')
         lines.append('\n - '.join([''] + sorted(rpm_packages_recommended_for_rebuild)))
+
+        lines.append(f'\nRPM packages not needed to be rebuilded')
+        lines.append('\n - '.join([''] + sorted(rpm_packages_not_need_to_be_rebuilded)))
+
+        lines.append(f'\nRPM packages rebuilded but not declared as rebuilded')
+        lines.append('\n - '.join([''] + sorted(rpm_packages_rebuilded_but_not_declared)))
 
         lines.append(f'\nPython packages recommended for rebuild')
         lines.append('\n - '.join([''] + sorted(python_packages_recommended_for_rebuild)))
