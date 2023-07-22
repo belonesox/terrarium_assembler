@@ -539,7 +539,7 @@ class TerrariumAssembler:
         if self.args.stage_make_packages == 'default':
             self.args.stage_make_packages = self.package_modes
 
-        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build']
+        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
                               'python3-wheel', 
@@ -1909,7 +1909,6 @@ for SPEC in `echo $SPECS`
 do
     BASEDIR=`dirname $SPEC`/..
     echo $BASEDIR
-    rm -rf $BASEDIR/BUILD/*
     {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
 done        
 {self.create_repo_cmd}
@@ -1972,8 +1971,9 @@ for SPEC in `echo $SPECS`
 do
     echo $SPEC
     BASEDIR=`dirname $SPEC`/..
-    {bashash_ok_folders_strings("$d/$BASEDIR/BUILD", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
+    {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
+    rm -rf $BASEDIR/BUILD/*
     {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
     {save_state_hash("$d/$BASEDIR/BUILD")}
