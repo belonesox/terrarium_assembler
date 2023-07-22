@@ -1909,6 +1909,7 @@ for SPEC in `echo $SPECS`
 do
     BASEDIR=`dirname $SPEC`/..
     echo $BASEDIR
+    rm -rf $BASEDIR/BUILD/*
     {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
 done        
 {self.create_repo_cmd}
@@ -2432,7 +2433,7 @@ do
     FILENAME=$PP-$VERSION
     if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
         echo **$FILENAME--
-        URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select( ((.filename|test(\"$FILENAME.tar.gz\")) or (.filename|test(\"$FILENAME.zip\"))) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
+        URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select( ((.filename|test(\\"$FILENAME.tar.gz\\")) or (.filename|test(\\"$FILENAME.zip\\"))) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
         echo $URL
         wget --secure-protocol=TLSv1_2 -c -P $PIP_SOURCE_DIR/ $URL
         if [ -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ]; then
