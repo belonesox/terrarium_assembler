@@ -36,7 +36,7 @@ class PythonRebuildProfile:
                 base_ = ''
                 if k in env:
                     base_ = env[k]
-                env[k] = base_ + ' ' + v
+                env[k] = base_ + ' ' + str(v)
         return env
 
 

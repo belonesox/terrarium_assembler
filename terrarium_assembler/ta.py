@@ -2485,10 +2485,10 @@ PP={pp}
 VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
 FILENAME=$PP-$VERSION
 PPDIR=$PIP_SOURCE_DIR/$FILENAME
-{self.tb_mod} bash -c "cd $PPDIR; {command}" 
+{self.tb_mod} bash -c "cd $PPDIR; {command} --build-number=99zzz " 
 {self.tb_mod} find $PPDIR -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
         ''')
-
+# $d/.venv/bin/python -m pip install --keep-outdated --force-reinstall --no-deps -e . 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
