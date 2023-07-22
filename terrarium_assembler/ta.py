@@ -460,9 +460,15 @@ class TerrariumAssembler:
                     if filter_(s_):
                         setattr(self.args, fname2stage(s_).replace('-','_'), True)
 
+        if args.specfile == 'systeminstall':
+            self.cmd(f'''
+sudo dnf install -y toolbox md5deep || true
+sudo apt-get install -y podman-toolbox md5deep || true
+''')
+            sys.exit(0)
 
         specfile_ = expandpath(args.specfile)
-        
+
         self.start_dir = self.curdir = os.path.split(specfile_)[0]
         terms = self.curdir.split(os.path.sep)
         terms.reverse()
@@ -3677,6 +3683,20 @@ overrides:
             os.chdir(self.curdir)
 
 
+    def stage_94_install_develop_nuitka(self):
+        '''
+        Compile TAR python packages for which not exists WHL
+        '''
+        os.chdir(self.curdir)
+        lines = []
+        lines.append(f'''
+{self.tb_mod} python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
+''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+
     def process(self):
         '''
         Основная процедура генерации переносимого питон окружения.
@@ -3692,12 +3712,6 @@ overrides:
         if self.args.git_sync:
             self.git_sync()
             return
-
-        self.lines2sh("94-install-last-nuitka", [
-            f'''
-export PIPENV_VENV_IN_PROJECT=1
-{self.tb_mod} python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
-            '''])
 
         self.build_mode = False
         self.clear_shell_files()
