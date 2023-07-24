@@ -548,7 +548,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
         self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
-                              'python3-wheel', 
+                              'python3-wheel', 'python3-pip', 'pipenv',  
                               'genisoimage', 'libtool', 'makeself', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
 
         nflags_ = {}
@@ -651,6 +651,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
 
         self.create_repo_cmd = f'''
 {self.tb_mod} chmod aou-w {self.rpms_path}/*.rpm ||  true
+{self.tb_mod} chattr +i {self.rpms_path}/*.rpm  ||  true
 {self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.rpmrepo_path}
 '''
         self.create_rebuilded_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.tarrepo_path}'
@@ -1983,7 +1984,7 @@ do
     rm -rf $BASEDIR/BUILD/*
     {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
-    {save_state_hash("$d/$BASEDIR/BUILD")}
+    {save_state_hash("$d/$BASEDIR/RPMS")}
 done        
 {self.create_rebuilded_repo_cmd}
 ''')
@@ -2029,6 +2030,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         lines.append(f'''
 {self.tb_mod} rpm -qa --queryformat "[%{{=NAME}}{ROW_SPLIT}%{{=VERSION}}{ROW_SPLIT}%{{=RELEASE}}{ROW_SPLIT}%{{=BUILDTIME}}{ROW_SPLIT}%{{=BUILDHOST}}{ROW_SPLIT}%{{FILENAMES}}\\n]"  > {self.file_package_list_from_rpms}
 {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --queryformat "%{{name}}" --resolve --recursive --cacheonly --requires {self.terra_package_names} > {self.terra_rpms_closure}
+{self.tb_mod} rpm -qa --queryformat "%{{NAME}} " > tmp/rpm-packages-names-list.txt
 ''')
 # {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 # {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
@@ -2036,9 +2038,24 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
 
 
 # {self.tb_mod} sudo rpm install -ivh --excludedocs $RPMS
-# toolbox run -c linux_distro-deploy-for-audit sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list onnxruntime python3-gobject-base python3-shapely python3-cups python3-pytest libX11-devel libXrandr-devel cups-filters nss nss-util poppler-utils tesseract tesseract-langpack-rus tesseract-script-cyrillic libwnck3 bash clickhouse-client zbar-devel gtk2-devel > tmp/file-list-from-deps-rpms.txt
+# toolbox run -c linux_distro-deploy-for-audit sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list onnxruntime python3-gobject-base python3-shapely python3-cupytest libX11-devel libXrandr-devel cups-filters nss nss-util poppler-utils tesseract tesseract-langpack-rus tesseract-script-cyrillic libwnck3 bash clickhouse-client zbar-devel gtk2-devel > tmp/file-list-from-deps-rpms.txt
 
 
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
+    def stage_95_install_all_rpms(self):
+        '''
+        Install rebuild SRPM packages.
+        '''
+        lines = []
+        packages = " ".join(self.packages_to_rebuild)
+        lines.append(f'''
+    x="$(readlink -f "$0")"
+    d="$(dirname "$x")"
+    {self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="ta" --enablerepo="tar" -y $(<./tmp/rpm-packages-names-list.txt)
+    ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
@@ -3313,6 +3330,8 @@ rm -f {self.ext_compiled_tar_path}/*
                                         type_ = SourceType.rebuilded_python_package
                                         what_ = so_files_rpips_path2package[f]
                                     elif rf in map2package:
+                                        if 'skimage' in rf:
+                                            wtf = 1
                                         type_ = SourceType.python_package
                                         what_ = map2package[rf]
                                     file_source_table[relname] = FileInBuild(relname, type_, what_, source_)
@@ -3417,6 +3436,8 @@ rm -f {self.ext_compiled_tar_path}/*
                 if fti_.source not in rbs_:
                     rpm_packages_rebuilded_but_not_declared.add(fti_.source)    
             elif fti_.source_type == SourceType.python_package.value:
+                if 'skimage' in fti_.source:
+                    wtf  = 1
                 python_packages_recommended_for_rebuild.add(fti_.source)
             # if fti_.source_type:
             #     pass
