@@ -2264,14 +2264,16 @@ rm -f {self.our_whl_path}/*
 {self.tb_mod} pipenv run pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
 {self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report.md -o tmp/pip-audit-report.wiki
 {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
-
-{save_state_hash('.venv')}
 '''
 
         lines.append(scmd)   # --no-cache-dir
 
         for scmd_ in self.pp.shell_commands or []:
             lines.append(scmd_)
+
+        lines.append(f'''
+{save_state_hash('.venv')}
+''')   
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2828,6 +2830,10 @@ rm -f {self.ext_compiled_tar_path}/*
                 pfr = PackageFileRow(*line.split(ROW_SPLIT))
                 file_package_list.append(pfr)
                 file2package[pfr.filename] = pfr
+                if 'libgcc_s-12-20221121.so.1' in pfr.filename:
+                    wtf = 1
+                if pfr.filename.startswith('/lib64'):
+                    file2package['/usr' + pfr.filename] = pfr
         return file_package_list, file2package
 
     def load_files_source(self):
@@ -2896,9 +2902,14 @@ rm -f {self.ext_compiled_tar_path}/*
                 fname = os.path.split(path_)[-1]
                 ok = False
                 relname = ''
+                if '_skbuild' in line:
+                    if 'cmake-build' in line:
+                        continue
+                    if 'setuptools' in line:
+                        continue
                 if 'geometry.cpython-310-x86_64-linux-gnu.so' in line:
                     wtf = 1
-                for split_ in ['build/lib.linux-x86_64-3', 'skbuild/linux-x86_64-3']:
+                for split_ in ['build/lib.linux-x86_64-3', 'skbuild/linux-x86_64-3.10/cmake-install']:
                     if split_ in line:    
                         relname = '/'.join(line.split(split_)[1].split('/')[1:])
                         break
@@ -3241,6 +3252,8 @@ rm -f {self.ext_compiled_tar_path}/*
                                     wtf = 1
                                 # assert(spr_.exists())
                                 map2source[dp_] = spr_.as_posix()
+                                if 'libgcc_s.so.1' in dp_ :
+                                    wtf  = 1
                                 map2package[dp_] = package_
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
@@ -3251,7 +3264,7 @@ rm -f {self.ext_compiled_tar_path}/*
                             wtf = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
-                        if '_shared/geometry' in f:
+                        if 'libgcc_s.so' in f:
                             wtf  = 1
                         if rf in map2source:
                             f = map2source[rf]
@@ -3329,6 +3342,8 @@ rm -f {self.ext_compiled_tar_path}/*
                                             wtf = 1
                                         type_ = SourceType.python_package
                                         what_ = map2package[rf]
+                                        if what_ == 'cv2':
+                                            wtf = 1
                                     file_source_table[relname] = FileInBuild(relname, type_, what_, source_)
                                 self.bin_files_sources[relname] = source_
                                 self.fix_sharedlib(tf, relname)
