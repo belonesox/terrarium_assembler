@@ -21,7 +21,7 @@ class PythonRebuildProfile:
     env: dict = None # ENVIRONMENT VARIABLES to CUSTOMIZE BUILD
     inherit: str = ''
     packages: list = None # utilities to build 
-    command: str = "python setup.py bdist_wheel"
+    command: str = "python setup.py bdist_wheel --build-number=99zzz "
 
 
     def get_merged_env(self):
@@ -36,7 +36,9 @@ class PythonRebuildProfile:
                 base_ = ''
                 if k in env:
                     base_ = env[k]
-                env[k] = base_ + ' ' + str(v)
+                if base_:
+                    base_ += ' '    
+                env[k] = base_ + str(v)
         return env
 
 

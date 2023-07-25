@@ -548,7 +548,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
         self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
-                              'python3-wheel', 'python3-pip', 'pipenv',  
+                              'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs',
                               'genisoimage', 'libtool', 'makeself', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
 
         nflags_ = {}
@@ -2504,7 +2504,7 @@ PP={pp}
 VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
 FILENAME=$PP-$VERSION
 PPDIR=$PIP_SOURCE_DIR/$FILENAME
-{self.tb_mod} bash -c "cd $PPDIR; {command} --build-number=99zzz " 
+{self.tb_mod} bash -c "cd $PPDIR; {command} " 
 {self.tb_mod} find $PPDIR -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
         ''')
 # $d/.venv/bin/python -m pip install --keep-outdated --force-reinstall --no-deps -e . 
