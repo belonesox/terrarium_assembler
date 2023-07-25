@@ -2067,7 +2067,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         lines = []
         lines.append(f'''
 find .venv -name "*.so*"  > {self.so_files_from_venv}
-find {self.pip_source_dir} -name "*.so*"  > {self.so_files_from_rebuilded_pips}
+find {self.pip_source_dir} -name "*.so"  > {self.so_files_from_rebuilded_pips}
 find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 ''')
 
@@ -2892,8 +2892,18 @@ rm -f {self.ext_compiled_tar_path}/*
         with open(self.so_files_from_rebuilded_pips, 'r') as lf:
             for i, line in enumerate(lf.readlines()):
                 line = line.strip('\n')
-                fname = os.path.split(line)[-1]
-                so_files_rpips_filename2path[fname] = line
+                path_ =  Path(line).absolute()
+                fname = os.path.split(path_)[-1]
+                ok = False
+                relname = ''
+                if 'geometry.cpython-310-x86_64-linux-gnu.so' in line:
+                    wtf = 1
+                for split_ in ['build/lib.linux-x86_64-3', 'skbuild/linux-x86_64-3']:
+                    if split_ in line:    
+                        relname = '/'.join(line.split(split_)[1].split('/')[1:])
+                        break
+                assert(relname)    
+                so_files_rpips_filename2path[relname] = line
                 package_name = line.split(split_)[1].split(os.path.sep)[1]
                 so_files_rpips_path2package[line] = package_name
 
@@ -3241,9 +3251,9 @@ rm -f {self.ext_compiled_tar_path}/*
                             wtf = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
+                        if '_shared/geometry' in f:
+                            wtf  = 1
                         if rf in map2source:
-                            # if '_random.so' in f:
-                            #     wtf  = 1
                             f = map2source[rf]
                             if '.venv/lib64' in f:
                                 wtf = 1
@@ -3252,23 +3262,8 @@ rm -f {self.ext_compiled_tar_path}/*
                             wrtf=1
                         if sfilename in so_files_from_src_filename2path:
                             f = so_files_from_src_filename2path[sfilename]
-                        elif sfilename in so_files_rpips_filename2path:
-                            f = so_files_rpips_filename2path[sfilename]
-                        # elif sfilename in so_files_from_venv_filename2path:
-                        #     f = so_files_from_venv_filename2path[sfilename]
-                        #     # changin path to 
-                        #     wrtf=1
-                        # elif filename in sofile2rpmfile:    
-                        #     f = sofile2rpmfile[filename]
-                        #     tf = self.toolbox_path(f)
-                        #     ptf = Path(tf)
-                        #     if ptf.is_symlink():
-                        #         liblink = os.path.join(root_dir, 'lib64', filename)
-                        #         if not os.path.exists(liblink):
-                        #             os.symlink(Path(tf).resolve().name, liblink)
-                        #     libname = Path(tf).resolve().name
-                        #     filename = libname
-                        #     f = sofile2rpmfile[libname]
+                        elif 'site-packages' in f and f.split('site-packages')[1][1:] in so_files_rpips_filename2path:
+                            f = so_files_rpips_filename2path[f.split('site-packages')[1][1:]]
                         if f in file2rpmpackage:
                             package_ = file2rpmpackage[f]
                             if package_.package in self.ps.terra_exclude:
