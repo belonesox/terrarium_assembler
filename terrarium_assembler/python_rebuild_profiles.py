@@ -22,6 +22,7 @@ class PythonRebuildProfile:
     inherit: str = ''
     packages: list = None # utilities to build 
     command: str = "python setup.py bdist_wheel --build-number=99zzz "
+    libs: list = None
 
 
     def get_merged_env(self):
@@ -51,6 +52,18 @@ class PythonRebuildProfile:
         scmd  = f'''{env_str} {self.command}'''
         return scmd
 
+    def get_list_of_libs_dir(self):
+        '''
+        Get list of symlinked dirs to system libs in /lib64 directory
+        '''
+        res = []
+        for p_ in self.packages:
+            for l_ in self.libs or []:
+                if l_ == '$package':
+                    l_ = p_
+                l_ = l_.replace('-', '_')    
+                res.append(l_)
+        return res        
 
     def get_flags(self, out_dir, target_):
         '''

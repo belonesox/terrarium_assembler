@@ -87,6 +87,7 @@ class SourceType(Enum):
 
 
 
+
 @dc.dataclass
 class PackageFileRow:
     '''
@@ -386,6 +387,7 @@ class TerrariumAssembler:
         self.src_deps_packages_add = 'tmp/src_deps_packages_add.txt'
         self.glibc_devel_packages = 'tmp/glibc_devel_packages.txt'
         self.files_source_path = 'tmp/files-source.yaml'
+        self.bin_files_sources_path = 'tmp/bin-files-sources.yaml'
         # self.files_source_path = 'tmp/files-source.txt'
         # self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
         self.pipdeptree_graph_dot = 'tmp/pipdeptree-graph.dot'
@@ -618,6 +620,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
             return folder_
 
         self.rpmrepo_path = in_bin_fld("rpmrepo")
+        self.rpms_backup_pool = in_bin_fld("rpms_backup_pool")
         self.our_whl_path = in_bin_fld("ourwheel")
         self.ext_whl_path = in_bin_fld("extwheel")
         self.rebuilded_whl_path = in_bin_fld("rebuilded_whls")
@@ -649,9 +652,10 @@ sudo apt-get install -y podman-toolbox md5deep || true
 
         self.packages_to_rebuild = [p for p in self.ps.terra if isinstance(p, str)] + [p for p in self.ps.rebuild if isinstance(p, str)]
 
+# {self.tb_mod} chmod aou-w {self.rpms_path}/*.rpm ||  true
+# {self.tb_mod} chattr +i {self.rpms_path}/*.rpm  ||  true
+
         self.create_repo_cmd = f'''
-{self.tb_mod} chmod aou-w {self.rpms_path}/*.rpm ||  true
-{self.tb_mod} chattr +i {self.rpms_path}/*.rpm  ||  true
 {self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.rpmrepo_path}
 '''
         self.create_rebuilded_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.tarrepo_path}'
@@ -877,7 +881,11 @@ rm -rf {ok_dir}.old
             cbs = self.spec.custombuilds
             for cb in cbs:
                 build_name = 'build_' + cb.name
-                self.lines2sh(build_name, [cb.shell.strip()], None)
+                build_name_inside_tb = 'build_in_tb_' + cb.name
+                self.lines2sh(build_name_inside_tb, [cb.shell.strip()], None)
+                self.lines2sh(build_name, [f'''
+{self.tb_mod} bash {fname2shname(build_name_inside_tb)}               
+                '''], None)
                 bfiles.insert(0, fname2shname(build_name))
 
         lines = []
@@ -2174,9 +2182,12 @@ done
 
         lines = [
             f"""
-
+rsync  {self.rpms_path}/*.rpm  {self.rpms_backup_pool}/     
+           
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
 {self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
+
+rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 """ 
         ]
         mn_ = get_method_name()
@@ -2305,14 +2316,14 @@ mkdir -p tmp/syslibs
 
 for PP in {pps}
 do
-    echo $PP
+    PPN=`echo $PP | tr '-' '_'`
     VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
     FILENAME=$PP-$VERSION
     if [ -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
 
 #{self.tb_mod} pipenv run python -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
-{self.tb_mod} rm -rf .venv/lib64/python3.10/site-packages/$PP.libs
-{self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python3.10/site-packages/$PP.libs
+{self.tb_mod} rm -rf .venv/lib64/python3.10/site-packages/$PPN.libs
+{self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python3.10/site-packages/$PPN.libs
 
     fi
 done        
@@ -2656,6 +2667,10 @@ rm -f {self.ext_compiled_tar_path}/*
 
         file_source_table = yaml.unsafe_load(open(self.files_source_path, 'r'))
         file_source = list(file_source_table.values())
+
+        bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_path, 'r'))
+        file_source = list(file_source_table.values())
+
         # ToDo — pydantic, enums, etc
         file_source_from_packages = [r for r in file_source if r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value]
 
@@ -3431,10 +3446,28 @@ rm -f {self.ext_compiled_tar_path}/*
         rpm_packages_rebuilded_but_not_declared = set()
         python_packages_recommended_for_rebuild = set()
         lines = []
+        binary_files_report = []
+
         for file_, source_ in sorted(self.bin_files_sources.items()):
             fti_ = file_source_table[file_]
             if fti_.source == 'geos':
                 wtf = 1
+
+            row_ = [file_]
+            if fti_.source_type == 'rpm_package':
+                row_.extend(["RPM-пакет", f"Требуется пересборка RPM-пакета {fti_.source}!"])
+            if fti_.source_type == 'python_package':
+                row_.extend(["Python-пакет", f"Нужна пересборка Python-пакета {fti_.source}!"])
+            if fti_.source_type == 'rebuilded_rpm_package':
+                row_.extend(["Собранный локально RPM-пакет", f"Исходники сборки пакета {fti_.source} в {self.rpmbuild_path}"])
+            if fti_.source_type == 'file_from_folder':
+                row_.extend(["Компиляция Nuitka", f"Компиляция в папке {fti_.source}"])
+            if fti_.source_type == 'rebuilded_python_package':
+                row_.extend(["Пересобранный Python-пакет", f"Исходники сборки пакета {fti_.source} в {self.pip_source_dir}"])
+            if fti_.source_type == 'our_source':
+                row_.extend(["Наше расширение", f"Исходники сборки пакета {fti_.source} в {self.src_dir}"])
+            binary_files_report.append(row_)    
+
             if fti_.source_type == SourceType.rpm_package.value:
                 if not fti_.source in rbs_:
                     rpm_packages_recommended_for_rebuild.add(fti_.source)
@@ -3449,31 +3482,8 @@ rm -f {self.ext_compiled_tar_path}/*
                 if 'skimage' in fti_.source:
                     wtf  = 1
                 python_packages_recommended_for_rebuild.add(fti_.source)
-            # if fti_.source_type:
-            #     pass
-            # if 'dm_ort.cpython-310-x86_64-linux-gnu.so' in source_:
-            #     wtf = 1
-            # if source_ in so_files_from_src_filename2path:
-            #     pp_ = so_files_from_src_filename2path[source_]
-            #     lines.append(f'{file_} <- {source_} from our project {pp_}')
-            # elif source_ in file2rpmpackage:
-            #     pfr = file2rpmpackage[source_]
-            #     if '.' in pfr.release and self.disttag in pfr.release.split('.'):
-            #         lines.append(f'{file_} <- {source_} from rebuilded RPM package {pfr.package}')
-            #     else:
-            #         if 'pcre' in pfr.package:
-            #             wtf = 1
-            #         lines.append(f'{file_} <- {source_} from package {pfr.package}!')
-            #         rpm_packages_recommended_for_rebuild.add(pfr.package)
-            # elif source_ in so_files_rpips_path2package:
-            #     pp_ = so_files_rpips_path2package[source_]
-            #     lines.append(f'{file_} <- {source_} from rebuilded RPM package {pp_}')
-            # elif source_ in so_files_from_venv_path2package:
-            #     pp_ = so_files_from_venv_path2package[source_]
-            #     lines.append(f'{file_} <- {source_} from python package {pp_}!')
-            #     python_packages_recommended_for_rebuild.add(pp_)
-            # else:
-            #     lines.append(f'{file_} -< {source_} not known!!!')
+
+        write_doc_table(os.path.join(self.curdir, 'tmp/binary-files-report.htm'), ['Файл', 'Тип', 'Исходники сборки'], binary_files_report)
 
         lines.append(f'\nRPM packages recommended for rebuild')
         lines.append('\n - '.join([''] + sorted(rpm_packages_recommended_for_rebuild)))
@@ -3500,7 +3510,9 @@ rm -f {self.ext_compiled_tar_path}/*
             # lf.write(file_source_table.to_yaml())
             lf.write(yaml.dump(file_source_table))
             # lf.write(json.dumps(file_source_table))
-            
+
+        # with open(os.path.join(self.curdir, self.bin_files_sources_path), 'w') as lf:
+        #     lf.write(yaml.dump(bin_files_sources))
 
         unique_packages = set([row.source for row in file_source_table.values() if row.source_type == 'package'])
         not_need_packages_to_rebuild = []
