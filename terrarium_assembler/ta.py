@@ -624,7 +624,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
         self.our_whl_path = in_bin_fld("ourwheel")
         self.ext_whl_path = in_bin_fld("extwheel")
         self.rebuilded_whl_path = in_bin_fld("rebuilded_whls")
-        self.pip_source_dir = in_bin_fld("pip_source_to_rebuild")
+        self.pip_source_path = in_bin_fld("pip_source_to_rebuild")
         self.ext_compiled_tar_path = in_bin_fld("ext_compiled_tar")
         self.ext_pip_path = in_bin_fld("extpip")
         self.base_whl_path = in_bin_fld("basewheel")
@@ -1707,7 +1707,8 @@ fi
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 
-{self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs en/g' /usr/lib/rpm/macros
+#{self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs en/g'     
+{self.tb_mod} bash -c 'ls /usr/share/locale/ | grep -v "en$" | xargs -i{{}} sudo rm -rf /usr/share/locale/{{}}'
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
 
 ''')
@@ -2075,7 +2076,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         lines = []
         lines.append(f'''
 find .venv -name "*.so*"  > {self.so_files_from_venv}
-find {self.pip_source_dir} -name "*.so"  > {self.so_files_from_rebuilded_pips}
+find {self.pip_source_path} -name "*.so"  > {self.so_files_from_rebuilded_pips}
 find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 ''')
 
@@ -2306,7 +2307,7 @@ rm -f {self.our_whl_path}/*
         lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
-PIP_SOURCE_DIR={self.pip_source_dir}
+PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
 
 {self.tb_mod} pipenv run python -m pip install --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
@@ -2461,7 +2462,7 @@ rm -f {self.base_whl_path}/*
         lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
-PIP_SOURCE_DIR={self.pip_source_dir}
+PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
 for PP in {pps}
 do
@@ -2505,7 +2506,7 @@ done
         lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
-PIP_SOURCE_DIR={self.pip_source_dir}
+PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
         ''')
 
@@ -2644,7 +2645,8 @@ rm -f {self.ext_compiled_tar_path}/*
 
         # cloc ./in/bin/rpmbuild/*/BUILD/   ./in/src/
         cloc_for_files('our-cloc', './in/src/')
-        # cloc_for_files('deps-cloc', './in/bin/rpmbuild/*/BUILD/')
+        cloc_for_files('rebuilded-rpms-cloc', './in/bin/rpmbuild/*/BUILD/')
+        cloc_for_files('python-rebuilded-cloc', f'./{self.pip_source_path}')
 
         lastdirs = os.path.sep.join(
             abs_path_to_out_dir.split(os.path.sep)[-2:])
@@ -2909,7 +2911,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
         so_files_rpips_filename2path = {}
         so_files_rpips_path2package = {}
-        split_ = os.path.split(self.pip_source_dir)[-1]
+        split_ = os.path.split(self.pip_source_path)[-1]
         with open(self.so_files_from_rebuilded_pips, 'r') as lf:
             for i, line in enumerate(lf.readlines()):
                 line = line.strip('\n')
@@ -3273,7 +3275,7 @@ rm -f {self.ext_compiled_tar_path}/*
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
-                        if 'zlib.so' in f:
+                        if 'libamd.so' in f:
                             wtf  = 1
                         if '_qpdf.so' in f:    
                             wtf = 1
@@ -3463,7 +3465,7 @@ rm -f {self.ext_compiled_tar_path}/*
             if fti_.source_type == 'file_from_folder':
                 row_.extend(["Компиляция Nuitka", f"Компиляция в папке {fti_.source}"])
             if fti_.source_type == 'rebuilded_python_package':
-                row_.extend(["Пересобранный Python-пакет", f"Исходники сборки пакета {fti_.source} в {self.pip_source_dir}"])
+                row_.extend(["Пересобранный Python-пакет", f"Исходники сборки пакета {fti_.source} в {self.pip_source_path}"])
             if fti_.source_type == 'our_source':
                 row_.extend(["Наше расширение", f"Исходники сборки пакета {fti_.source} в {self.src_dir}"])
             binary_files_report.append(row_)    
