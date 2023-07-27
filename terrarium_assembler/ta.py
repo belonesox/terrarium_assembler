@@ -478,6 +478,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
         self.tb_mod = ''
         if self.toolbox_mode:
             self.tb_mod = f'toolbox run -c {self.environ_name}'
+        self.rm_locales = f'''{self.tb_mod} bash -c 'ls /usr/share/locale/ | grep -v "en$" | xargs -i{{}} sudo rm -rf /usr/share/locale/{{}}' '''
 
         # self.common_cache_dir = Path('/tmp/ta_cache')
         # self.common_cache_dir.mkdir(exist_ok=True, parents=True)
@@ -1708,7 +1709,7 @@ x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 
 #{self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs en/g'     
-{self.tb_mod} bash -c 'ls /usr/share/locale/ | grep -v "en$" | xargs -i{{}} sudo rm -rf /usr/share/locale/{{}}'
+{self.rm_locales}
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
 
 ''')
@@ -1758,7 +1759,9 @@ d="$(dirname "$x")"
         f"Looks required base RPMs already downloaded"
         )}
 #rm -rf '{self.base_rpms_path}'
+{self.rm_locales}
 {self.tb_mod} {scmd}
+{self.rm_locales}
 {save_state_hash(self.base_rpms_path)}
 ''')
         mn_ = get_method_name()
@@ -1794,7 +1797,9 @@ d="$(dirname "$x")"
         f"Looks required RPMs already downloaded"
         )}
 # rm -rf '{self.rpms_path}'
+{self.rm_locales}
 {self.tb_mod} {scmd}
+{self.rm_locales}
 {self.create_repo_cmd}
 {save_state_hash(self.rpms_path)}
 ''')
@@ -1818,6 +1823,7 @@ d="$(dirname "$x")"
         f"Looks required SRPMs already downloaded"
         )}
 rm -rf '{self.srpms_path}'
+{self.rm_locales}
 {self.tb_mod} {scmd}
 {self.create_repo_cmd}
 {save_state_hash(self.srpms_path)}
@@ -1858,10 +1864,12 @@ rm -rf '{self.srpms_path}'
         )}
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
+{self.rm_locales}
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
 #{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  $SRPMS -y 
 {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
+{self.rm_locales}
 # SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
 # SRC_DEPS_PACKAGES_MAIN=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep -v i686 | tr '\\n' ' '`
 # SRC_DEPS_PACKAGES_ADD=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep i686 | tr '\\n' ' '`
@@ -1921,6 +1929,7 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         )}
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
+{self.rm_locales}
 SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
 for SPEC in `echo $SPECS`
 do
@@ -1928,6 +1937,7 @@ do
     echo $BASEDIR
     {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
 done        
+{self.rm_locales}
 {self.create_repo_cmd}
 {save_state_hash(state_dir)}
 ''')
@@ -2015,6 +2025,7 @@ done
         lines.append(f'''
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
+{self.rm_locales}
 #RPMS=`find . -wholename "./{self.rpmbuild_path}/*/RPMS/*.{self.disttag}.*.rpm"`        
 {self.tb_mod} sudo rm /etc/dnf/protected.d/systemd.conf
 {self.tb_mod} sudo dnf remove -y "*.i686"
@@ -2023,6 +2034,7 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
 #do
 #{self.tb_mod} sudo rpm -ivh --force --nodeps $RPMS
 {self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y $RPMS
+{self.rm_locales}
 #done
 #{self.tb_mod} sudo dnf install --refresh --disablerepo="*" --enablerepo="tar" -y {packages}
 ''')
@@ -2061,9 +2073,11 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         lines = []
         packages = " ".join(self.packages_to_rebuild)
         lines.append(f'''
-    x="$(readlink -f "$0")"
-    d="$(dirname "$x")"
-    {self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="ta" --enablerepo="tar" -y $(<./tmp/rpm-packages-names-list.txt)
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+{self.rm_locales}
+{self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="ta" --enablerepo="tar" -y $(<./tmp/rpm-packages-names-list.txt)
+{self.rm_locales}
     ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2116,7 +2130,9 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         # --disablerepo="*" ???? WTF!!!!
         lines = [
             f"""
+{self.rm_locales}
 {self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
+{self.rm_locales}
 {self.create_repo_cmd}
 {self.tb_mod} createrepo {self.tarrepo_path}
 {self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[ta]\\nname=TA\\nbaseurl=file:///$d/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
@@ -2137,6 +2153,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         #--skip-broken
         lines = [
             f"""
+{self.rm_locales}
 {self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {packages}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
@@ -2160,6 +2177,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
             f"""
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
+{self.rm_locales}
 {self.tb_mod} sudo dnf --refresh --disablerepo="*" --enablerepo="ta" update -y 
 SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
 for SPEC in `echo $SPECS`
@@ -2185,9 +2203,10 @@ done
             f"""
 rsync  {self.rpms_path}/*.rpm  {self.rpms_backup_pool}/     
            
+{self.rm_locales}
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
 {self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
-
+{self.rm_locales}
 rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 """ 
         ]
@@ -2995,7 +3014,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
                     for filename in filenames:
                         fname_ = os.path.join(dirpath, filename)
-                        if 'python' in fname_:
+                        if 'libflexiblas_fallback_lapack.so' in fname_:
                             wtf = 1
                         out_fname_ = os.path.join(root_dir, dirpath, filename)
                         out_fname_ = Template(out_fname_).render(self.tvars)
@@ -3416,8 +3435,8 @@ rm -f {self.ext_compiled_tar_path}/*
 
             # killing broken links
             for path in Path(self.root_dir).rglob('*'):
-                rp_ = str(path.absolute())
-                if os.path.islink(rp_) and not os.path.exists(rp_):
+                # rp_ = str(path.absolute())
+                if path.is_symlink() and not path.resolve().exists():
                     path.unlink(missing_ok=True)
             pass
 
