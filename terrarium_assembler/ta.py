@@ -3559,13 +3559,13 @@ rm -f {self.ext_compiled_tar_path}/*
         # with open(os.path.join(self.curdir, self.bin_files_sources_path), 'w') as lf:
         #     lf.write(yaml.dump(bin_files_sources))
 
-        unique_packages = set([row.source for row in file_source_table.values() if row.source_type == 'package'])
+        unique_packages = set([row.source for row in file_source_table.values() if row.source_type == SourceType.rebuilded_rpm_package.value])
         not_need_packages_to_rebuild = []
         for p in self.packages_to_rebuild:
             if p not in unique_packages:
                 not_need_packages_to_rebuild.append(p)
 
-        with open(os.path.join(self.curdir, 'not-need-packages-in-terra.txt'), 'w') as lf:
+        with open(os.path.join(self.curdir, 'not-need-packages-to-rebuild-in-terra.txt'), 'w') as lf:
             lf.write('\n - '.join([''] + not_need_packages_to_rebuild))
 
 
