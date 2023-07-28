@@ -19,6 +19,7 @@ class PythonRebuildProfile:
     '''
     inherited: object = None # PythonRebuildProfile profile to inherit all the staff.
     env: dict = None # ENVIRONMENT VARIABLES to CUSTOMIZE BUILD
+    files: dict = None # List of configuration files to create
     inherit: str = ''
     packages: list = None # utilities to build 
     command: str = "python setup.py bdist_wheel --build-number=99zzz "
@@ -135,4 +136,4 @@ class PythonRebuildProfiles:
         for _, profile in self.profiles.items():
             command_ = profile.get_build_command()
             for pp in profile.packages:
-                yield pp, command_
+                yield pp, command_, profile.files

@@ -192,7 +192,7 @@ class BinRegexps:
         return False
 
     def is_need_exclude(self, f):
-        if 'extract' in f:
+        if 'bin/pdftoppm' in f:
             wtf = 34342
         for re_ in self.ignore_re:
             if re_.match(f):
@@ -1055,7 +1055,7 @@ popd
             return False
 
         if not self.args.debug:
-            if (parts[0] not in ["lib", "lib64", "libexec"]) and (parts != ['bin', 'bash', 'sbin']):
+            if (parts[0] not in ["lib", "lib64", "libexec"]) and (parts[0] != ['bin', 'bash', 'sbin']):
                 return False
         parts.pop(0)
 
@@ -1708,7 +1708,7 @@ fi
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 
-#{self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs en/g'     
+{self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs ru:en/g' /usr/lib/rpm/macros     
 {self.rm_locales}
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
 
@@ -2310,8 +2310,39 @@ rm -f {self.our_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
         pass
 
+    def stage_31_audit_install_depswheels_for_rebuild(self):
+        '''
+        Install our and external Python wheels
+        '''
+        os.chdir(self.curdir)
+        lines = []
 
-    def stage_30_audit_install_rebuilded_whls(self):
+        our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
+        ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
+        ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
+        mn_ = get_method_name()
+
+        scmd = f'''
+{bashash_ok_folders_strings(f'tmp/states/{mn_}', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path], [],
+        f"Looks like dont need to do {mn_}"
+        )}
+
+{self.tb_mod} sudo python -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+'''
+
+        lines.append(scmd)   # --no-cache-dir
+
+        for scmd_ in self.pp.shell_commands or []:
+            lines.append(scmd_)
+
+        lines.append(f'''
+{save_state_hash(f'tmp/states/{mn_}')}
+''')   
+
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+    def stage_34_audit_install_rebuilded_whls(self):
         '''
         Install our and external Python wheels
         '''
@@ -2329,7 +2360,7 @@ d="$(dirname "$x")"
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
 
-{self.tb_mod} pipenv run python -m pip install --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} pipenv run python -m pip install --no-deps --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 
 mkdir -p tmp/syslibs
 {self.tb_mod} bash -c "sudo ln -sf /usr/lib64/lib*.so* tmp/syslibs/"
@@ -2463,7 +2494,7 @@ rm -f {self.base_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_28_audit_download_pip_sources(self):
+    def stage_30_audit_download_pip_sources(self):
         '''
         Download PIP sources.
         '''
@@ -2507,7 +2538,7 @@ done
         pass
 
 
-    def stage_29_audit_build_pip_sources(self):
+    def stage_33_audit_build_pip_sources(self):
         '''
         Download PIP sources.
         '''
@@ -2529,12 +2560,17 @@ PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
         ''')
 
-        for pp, command in self.python_rebuild_profiles.get_commands_to_build_packages():
+        for pp, command, files_ in self.python_rebuild_profiles.get_commands_to_build_packages():
             lines.append(f'''
 PP={pp}
 VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
 FILENAME=$PP-$VERSION
 PPDIR=$PIP_SOURCE_DIR/$FILENAME
+        ''')
+            for file_ in files_ or []:    
+                content_ = files_[file_].replace('\n','\\n')
+                lines.append(f'''echo -e "{content_}" > $PPDIR/{file_} ''')
+            lines.append(f'''
 {self.tb_mod} bash -c "cd $PPDIR; {command} " 
 {self.tb_mod} find $PPDIR -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
         ''')
@@ -2705,8 +2741,6 @@ rm -f {self.ext_compiled_tar_path}/*
                     m_ = re_file.match(line)
                     if m_:
                         fname = m_.group('filename')
-                        # if 'lib64/girepository-1.0/GdkPixbuf-2.0.typelib' in fname:
-                        #     wtf = 1
                         # Heuristic to process strace files from Vagrant virtualboxes
                         fname = fname.replace('/vagrant', self.curdir)
                         # Heuristic to process strace files from remote VM, mounted by sshmnt
@@ -2739,8 +2773,6 @@ rm -f {self.ext_compiled_tar_path}/*
         packages_from_build = set([r.source for r in file_source_from_packages])
         not_used_packages = set()
         for p_ in packages_from_build:
-            if p_ == 'glibc':
-                wtf = 1
             # files_in_package = set([r.filename for r in file_package_list if r.package==p_])
             used_files_from_thepackage = set([os.path.join(self.curdir, self.out_dir) + '/' + r.relname for r in file_source_from_packages if r.source==p_])
             if not (used_files_from_thepackage & used_files):
@@ -2807,7 +2839,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
             lines.append(f'      - .*{f_} # \t {s} \t {rel_f}')
 
-        with open('recommend-for-exclude', 'w') as lf:
+        with open('recommend-for-exclude.txt', 'w') as lf:
             lf.write('\n'.join(lines))
         # print("\n".join([f'{f}: \t {s}' for f,s in top10]))
 
@@ -2866,8 +2898,6 @@ rm -f {self.ext_compiled_tar_path}/*
                 pfr = PackageFileRow(*line.split(ROW_SPLIT))
                 file_package_list.append(pfr)
                 file2package[pfr.filename] = pfr
-                if 'libgcc_s-12-20221121.so.1' in pfr.filename:
-                    wtf = 1
                 if pfr.filename.startswith('/lib64'):
                     file2package['/usr' + pfr.filename] = pfr
         return file_package_list, file2package
@@ -2943,8 +2973,6 @@ rm -f {self.ext_compiled_tar_path}/*
                         continue
                     if 'setuptools' in line:
                         continue
-                if 'geometry.cpython-310-x86_64-linux-gnu.so' in line:
-                    wtf = 1
                 for split_ in ['build/lib.linux-x86_64-3', 'skbuild/linux-x86_64-3.10/cmake-install']:
                     if split_ in line:    
                         relname = '/'.join(line.split(split_)[1].split('/')[1:])
@@ -3014,8 +3042,6 @@ rm -f {self.ext_compiled_tar_path}/*
 
                     for filename in filenames:
                         fname_ = os.path.join(dirpath, filename)
-                        if 'libflexiblas_fallback_lapack.so' in fname_:
-                            wtf = 1
                         out_fname_ = os.path.join(root_dir, dirpath, filename)
                         out_fname_ = Template(out_fname_).render(self.tvars)
                         # Path(out_fname_).parent.mkdir(exist_ok=True)
@@ -3238,11 +3264,9 @@ rm -f {self.ext_compiled_tar_path}/*
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
-            if fpl_.package == 'glibc':
+            if 'bin/pdftoppm' in fpl_.filename:    
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
-                if 'libmpdec' in fpl_.filename:    
-                    wtf = 1
                 ok = True
                 for prefix in self.ps.exclude_prefix:
                     if fpl_.package.startswith(prefix):
