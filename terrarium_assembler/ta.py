@@ -2024,13 +2024,14 @@ done
         lines.append(f'''
 {self.rm_locales}
 #RPMS=`find . -wholename "./{self.rpmbuild_path}/*/RPMS/*.{self.disttag}.*.rpm"`        
-{self.tb_mod} sudo rm /etc/dnf/protected.d/systemd.conf
+{self.tb_mod} sudo rm /etc/dnf/protected.d/systemd.conf || true
 {self.tb_mod} sudo dnf remove -y "*.i686"
-RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`        
+#RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`        
 #for RPM in `echo $RPMS`
 #do
 #{self.tb_mod} sudo rpm -ivh --force --nodeps $RPMS
-{self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y $RPMS
+# {self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y $RPMS
+{self.tb_mod} sudo dnf update --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y {packages}
 {self.rm_locales}
 #done
 #{self.tb_mod} sudo dnf install --refresh --disablerepo="*" --enablerepo="tar" -y {packages}
