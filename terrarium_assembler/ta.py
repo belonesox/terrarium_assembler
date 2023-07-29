@@ -464,8 +464,8 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep || true
-sudo apt-get install -y podman-toolbox md5deep || true
+sudo dnf install -y toolbox md5deep git git-lfs || true
+sudo apt-get install -y podman-toolbox md5deep git git-lfs || true
 ''')
             sys.exit(0)
 
@@ -551,7 +551,7 @@ sudo apt-get install -y podman-toolbox md5deep || true
         self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
-                              'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs',
+                              'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs', 'git',
                               'genisoimage', 'libtool', 'makeself', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
 
         self.minimal_pips = ['wheel']
@@ -758,6 +758,8 @@ toolbox create {self.environ_name} --distro fedora --release {self.spec.fc_versi
 {desc}
 # Automatically called when terrarium_assembler --{stage_} "{self.args.specfile}"
 date
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
 ''')
 
             bash_line('''export PIPENV_VENV_IN_PROJECT=1\n''')
@@ -932,9 +934,11 @@ rm -rf {ok_dir}.old
                 lines = []
                 build_name = 'build_' + outputname
                 lines.append(fR"""
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
 pushd {path_to_dir__}
-{self.tb_mod} bash -c 'go mod download'
-{self.tb_mod} bash -c 'CGO_ENABLED=0 go build -ldflags="-linkmode=internal -r" -o {target_dir_}/{outputname} 2>&1 > {log_dir_}/{build_name}.log'
+{self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod download"
+{self.tb_mod} bash -c "GOPATH=$d/tmp/go CGO_ENABLED=0 go build -ldflags='-linkmode=internal -r' -o {target_dir_}/{outputname} 2>&1 > {log_dir_}/{build_name}.log"
 popd
     """)
                 self.fs.folders.append(target_dir)
@@ -1709,10 +1713,8 @@ fi
         lines = [self.toolbox_create_line()]
 
         lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 
-{self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs ru:en/g' /usr/lib/rpm/macros     
+        {self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs ru:en/g' /usr/lib/rpm/macros     
 {self.rm_locales}
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
 
@@ -1866,8 +1868,6 @@ rm -rf '{self.srpms_path}'
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 {self.rm_locales}
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
@@ -1931,8 +1931,6 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 {self.rm_locales}
 SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
 for SPEC in `echo $SPECS`
@@ -1968,8 +1966,6 @@ done
 {bashash_ok_folders_strings(self.rpmbuild_path, [self.srpms_path], [],
          f"Looks all SRPMs already prepared for build"
         )}
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 #rm -rf {self.rpmbuild_path}/*
 SRPMS=`find {self.srpms_path} -name "*.src.rpm"`        
 for SRPM in `echo $SRPMS`
@@ -1995,8 +1991,6 @@ done
         rebuild_mod = ' --without '.join([''] + self.ps.rebuild_disable_features)
 
         lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 chmod u+w {self.rpmbuild_path} -R
 SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
 for SPEC in `echo $SPECS`
@@ -2028,8 +2022,6 @@ done
 # {self.tb_mod} sudo dnf remove -y --skip-broken {packages}
 #{self.rebuilded_rpms_path}/
         lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 {self.rm_locales}
 #RPMS=`find . -wholename "./{self.rpmbuild_path}/*/RPMS/*.{self.disttag}.*.rpm"`        
 {self.tb_mod} sudo rm /etc/dnf/protected.d/systemd.conf
@@ -2078,8 +2070,6 @@ RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
         lines = []
         packages = " ".join(self.packages_to_rebuild)
         lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 {self.rm_locales}
 {self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="ta" --enablerepo="tar" -y $(<./tmp/rpm-packages-names-list.txt)
 {self.rm_locales}
@@ -2180,8 +2170,6 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         '''
         lines = [
             f"""
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 {self.rm_locales}
 {self.tb_mod} sudo dnf --refresh --disablerepo="*" --enablerepo="ta" update -y 
 SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
@@ -2360,8 +2348,6 @@ rm -f {self.our_whl_path}/*
             return 
 
         lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
 
@@ -2480,8 +2466,6 @@ done
         bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
 
         lines = []
-# x="$(readlink -f "$0")"
-# d="$(dirname "$x")"
 
         bws =  self.base_wheels_string()
 
@@ -2515,8 +2499,6 @@ rm -f {self.base_whl_path}/*
 
 
         lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
 for PP in {pps}
@@ -2559,8 +2541,6 @@ done
             return 
 
         lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
         ''')
@@ -2598,11 +2578,6 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
         bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
 
         lines = []
-        lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
-
-''')
 
         pip_args_ = self.pip_args_from_sources()
         remove_pips = self.pp.remove_from_download or []
@@ -2644,11 +2619,6 @@ rm -f {self.ext_whl_path}/*
         bin_dir = os.path.relpath(self.in_bin, start=self.curdir)
 
         lines = []
-        lines.append(f'''
-x="$(readlink -f "$0")"
-d="$(dirname "$x")"
-
-''')
 
         pip_args_ = self.pip_args_from_sources()
 
