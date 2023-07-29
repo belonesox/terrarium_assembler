@@ -554,6 +554,10 @@ sudo apt-get install -y podman-toolbox md5deep || true
                               'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs',
                               'genisoimage', 'libtool', 'makeself', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
 
+        self.minimal_pips = ['wheel']
+        self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons==3.1.2', 'graphviz']
+
+
         nflags_ = {}
         if 'nuitka' in spec:
             nflags_ = spec.nuitka
@@ -1972,7 +1976,8 @@ for SRPM in `echo $SRPMS`
 do
     echo $SRPM
     BASEDIR=`basename $SRPM`-rpmbuild
-    {self.tb_mod} rpmbuild -rp --rebuild  --define "_topdir $d/{self.rpmbuild_path}/$BASEDIR" $SRPM
+    rm -rf $d/{self.rpmbuild_path}/$BASEDIR/BUILD/*
+    {self.tb_mod} rpmbuild -rp --nodeps --nobuild --rebuild  --define "_topdir $d/{self.rpmbuild_path}/$BASEDIR" $SRPM
 done        
 {save_state_hash(self.rpmbuild_path)}
 ''')
@@ -2408,7 +2413,7 @@ done
             pip_targets += self.pp.terra.pip or []
         else:
             projects += self.pp.projects()
-            pip_targets += self.pp.pip()
+            pip_targets += self.pp.pip() + self.need_pips
 
         for td_ in projects:
             git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(
