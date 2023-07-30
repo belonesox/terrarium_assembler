@@ -636,7 +636,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c || true
         self.rpms_path = rpmrepo("rpms")
         self.srpms_path = rpmrepo("srpms")
         self.build_deps_rpms = rpmrepo("build-deps-rpms")
-        self.base_rpms_path = rpmrepo("base-rpms")
+        # self.base_rpms_path = rpmrepo("base-rpms")
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
         self.states_path =  in_bin_fld("states")
         self.rpmbuild_path =  in_bin_fld("rpmbuild")
@@ -1740,6 +1740,14 @@ fi
         self.lines2sh(mn_, lines, mn_)
         pass
 
+    def strlist_of_minimal_rpm_packages(self):
+        pls_ = [p for p in self.minimal_packages]
+        for rp_ in self.ps.repos or []:
+            if rp_.endswith('.rpm'):
+                pls_.append(rp_)
+        packages = " ".join(pls_)
+        return packages        
+
     def stage_02_download_base_packages(self):
         '''
         Download base RPM packages.
@@ -1748,29 +1756,25 @@ fi
         args = self.args
         packages = []
         lines = []
+        mn_ = get_method_name()
 
         lines_src = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
 
-        pls_ = [p for p in self.minimal_packages]
-        for rp_ in self.ps.repos or []:
-            if rp_.endswith('.rpm'):
-                pls_.append(rp_)
+        packages = self.strlist_of_minimal_rpm_packages()
 
-        # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
-        packages = " ".join(pls_)
-        scmd = f'''dnf download --skip-broken --downloaddir {self.base_rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        scmd = f'''dnf download --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
         lines.append(f'''
-{bashash_ok_folders_strings(self.base_rpms_path, [], [scmd],
+{bashash_ok_folders_strings(self.states_path + '/' + mn_, [], [scmd],
         f"Looks required base RPMs already downloaded"
         )}
-#rm -rf '{self.base_rpms_path}'
 {self.rm_locales}
 {self.tb_mod} {scmd}
 {self.rm_locales}
-{save_state_hash(self.base_rpms_path)}
+createrepo {self.rpmrepo_path}
+createrepo {self.tarrepo_path}
+{save_state_hash(self.states_path + '/' + mn_)}
 ''')
-        mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
 
@@ -2123,16 +2127,16 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         '''
         Install downloaded base RPM packages
         '''
-        # --disablerepo="*" ???? WTF!!!!
+        packages = self.strlist_of_minimal_rpm_packages()
+
         lines = [
             f"""
 {self.rm_locales}
-{self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --skip-broken {self.base_rpms_path}/*.rpm -y --allowerasing
-{self.rm_locales}
-{self.create_repo_cmd}
-{self.tb_mod} createrepo {self.tarrepo_path}
+# createrepo {self.rpmrepo_path}
+# createrepo {self.tarrepo_path}
 {self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[ta]\\nname=TA\\nbaseurl=file:///$d/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
 {self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[tar]\\nname=TAR\\nbaseurl=file:///$d/{self.tarrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/tar.repo'
+{self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  --skip-broken {packages} -y --allowerasing
 """ 
         ]
         mn_ = get_method_name()
@@ -2234,7 +2238,7 @@ rm -f {self.our_whl_path}/*
             # scmd = "pushd %s" % (path_to_dir)
             # lines.append(scmd)
             scmd = f"""
-{self.tb_mod} python -m pipenv run sh -c "pushd {path_to_dir};python3 setup.py clean --all;python3 setup.py bdist_wheel -d {relwheelpath};popd"
+{self.tb_mod} python -m pipenv run sh -c "pushd {path_to_dir}; $d/.venv/bin/python setup.py clean --all; $d/.venv/bin/python setup.py bdist_wheel -d {relwheelpath} ;popd"
 """
             lines.append(scmd)
             pass
@@ -2254,9 +2258,10 @@ rm -f {self.our_whl_path}/*
         scmd = f'''
 {self.tb_mod} python -m pipenv --rm || true
 {self.tb_mod} rm -f Pipfile*
-{self.tb_mod} python -m pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+{self.tb_mod} python -m pipenv install --python {self.spec.python_major_version}.{self.spec.python_minor_version}
 {self.tb_mod} python -m pipenv run python -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
+
 #{self.tb_mod} touch Pipfile
 
         lines.append(scmd)
