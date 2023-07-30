@@ -2286,7 +2286,7 @@ rm -f {self.our_whl_path}/*
         )}
 
 {self.tb_mod} pipenv --rm || true
-{self.tb_mod} pipenv install --python {self.tvars.python_version_1}.{self.tvars.python_version_2}
+{self.tb_mod} python -m pipenv install --python {self.spec.python_major_version}.{self.spec.python_minor_version}
 {self.tb_mod} pipenv run python -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 {self.tb_mod} pipenv run python -m pip list > {self.pip_list}
 {self.tb_mod} pipenv run python -m pip list --format json > {self.pip_list_json}
@@ -2365,7 +2365,8 @@ mkdir -p tmp/syslibs
 for PP in {pps}
 do
     PPN=`echo $PP | tr '-' '_'`
-    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
+    PPD=`echo $PP | tr '_' '-'`
+    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
     FILENAME=$PP-$VERSION
     if [ -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
 
@@ -2510,7 +2511,8 @@ mkdir -p $PIP_SOURCE_DIR
 for PP in {pps}
 do
     echo $PP
-    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
+    PPD=`echo $PP | tr '_' '-'`
+    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
     FILENAME=$PP-$VERSION
     if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
         echo **$FILENAME--
@@ -2554,8 +2556,10 @@ mkdir -p $PIP_SOURCE_DIR
         for pp, command, files_ in self.python_rebuild_profiles.get_commands_to_build_packages():
             lines.append(f'''
 PP={pp}
-VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PP\\")) | .[0].version"`
-FILENAME=$PP-$VERSION
+PPD=`echo $PP | tr '_' '-'`
+VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
+PPN=`echo $PP | tr '-' '_'`
+FILENAME=$PPN-$VERSION
 PPDIR=$PIP_SOURCE_DIR/$FILENAME
         ''')
             for file_ in files_ or []:    
