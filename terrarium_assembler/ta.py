@@ -2962,7 +2962,7 @@ rm -f {self.ext_compiled_tar_path}/*
                         continue
                     if 'setuptools' in line:
                         continue
-                for split_ in ['build/lib.linux-x86_64-3', f'skbuild/linux-x86_64-{self.python_version_for_build()}/cmake-install']:
+                for split_ in ['build/lib.linux-x86_64-3', 'build/lib.linux-x86_64-cpython-3', f'''skbuild/linux-x86_64-{self.python_version_for_build().replace('.', '')}/cmake-install''']:
                     if split_ in line:    
                         relname = '/'.join(line.split(split_)[1].split('/')[1:])
                         break
