@@ -667,7 +667,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c || true
         pass
 
     def python_version_for_build(self):
-        return '.'.join([self.spec.python_major_version, self.spec.python_minor_version])
+        return '.'.join([str(self.spec.python_major_version), str(self.spec.python_minor_version)])
 
     def toolbox_create_line(self):
         if not self.toolbox_mode:
