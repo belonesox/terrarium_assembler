@@ -666,6 +666,9 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c || true
         self.create_rebuilded_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.tarrepo_path}'
         pass
 
+    def python_version_for_build(self):
+        return '.'.join([self.spec.python_major_version, self.spec.python_minor_version])
+
     def toolbox_create_line(self):
         if not self.toolbox_mode:
             return ''
@@ -2258,7 +2261,7 @@ rm -f {self.our_whl_path}/*
         scmd = f'''
 {self.tb_mod} python -m pipenv --rm || true
 {self.tb_mod} rm -f Pipfile*
-{self.tb_mod} python -m pipenv install --python {self.spec.python_major_version}.{self.spec.python_minor_version}
+{self.tb_mod} python -m pipenv install --python python{self.python_version_for_build()}
 {self.tb_mod} python -m pipenv run python -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
 
@@ -2286,7 +2289,7 @@ rm -f {self.our_whl_path}/*
         )}
 
 {self.tb_mod} pipenv --rm || true
-{self.tb_mod} python -m pipenv install --python {self.spec.python_major_version}.{self.spec.python_minor_version}
+{self.tb_mod} python -m pipenv install --python python{self.python_version_for_build()}
 {self.tb_mod} pipenv run python -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 {self.tb_mod} pipenv run python -m pip list > {self.pip_list}
 {self.tb_mod} pipenv run python -m pip list --format json > {self.pip_list_json}
@@ -2371,8 +2374,8 @@ do
     if [ -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
 
 #{self.tb_mod} pipenv run python -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
-{self.tb_mod} rm -rf .venv/lib64/python3.10/site-packages/$PPN.libs
-{self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python3.10/site-packages/$PPN.libs
+{self.tb_mod} rm -rf .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
+{self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 
     fi
 done        
@@ -2959,7 +2962,7 @@ rm -f {self.ext_compiled_tar_path}/*
                         continue
                     if 'setuptools' in line:
                         continue
-                for split_ in ['build/lib.linux-x86_64-3', 'skbuild/linux-x86_64-3.10/cmake-install']:
+                for split_ in ['build/lib.linux-x86_64-3', f'skbuild/linux-x86_64-{self.python_version_for_build()}/cmake-install']:
                     if split_ in line:    
                         relname = '/'.join(line.split(split_)[1].split('/')[1:])
                         break
