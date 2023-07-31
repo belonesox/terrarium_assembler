@@ -2484,6 +2484,7 @@ done
         )}
 rm -f {self.base_whl_path}/*
 {self.tb_mod} {scmd}
+{self.tb_mod} bash -c "find {self.base_whl_path} -name '*.tar.*' | xargs -i[] -t $d/.venv/bin/python -m pip wheel [] --no-deps --wheel-dir {self.base_whl_path}"
 {save_state_hash(self.base_whl_path)}
 ''')
         mn_ = get_method_name()
