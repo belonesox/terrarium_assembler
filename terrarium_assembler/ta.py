@@ -2560,7 +2560,7 @@ PP={pp}
 PPD=`echo $PP | tr '_' '-'`
 VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
 PPN=`echo $PP | tr '-' '_'`
-FILENAME=$PPN-$VERSION
+FILENAME=$PP-$VERSION
 PPDIR=$PIP_SOURCE_DIR/$FILENAME
         ''')
             for file_ in files_ or []:    
