@@ -467,6 +467,8 @@ class TerrariumAssembler:
 sudo dnf install -y toolbox md5deep git git-lfs createrepo || true
 sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c || true
 ''')
+            if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
+                self.cmd('sudo ln -sf /usr/bin/createrepo_c /usr/bin/createrepo')
             sys.exit(0)
 
         specfile_ = expandpath(args.specfile)
@@ -2259,9 +2261,9 @@ rm -f {self.our_whl_path}/*
 
         lines = []
         scmd = f'''
-{self.tb_mod} python3 -m pipenv --rm || true
+{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
 {self.tb_mod} rm -f Pipfile*
-{self.tb_mod} python3 -m pipenv install --python python{self.python_version_for_build()}
+{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
 {self.tb_mod} ./.venv/bin/python3 -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
 
