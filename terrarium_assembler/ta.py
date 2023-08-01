@@ -3694,11 +3694,11 @@ overrides:
             if not packagetype in package_modes:
                 continue
             pkgdir = '../../' + self.out_dir + '.'+ packagetype
+            os.chdir(nfpm_dir)
             mkdir_p(pkgdir)
             scmd = f'''
 {self.tb_mod} nfpm pkg --packager {packagetype} --target {pkgdir}        
     '''.strip()
-            os.chdir(nfpm_dir)
             self.cmd(scmd)
 
             package_dir = f'out.{packagetype}'
