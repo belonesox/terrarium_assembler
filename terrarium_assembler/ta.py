@@ -744,7 +744,7 @@ toolbox create {self.environ_name} --distro fedora --release {self.spec.fc_versi
                 #!/usr/bin/env shellpy
                 lf.write(f"#!/usr/bin/env shellpy\n")
             else:    
-                lf.write(f"#!/bin/sh\n")
+                lf.write(f"#!/bin/bash\n")
             lf.write(f"# Generated {name} \n ")
             def bash_line(msg):
                 mod = ''
