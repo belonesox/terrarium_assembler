@@ -830,10 +830,7 @@ export PATH="/usr/lib64/ccache:$PATH"
         f"Sources for {build_name} not changed, skipping"
         )}
 
-        {self.tb_mod} bash -c 'time nice -19 pipenv run python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > {build_name}.log'
-# time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log || {{ echo 'Compilation failed' ; exit 1; }}
-#time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
-#time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
+        {self.tb_mod} bash -c 'time nice -19 ./.venv/bin/python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > {build_name}.log'
 {self.tb_mod} ./.venv/bin/python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
 mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
@@ -2243,7 +2240,7 @@ rm -f {self.our_whl_path}/*
             # scmd = "pushd %s" % (path_to_dir)
             # lines.append(scmd)
             scmd = f"""
-{self.tb_mod} python3 -m pipenv run sh -c "pushd {path_to_dir}; $d/.venv/bin/python3 setup.py clean --all; $d/.venv/bin/python3 setup.py bdist_wheel -d {relwheelpath} ;popd"
+{self.tb_mod} bash -c "pushd {path_to_dir}; $d/.venv/bin/python3 setup.py clean --all; $d/.venv/bin/python3 setup.py bdist_wheel -d {relwheelpath} ;popd"
 """
             lines.append(scmd)
             pass
@@ -2290,13 +2287,13 @@ rm -f {self.our_whl_path}/*
         f"Looks like dont need to update .venv"
         )}
 
-{self.tb_mod} pipenv --rm || true
-{self.tb_mod} python3 -m pipenv install --python python{self.python_version_for_build()}
+{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
+{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
 {self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {self.pip_list}
 {self.tb_mod} ./.venv/bin/python3 -m pip list --format json > {self.pip_list_json}
-{self.tb_mod} pipenv run pip-audit -o tmp/pip-audit-report.md -f markdown || true
-{self.tb_mod} pipenv run pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
+{self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.md -f markdown || true
+{self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
 {self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report.md -o tmp/pip-audit-report.wiki
 {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
 '''
@@ -2362,7 +2359,7 @@ rm -f {self.our_whl_path}/*
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
 
-{self.tb_mod} pipenv run python3 -m pip install --no-deps --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} ./.venv/bin/python3 -m pip install --no-deps --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 
 mkdir -p tmp/syslibs
 {self.tb_mod} bash -c "sudo ln -sf /usr/lib64/lib*.so* tmp/syslibs/"
@@ -2375,7 +2372,7 @@ do
     FILENAME=$PP-$VERSION
     if [ -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
 
-#{self.tb_mod} pipenv run python3 -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
+#{self.tb_mod} ./.venv/bin/python3 -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
 {self.tb_mod} rm -rf .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 {self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 
