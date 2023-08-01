@@ -555,7 +555,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c || true
                               'genisoimage', 'libtool', 'makeself', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
 
         self.minimal_pips = ['wheel']
-        self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons==3.1.2', 'graphviz']
+        self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons', 'graphviz']
 
 
         nflags_ = {}
@@ -832,8 +832,8 @@ export PATH="/usr/lib64/ccache:$PATH"
 # time nice -19 pipenv run python3 -X utf8 -m nuitka  {nflags} {flags_} {src} 2>&1 > {build_name}.log || {{ echo 'Compilation failed' ; exit 1; }}
 #time nice -19 pipenv run python3 -m nuitka --recompile-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
 #time nice -19 pipenv run python3 -m nuitka --generate-c-only {nflags} {flags_} {src} 2>&1 > {build_name}.log
-{self.tb_mod} python -m pipenv run python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
-{self.tb_mod} python -m pipenv run python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
+{self.tb_mod} ./.venv/bin/python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
+{self.tb_mod} ./.venv/bin/python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
 mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
     """)
                 self.fs.folders.append(ok_dir)
@@ -1532,8 +1532,8 @@ pushd "{path_to_dir}"
 git config core.fileMode false
 git config core.autocrlf input
 git pull
-python -m pipenv run python -m pip uninstall  {probably_package_name} -y
-python -m pipenv run python setup.py develop
+./.venv/bin/python3 -m pip uninstall  {probably_package_name} -y
+./.venv/bin/python3 setup.py develop
 popd
 ''' )
 
@@ -2241,7 +2241,7 @@ rm -f {self.our_whl_path}/*
             # scmd = "pushd %s" % (path_to_dir)
             # lines.append(scmd)
             scmd = f"""
-{self.tb_mod} python -m pipenv run sh -c "pushd {path_to_dir}; $d/.venv/bin/python setup.py clean --all; $d/.venv/bin/python setup.py bdist_wheel -d {relwheelpath} ;popd"
+{self.tb_mod} python3 -m pipenv run sh -c "pushd {path_to_dir}; $d/.venv/bin/python3 setup.py clean --all; $d/.venv/bin/python3 setup.py bdist_wheel -d {relwheelpath} ;popd"
 """
             lines.append(scmd)
             pass
@@ -2259,10 +2259,10 @@ rm -f {self.our_whl_path}/*
 
         lines = []
         scmd = f'''
-{self.tb_mod} python -m pipenv --rm || true
+{self.tb_mod} python3 -m pipenv --rm || true
 {self.tb_mod} rm -f Pipfile*
-{self.tb_mod} python -m pipenv install --python python{self.python_version_for_build()}
-{self.tb_mod} python -m pipenv run python -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} python3 -m pipenv install --python python{self.python_version_for_build()}
+{self.tb_mod} ./.venv/bin/python3 -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
 
 #{self.tb_mod} touch Pipfile
@@ -2289,10 +2289,10 @@ rm -f {self.our_whl_path}/*
         )}
 
 {self.tb_mod} pipenv --rm || true
-{self.tb_mod} python -m pipenv install --python python{self.python_version_for_build()}
-{self.tb_mod} pipenv run python -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
-{self.tb_mod} pipenv run python -m pip list > {self.pip_list}
-{self.tb_mod} pipenv run python -m pip list --format json > {self.pip_list_json}
+{self.tb_mod} python3 -m pipenv install --python python{self.python_version_for_build()}
+{self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} ./.venv/bin/python3 -m pip list > {self.pip_list}
+{self.tb_mod} ./.venv/bin/python3 -m pip list --format json > {self.pip_list_json}
 {self.tb_mod} pipenv run pip-audit -o tmp/pip-audit-report.md -f markdown || true
 {self.tb_mod} pipenv run pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
 {self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report.md -o tmp/pip-audit-report.wiki
@@ -2329,7 +2329,7 @@ rm -f {self.our_whl_path}/*
         f"Looks like dont need to do {mn_}"
         )}
 
-{self.tb_mod} sudo python -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 '''
 
         lines.append(scmd)   # --no-cache-dir
@@ -2360,7 +2360,7 @@ rm -f {self.our_whl_path}/*
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
 
-{self.tb_mod} pipenv run python -m pip install --no-deps --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} pipenv run python3 -m pip install --no-deps --force-reinstall `ls {self.rebuilded_whl_path}/*.whl`  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 
 mkdir -p tmp/syslibs
 {self.tb_mod} bash -c "sudo ln -sf /usr/lib64/lib*.so* tmp/syslibs/"
@@ -2373,7 +2373,7 @@ do
     FILENAME=$PP-$VERSION
     if [ -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
 
-#{self.tb_mod} pipenv run python -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
+#{self.tb_mod} pipenv run python3 -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
 {self.tb_mod} rm -rf .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 {self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 
@@ -2480,14 +2480,14 @@ done
         bws =  self.base_wheels_string()
 
         # pipenv environment does not exists we using regular python to download base packages.
-        scmd = f"python -m pip download  {bws} --dest {self.base_whl_path} "
+        scmd = f"python3 -m pip download  {bws} --dest {self.base_whl_path} "
         lines.append(f'''
 {bashash_ok_folders_strings(self.base_whl_path, [], [bws],
         f"Looks required base wheels already downloaded"
         )}
 rm -f {self.base_whl_path}/*
 {self.tb_mod} {scmd}
-{self.tb_mod} bash -c "find {self.base_whl_path} -name '*.tar.*' | xargs -i[] -t $d/.venv/bin/python -m pip wheel [] --no-deps --wheel-dir {self.base_whl_path}"
+{self.tb_mod} bash -c "find {self.base_whl_path} -name '*.tar.*' | xargs -i[] -t $d/.venv/bin/python3 -m pip wheel [] --no-deps --wheel-dir {self.base_whl_path}"
 {save_state_hash(self.base_whl_path)}
 ''')
         mn_ = get_method_name()
@@ -2597,8 +2597,8 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
         remove_pips = self.pp.remove_from_download or []
         remove_pips_str = " ".join(remove_pips)
 
-        scmd = f"python -m pipenv run python -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
-        scmd_srcs = f"{self.tb_mod} python -m pipenv run python -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
+        scmd = f"./.venv/bin/python3 -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
+        scmd_srcs = f"{self.tb_mod} ./.venv/bin/python3 -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
         lines.append(f'''
 {bashash_ok_folders_strings(self.ext_whl_path, [self.src_dir], [scmd, remove_pips_str],
         f"Looks required RPMs already downloaded"
@@ -2612,7 +2612,7 @@ rm -f {self.ext_whl_path}/*
             scmd = f'rm -f {self.ext_whl_path}/{py_}-*'
             lines.append(scmd)
         lines.append(f'''
-{self.tb_mod} python -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
+{self.tb_mod} python3 -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
 {save_state_hash(self.ext_whl_path)}
 ''')
         mn_ = get_method_name()
@@ -2642,7 +2642,7 @@ rm -f {self.ext_whl_path}/*
         )}
                
 rm -f {self.ext_compiled_tar_path}/*
-{self.tb_mod} bash -c "find {self.ext_whl_path} -name '*.tar.*' | xargs -i[] -t python -m pipenv run python -m pip wheel [] --no-deps --wheel-dir {self.ext_compiled_tar_path}"
+{self.tb_mod} bash -c "find {self.ext_whl_path} -name '*.tar.*' | xargs -i[] -t ./.venv/bin/python3 -m pip wheel [] --no-deps --wheel-dir {self.ext_compiled_tar_path}"
 {save_state_hash(self.ext_compiled_tar_path)}
 ''')
         mn_ = get_method_name()
@@ -3788,7 +3788,7 @@ overrides:
         os.chdir(self.curdir)
         lines = []
         lines.append(f'''
-{self.tb_mod} python -m pipenv run pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
+{self.tb_mod} ./.venv/bin/python3 -m pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
 ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
