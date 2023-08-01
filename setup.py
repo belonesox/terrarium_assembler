@@ -19,6 +19,7 @@ requirements = [
     'python-magic',
     'jinja2', 
     'pyyaml',
+    'packaging',
     'prettytable',
     'pipenv',
     'imohash',
