@@ -48,7 +48,7 @@ def bashash_stop_if_not_changed(listvar, msg, cont=False):
     complex_hash_ = ' + '.join([f'$HASH_{v}' for v in listvar])
     scmd = f'''
 HASH_STATE="{complex_hash_}"    
-if [[ "$OLD_HASH" == "$HASH_STATE" ]] then
+if [[ "$OLD_HASH" == "$HASH_STATE" ]]; then
     echo "{msg}"
     {exit_mod}
 fi
