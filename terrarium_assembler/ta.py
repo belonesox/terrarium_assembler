@@ -464,8 +464,8 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep git git-lfs createrepo || true
-sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c || true
+sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf || true
+sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf  || true
 ''')
             if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
                 self.cmd('sudo ln -sf /usr/bin/createrepo_c /usr/bin/createrepo')
