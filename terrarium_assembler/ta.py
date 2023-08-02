@@ -513,6 +513,8 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.spec, vars_ = yaml_load(specfile_, self.tvars)
         self.tvars = edict(vars_)
         spec = self.spec
+        self.tvars.python_version_1 = self.spec.python_major_version
+        self.tvars.python_version_2 = self.spec.python_minor_version
 
         for term in self.args.override_spec:
             if '=' in term:
