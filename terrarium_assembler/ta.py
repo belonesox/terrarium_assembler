@@ -445,7 +445,7 @@ class TerrariumAssembler:
 
         for cs_, filter_ in complex_stages.items():
             desc = []
-            selected_stages_ = [fname2stage(s_) for s_ in self.stages_names if filter_(s_)]
+            selected_stages_ = [fname2stage(s_).replace('_', '-') for s_ in self.stages_names if filter_(s_)]
             desc = ' + '.join(selected_stages_)
             ap.add_argument(f'--{cs_}', default=False, action='store_true', help=f'{desc}')
             
@@ -464,8 +464,8 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf || true
-sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf  || true
+sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop || true
+sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop  || true
 ''')
             if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
                 self.cmd('sudo ln -sf /usr/bin/createrepo_c /usr/bin/createrepo')
@@ -556,7 +556,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
                               'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs', 'git',
-                              'genisoimage', 'libtool', 'makeself', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
+                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
 
         self.minimal_pips = ['wheel']
         self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons', 'graphviz']
@@ -2055,7 +2055,7 @@ done
         '''
         lines = []
         lines.append(f'''
-{self.tb_mod} rpm -qa --queryformat "[%{{=NAME}}{ROW_SPLIT}%{{=VERSION}}{ROW_SPLIT}%{{=RELEASE}}{ROW_SPLIT}%{{=BUILDTIME}}{ROW_SPLIT}%{{=BUILDHOST}}{ROW_SPLIT}%{{FILENAMES}}\\n]"  > {self.file_package_list_from_rpms}
+{self.tb_mod} bash -c "rpm -qa --queryformat '[%{{=NAME}}{ROW_SPLIT}%{{=VERSION}}{ROW_SPLIT}%{{=RELEASE}}{ROW_SPLIT}%{{=BUILDTIME}}{ROW_SPLIT}%{{=BUILDHOST}}{ROW_SPLIT}%{{FILENAMES}}\\n]' > {self.file_package_list_from_rpms} "
 {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --queryformat "%{{name}}" --resolve --recursive --cacheonly --requires {self.terra_package_names} > {self.terra_rpms_closure}
 {self.tb_mod} rpm -qa --queryformat "%{{NAME}} " > tmp/rpm-packages-names-list.txt
 ''')
