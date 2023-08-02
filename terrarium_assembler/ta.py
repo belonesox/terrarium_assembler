@@ -3254,7 +3254,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
-            if 'bin/pdftoppm' in fpl_.filename:    
+            if 'nettle' in fpl_.filename:    
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
                 ok = True
