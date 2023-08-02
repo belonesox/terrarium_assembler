@@ -2055,7 +2055,7 @@ done
         '''
         lines = []
         lines.append(f'''
-{self.tb_mod} rpm -qa --queryformat "[%{{=NAME}}{ROW_SPLIT}%{{=VERSION}}{ROW_SPLIT}%{{=RELEASE}}{ROW_SPLIT}%{{=BUILDTIME}}{ROW_SPLIT}%{{=BUILDHOST}}{ROW_SPLIT}%{{FILENAMES}}\\n]"  > {self.file_package_list_from_rpms}
+{self.tb_mod} bash -c "rpm -qa --queryformat '[%{{=NAME}}{ROW_SPLIT}%{{=VERSION}}{ROW_SPLIT}%{{=RELEASE}}{ROW_SPLIT}%{{=BUILDTIME}}{ROW_SPLIT}%{{=BUILDHOST}}{ROW_SPLIT}%{{FILENAMES}}\\n]' > {self.file_package_list_from_rpms} "
 {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --queryformat "%{{name}}" --resolve --recursive --cacheonly --requires {self.terra_package_names} > {self.terra_rpms_closure}
 {self.tb_mod} rpm -qa --queryformat "%{{NAME}} " > tmp/rpm-packages-names-list.txt
 ''')
