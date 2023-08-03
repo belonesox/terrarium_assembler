@@ -525,6 +525,8 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
 
         # self.start_dir = os.getcwd()
 
+        self.disable_patchelf = False
+
         need_patch = just_copy = need_exclude = None
         if 'bin_regexps' in spec:
             br_ = spec.bin_regexps
@@ -1202,8 +1204,11 @@ popd
         if not path.startswith(os.path.sep):
             return path
 
-        if path.startswith('/home'):
+        if Path(path).is_relative_to(self.curdir):
             return path
+
+        # if path.startswith('/home'):
+        #     return path
 
         if not self.container_path or not any(self.container_path.iterdir()):
             if not  self.container_info:
@@ -1346,10 +1351,11 @@ popd
 
         if libpath:
             try:
-                subprocess.check_call(['patchelf',
-                                    '--set-rpath',
-                                    libpath,
-                                    patched_elf])
+                if not self.disable_patchelf:
+                    subprocess.check_call(['patchelf',
+                                        '--set-rpath',
+                                        libpath,
+                                        patched_elf])
             except Exception as ex_:
                 print("Cannot patch ", path)
                 pass
@@ -1392,8 +1398,7 @@ popd
 
         if not self.interpreter:
             self.interpreter = subprocess.check_output(['patchelf', '--print-interpreter', patched_binary], universal_newlines=True).splitlines()[0]
-            patched_interpreter = self.fix_elf(os.path.realpath(self.interpreter))
-            tb_patched_interpreter = self.toolbox_path(patched_interpreter)
+            patched_interpreter = self.fix_elf(self.toolbox_path(os.path.realpath(self.interpreter)))
             self.add(patched_interpreter, self.out_interpreter)
             self.bin_files.add( self.out_interpreter )
         # except Exception as ex_:
@@ -3297,10 +3302,15 @@ rm -f {self.ext_compiled_tar_path}/*
                                     package_ = 'basicpython'
                                 if '.' in package_:
                                     package_ = package_.split('.')[0]
+                                if 'libgeos' in sp_:
+                                    wtf = 1
                                 spr_ = Path(sp_.replace('${sys.prefix}', '.venv').replace('${sys.real_prefix}', '')).resolve()
                                 if '.venv/lib64' in spr_.as_posix():
                                     wtf = 1
                                 # assert(spr_.exists())
+                                # pp_ = spr_.as_posix()
+                                # if spr_.is_relative_to(self.curdir):
+                                #     pp_ = spr_.relative_to(self.curdir).as_posix()
                                 map2source[dp_] = spr_.as_posix()
                                 if 'libgcc_s.so.1' in dp_ :
                                     wtf  = 1
@@ -3308,7 +3318,7 @@ rm -f {self.ext_compiled_tar_path}/*
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
-                        if 'libamd.so' in f:
+                        if 'libgeos' in f:
                             wtf  = 1
                         if '_qpdf.so' in f:    
                             wtf = 1
@@ -3318,7 +3328,7 @@ rm -f {self.ext_compiled_tar_path}/*
                             wtf  = 1
                         if rf in map2source:
                             f = map2source[rf]
-                            if '.venv/lib64' in f:
+                            if '.venv/lib' in f:
                                 wtf = 1
                             sfilename = os.path.split(f)[-1]
                         if 'dm_ort.cpython-310-x86_64-linux-gnu.so' in f:
