@@ -381,6 +381,7 @@ class TerrariumAssembler:
         self.so_files_from_rebuilded_pips = 'tmp/so-files-from-rebuilded-pips.txt'
         self.so_files_from_our_packages = 'tmp/so-files-from-our-packages.txt'
         self.file_list_from_rpms = 'tmp/file-list-from-rpm.txt'
+        self.ld_so_path = 'tmp/ld_so_path.txt'
         self.file_package_list_from_rpms = 'tmp/file-package-list-from-rpm.txt'
         self.src_deps_packages = 'tmp/src_deps_packages.txt'
         self.src_deps_packages_main = 'tmp/src_deps_packages_main.txt'
@@ -1397,14 +1398,11 @@ popd
             raise ex_
 
         if not self.interpreter:
-            self.interpreter = subprocess.check_output(['patchelf', '--print-interpreter', patched_binary], universal_newlines=True).splitlines()[0]
+            with open(self.ld_so_path, 'r') as lf:
+                self.interpreter = lf.read().strip()
             patched_interpreter = self.fix_elf(self.toolbox_path(os.path.realpath(self.interpreter)))
             self.add(patched_interpreter, self.out_interpreter)
             self.bin_files.add( self.out_interpreter )
-        # except Exception as ex_:
-        #     print('Cannot get interpreter for binary', binpath)
-        #     # raise ex_
-        # pass
 
         self.add(patched_binary, new_path_for_binary)
         self.bin_files.add( new_path_for_binary )
@@ -2167,6 +2165,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
 {self.tb_mod} cat {self.file_list_from_terra_rpms} {self.file_list_from_deps_rpms} > {self.file_list_from_rpms}
+{self.tb_mod} patchelf --print-interpreter /usr/bin/createrepo > {self.ld_so_path}
 """ 
 #{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.doc_list_from_deps_rpms}
 #{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --cacheonly --list {terra_package_names} > {self.doc_list_from_terra_rpms}
