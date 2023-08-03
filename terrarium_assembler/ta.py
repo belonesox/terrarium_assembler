@@ -1400,7 +1400,7 @@ popd
         if not self.interpreter:
             with open(self.ld_so_path, 'r') as lf:
                 self.interpreter = lf.read().strip()
-            patched_interpreter = self.fix_elf(self.toolbox_path(os.path.realpath(self.interpreter)))
+            patched_interpreter = self.fix_elf(self.toolbox_path(self.interpreter))
             self.add(patched_interpreter, self.out_interpreter)
             self.bin_files.add( self.out_interpreter )
 
@@ -3319,7 +3319,7 @@ rm -f {self.ext_compiled_tar_path}/*
                         f = os.path.join(dirpath, filename)
                         if 'libgeos' in f:
                             wtf  = 1
-                        if '_qpdf.so' in f:    
+                        if 'libb2.so.1' in f:    
                             wtf = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
@@ -3355,7 +3355,7 @@ rm -f {self.ext_compiled_tar_path}/*
                         except Exception as ex_:
                             print("Cannot detect Magic for ", f)
                             raise ex_
-                        if m.startswith('ELF') and 'shared' in m:
+                        if m.startswith('ELF') and 'shared' in m  or 'symbolic' in m:
                             # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
                             if 'zlib.so' in filename:
                                 wtf = 1
