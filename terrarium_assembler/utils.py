@@ -204,6 +204,8 @@ def yaml_load(filename, vars__=None):
     try:
         for try_ in range(5):
             real_yaml = template.render(vars_)
+            with open("tmp/last-real-spec.yml", 'w', encoding='utf-8') as lf:
+                lf.write(real_yaml)
             ld = yaml.safe_load(real_yaml)
             vars_ = {**vars_, **ld}
 

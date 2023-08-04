@@ -372,6 +372,10 @@ class TerrariumAssembler:
         self.patching_dir = 'tmp/patching'
         mkdir_p(self.patching_dir)
 
+        mkdir_p('reports')
+
+        self.report_binary_files_path = 'reports/binary-files-report.txt'
+        self.not_need_packages_to_rebuild_in_terra_path = 'reports/not-need-packages-to-rebuild-in-terra.txt'
         self.file_list_from_terra_rpms = 'tmp/file-list-from-terra-rpms.txt'
         self.terra_rpms_closure = 'tmp/terra-rpms-closure.txt'
         self.doc_list_from_terra_rpms = 'tmp/doc-list-from-terra-rpms.txt'
@@ -435,6 +439,7 @@ class TerrariumAssembler:
                         help='Perform lazy git sync for all projects')
         ap.add_argument('--step-from', type=int, default=0, help='Step from')
         ap.add_argument('--step-to', type=int, default=0, help='Step from')
+        ap.add_argument('--steps', type=str, default='', help='Steps like page list or intervals')
         ap.add_argument('specfile', type=str, help='Specification File')
         ap.add_argument('-o', '--override-spec', action='append', help='Override variable from SPEC file', default=[])
 
@@ -456,6 +461,13 @@ class TerrariumAssembler:
             for s_ in self.stages_names:
                 if args.step_from <= fname2num(s_) <= args.step_to:
                     setattr(self.args, fname2stage(s_).replace('-','_'), True)
+
+        if args.steps:
+            for step_ in args.steps.split(','):
+                for s_ in self.stages_names:
+                    if fname2num(s_) == int(step_):
+                        setattr(self.args, fname2stage(s_).replace('-','_'), True)
+
 
         for cs_, filter_ in complex_stages.items():
             if vars(self.args)[cs_.replace('-','_')]:
@@ -835,7 +847,7 @@ export PATH="/usr/lib64/ccache:$PATH"
         f"Sources for {build_name} not changed, skipping"
         )}
 
-        {self.tb_mod} bash -c 'time nice -19 ./.venv/bin/python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > {build_name}.log'
+        {self.tb_mod} bash -c 'time nice -19 ./.venv/bin/python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > reports/{build_name}.log'
 {self.tb_mod} ./.venv/bin/python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
 mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
@@ -2736,6 +2748,7 @@ rm -f {self.ext_compiled_tar_path}/*
                     if m_:
                         fname = m_.group('filename')
                         # Heuristic to process strace files from Vagrant virtualboxes
+                        fname = fname.replace('/run/host', '')
                         fname = fname.replace('/vagrant', self.curdir)
                         # Heuristic to process strace files from remote VM, mounted by sshmnt
                         fname = re.sub(
@@ -2773,13 +2786,13 @@ rm -f {self.ext_compiled_tar_path}/*
                 not_used_packages.add(p_)
             pass
 
-        with open('likely-not-used-packages.txt', 'w') as lf:
-            lf.write('\n - '.join([''] + sorted(list(not_used_packages))))
+        with open('reports/likely-not-used-rpm-packages-in-terra.txt', 'w') as lf:
+            lf.write('\n    - '.join([''] + sorted(list(not_used_packages))))
 
-        with open('used-packages.txt', 'w') as lf:
+        with open('reports/used-packages.txt', 'w') as lf:
             lf.write('\n - '.join([''] + sorted(list(packages_from_build - not_used_packages))))
 
-        with open('used-files.txt', 'w') as lf:
+        with open('reports/used-files.txt', 'w') as lf:
             lf.write('\n - '.join([''] + sorted(list(used_files))))
 
         lines = []
@@ -2833,7 +2846,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
             lines.append(f'      - .*{f_} # \t {s} \t {rel_f}')
 
-        with open('recommend-for-exclude.txt', 'w') as lf:
+        with open('reports/recommend-for-exclude.txt', 'w') as lf:
             lf.write('\n'.join(lines))
         # print("\n".join([f'{f}: \t {s}' for f,s in top10]))
 
@@ -3114,7 +3127,7 @@ rm -f {self.ext_compiled_tar_path}/*
             for r_ in json_:
                 rows_.append([r_['name'], r_['version']])
 
-            write_doc_table('doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
+            write_doc_table('reports/doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
         except Exception as ex_:
             print(ex_)
             pass
@@ -3465,7 +3478,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
         remove_exclusions()
 
-        with open(f'{self.curdir}/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
+        with open(f'{self.curdir}/reports/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
             lf.write('obsoletes excludes \n')
             for re_, cnt_ in self.br.need_exclude_re.items():
                 if cnt_ == 0:
@@ -3541,7 +3554,7 @@ rm -f {self.ext_compiled_tar_path}/*
         lines.append(f'\nPython packages recommended for rebuild')
         lines.append('\n - '.join([''] + sorted(python_packages_recommended_for_rebuild)))
 
-        with open(os.path.join(self.curdir, 'binary-files-report.txt'), 'w') as lf:
+        with open(os.path.join(self.curdir, self.report_binary_files_path), 'w') as lf:
             lf.write('\n'.join(lines))
 
         lines = []
@@ -3555,8 +3568,8 @@ rm -f {self.ext_compiled_tar_path}/*
             lf.write(yaml.dump(file_source_table))
             # lf.write(json.dumps(file_source_table))
 
-        # with open(os.path.join(self.curdir, self.bin_files_sources_path), 'w') as lf:
-        #     lf.write(yaml.dump(bin_files_sources))
+        with open(os.path.join(self.curdir, self.bin_files_sources_path), 'w') as lf:
+            lf.write(yaml.dump(self.bin_files_sources_path))
 
         unique_packages = set([row.source for row in file_source_table.values() if row.source_type == SourceType.rebuilded_rpm_package.value])
         not_need_packages_to_rebuild = []
@@ -3564,7 +3577,7 @@ rm -f {self.ext_compiled_tar_path}/*
             if p not in unique_packages:
                 not_need_packages_to_rebuild.append(p)
 
-        with open(os.path.join(self.curdir, 'not-need-packages-to-rebuild-in-terra.txt'), 'w') as lf:
+        with open(os.path.join(self.curdir, self.not_need_packages_to_rebuild_in_terra_path), 'w') as lf:
             lf.write('\n - '.join([''] + not_need_packages_to_rebuild))
 
 
