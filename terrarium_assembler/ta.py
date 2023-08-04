@@ -437,8 +437,8 @@ class TerrariumAssembler:
                         help='Perform some shell command for all projects')
         ap.add_argument('--git-sync', default='', type=str,
                         help='Perform lazy git sync for all projects')
-        ap.add_argument('--step-from', type=int, default=0, help='Step from')
-        ap.add_argument('--step-to', type=int, default=0, help='Step from')
+        # ap.add_argument('--step-from', type=int, default=0, help='Step from')
+        # ap.add_argument('--step-to', type=int, default=0, help='Step from')
         ap.add_argument('--steps', type=str, default='', help='Steps like page list or intervals')
         ap.add_argument('specfile', type=str, help='Specification File')
         ap.add_argument('-o', '--override-spec', action='append', help='Override variable from SPEC file', default=[])
@@ -457,16 +457,24 @@ class TerrariumAssembler:
             
         self.args = args = ap.parse_args()
 
-        if args.step_from or args.step_to:
-            for s_ in self.stages_names:
-                if args.step_from <= fname2num(s_) <= args.step_to:
-                    setattr(self.args, fname2stage(s_).replace('-','_'), True)
+        # if args.step_from or args.step_to:
+        #     for s_ in self.stages_names:
+        #         if args.step_from <= fname2num(s_) <= args.step_to:
+        #             setattr(self.args, fname2stage(s_).replace('-','_'), True)
 
         if args.steps:
             for step_ in args.steps.split(','):
-                for s_ in self.stages_names:
-                    if fname2num(s_) == int(step_):
-                        setattr(self.args, fname2stage(s_).replace('-','_'), True)
+                if '-' in step_:
+                    sfrom, sto = step_.split('-')
+                    for s_ in self.stages_names:
+                        if int(sfrom) <= fname2num(s_) <= int(sto):
+                            setattr(self.args, fname2stage(s_).replace('-','_'), True)
+                else:
+                    for s_ in self.stages_names:
+                        if fname2num(s_) == int(step_):
+                            setattr(self.args, fname2stage(s_).replace('-','_'), True)
+
+
 
 
         for cs_, filter_ in complex_stages.items():
