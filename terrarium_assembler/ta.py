@@ -440,6 +440,7 @@ class TerrariumAssembler:
         # ap.add_argument('--step-from', type=int, default=0, help='Step from')
         # ap.add_argument('--step-to', type=int, default=0, help='Step from')
         ap.add_argument('--steps', type=str, default='', help='Steps like page list or intervals')
+        ap.add_argument('--skip-words', type=str, default='', help='Skip steps that contain these words (comma, separated)')
         ap.add_argument('specfile', type=str, help='Specification File')
         ap.add_argument('-o', '--override-spec', action='append', help='Override variable from SPEC file', default=[])
 
@@ -462,6 +463,12 @@ class TerrariumAssembler:
         #         if args.step_from <= fname2num(s_) <= args.step_to:
         #             setattr(self.args, fname2stage(s_).replace('-','_'), True)
 
+        if args.skip_words:
+            for word_ in args.skip_words.split(','):
+                for s_ in self.stages_names:
+                    if word_ in s_:
+                        setattr(self.args, fname2stage(s_).replace('-','_'), False)
+
         if args.steps:
             for step_ in args.steps.split(','):
                 if '-' in step_:
@@ -473,7 +480,6 @@ class TerrariumAssembler:
                     for s_ in self.stages_names:
                         if fname2num(s_) == int(step_):
                             setattr(self.args, fname2stage(s_).replace('-','_'), True)
-
 
 
 
