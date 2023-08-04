@@ -495,13 +495,6 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         specfile_ = expandpath(args.specfile)
 
         self.start_dir = self.curdir = os.path.split(specfile_)[0]
-        terms = self.curdir.split(os.path.sep)
-        terms.reverse()
-        self.environ_name = '-'.join(terms[:2])
-        self.tb_mod = ''
-        if self.toolbox_mode:
-            self.tb_mod = f'toolbox run -c {self.environ_name}'
-        self.rm_locales = f'''{self.tb_mod} bash -c 'ls /usr/share/locale/ | grep -v "en$" | xargs -i{{}} sudo rm -rf /usr/share/locale/{{}}' '''
 
         # self.common_cache_dir = Path('/tmp/ta_cache')
         # self.common_cache_dir.mkdir(exist_ok=True, parents=True)
@@ -541,6 +534,17 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
             if '=' in term:
                 k_, v_ = term.split('=')
                 self.spec[k_.strip()] = v_.strip()
+
+        # Here we should completely define params and specs
+
+        terms = self.curdir.split(os.path.sep)
+        terms.reverse()
+        self.container_name = '-'.join(terms[:2] + [f'fc{self.spec.fc_version}'])
+        self.tb_mod = ''
+        if self.toolbox_mode:
+            self.tb_mod = f'toolbox run -c {self.container_name}'
+        self.rm_locales = f'''{self.tb_mod} bash -c 'ls /usr/share/locale/ | grep -v "en$" | xargs -i{{}} sudo rm -rf /usr/share/locale/{{}}' '''
+
 
         self.disttag = 'zzz' + str(self.spec.fc_version)   # self.disttag self.spec.label
 
@@ -637,12 +641,17 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         mkdir_p('tmp')
 
         def in_bin_fld(subfolder):
-            folder_ = os.path.join(self.in_bin, subfolder)
+            folder_ = os.path.join(self.in_bin, f'fc{self.spec.fc_version}', subfolder)
             mkdir_p(folder_)
             return folder_
 
         def rpmrepo(subfolder):
             folder_ =  self.rpmrepo_path + '/' + subfolder
+            mkdir_p(folder_)
+            return folder_
+
+        def rebuildedrepo(subfolder):
+            folder_ =  self.tarrepo_path + '/' + subfolder
             mkdir_p(folder_)
             return folder_
 
@@ -652,25 +661,25 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
             return folder_
 
         self.rpmrepo_path = in_bin_fld("rpmrepo")
+        self.tarrepo_path = in_bin_fld("rebuilded-repo")
+
         self.rpms_backup_pool = in_bin_fld("rpms_backup_pool")
-        self.our_whl_path = in_bin_fld("ourwheel")
-        self.ext_whl_path = in_bin_fld("extwheel")
-        self.rebuilded_whl_path = in_bin_fld("rebuilded_whls")
-        self.pip_source_path = in_bin_fld("pip_source_to_rebuild")
-        self.ext_compiled_tar_path = in_bin_fld("ext_compiled_tar")
-        self.ext_pip_path = in_bin_fld("extpip")
-        self.base_whl_path = in_bin_fld("basewheel")
+        self.our_whl_path = in_bin_fld("our_python_wheels")
+        self.ext_whl_path = in_bin_fld("external_python_wheels_resolved_dependencies")
+        self.rebuilded_whl_path = in_bin_fld("rebuilded_python_wheels")
+        self.pip_source_path = in_bin_fld("pip_sources_to_rebuild")
+        self.ext_compiled_tar_path = in_bin_fld("external_python_tars")
+        # self.ext_pip_path = in_bin_fld("extpip")
+        self.base_whl_path = in_bin_fld("external_python_wheels_fixed_versions")
+
+        self.states_path =  in_bin_fld("states")
+        self.rpmbuild_path =  in_bin_fld("rpmbuild")
+
         self.rpms_path = rpmrepo("rpms")
         self.srpms_path = rpmrepo("srpms")
         self.build_deps_rpms = rpmrepo("build-deps-rpms")
-        # self.base_rpms_path = rpmrepo("base-rpms")
-        self.tarrepo_path = in_bin_fld("rebuilded-repo")
-        self.states_path =  in_bin_fld("states")
-        self.rpmbuild_path =  in_bin_fld("rpmbuild")
-        self.rebuilded_rpms_path = in_bin_fld("rebuilded-repo/rebuilded-rpms")
 
-        # looks like we dont need it anymore
-        # os.environ['PATH'] = "/usr/lib64/ccache:" + os.environ['PATH']
+        self.rebuilded_rpms_path = rebuildedrepo("rebuilded-rpms")
 
         self.nuitka_plugins_dir = os.path.realpath(os.path.join(
             os.path.split(__file__)[0], '..', 'nuitka_plugins'))
@@ -701,12 +710,10 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
             return ''
 
         scmd = f'''
-toolbox rm -f {self.environ_name} -y || true
-toolbox create {self.environ_name} --distro fedora --release {self.spec.fc_version} -y;
+toolbox rm -f {self.container_name} -y || true
+toolbox create {self.container_name} --distro fedora --release {self.spec.fc_version} -y;
 '''
         return scmd
-# toolbox run --container {self.environ_name} sudo dnf install -y dnf-utils
-
 
     @property
     def installed_packages(self):
@@ -1210,7 +1217,7 @@ popd
     def prefix_args_for_toolbox(self):
         args_ = []
         if self.toolbox_mode:
-            args_ += ['toolbox', 'run', '--container', self.environ_name]
+            args_ += ['toolbox', 'run', '--container', self.container_name]
         return  args_   
 
     def lines_from_cmd(self, args):
@@ -1235,10 +1242,10 @@ popd
             if not  self.container_info:
                 inspect_file = Path(self.curdir) / 'tmp/container.json'
                 # if not inspect_file.exists():
-                os.system(f'podman inspect {self.environ_name} > {inspect_file}')
+                os.system(f'podman inspect {self.container_name} > {inspect_file}')
                 assert(inspect_file.exists())    
                 self.container_info = json.loads(open(inspect_file).read())
-            self.container_path = Path('/tmp') / 'overlay' / self.environ_name                
+            self.container_path = Path('/tmp') / 'overlay' / self.container_name                
             self.container_path.mkdir(exist_ok=True, parents=True)
             upper = Path(self.container_info[0]["GraphDriver"]["Data"]["UpperDir"])
             lower = Path(self.container_info[0]["GraphDriver"]["Data"]["LowerDir"])
@@ -2249,8 +2256,7 @@ rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
         bindir_ = os.path.abspath(self.in_bin)
         lines = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
-        wheelpath = os.path.join(self.in_bin, "ourwheel")
-        relwheelpath = os.path.relpath(wheelpath, start=self.curdir)
+        relwheelpath = os.path.relpath(self.rebuilded_whl_path, start=self.curdir)
         lines.append(fR'''
 {bashash_ok_folders_strings(self.our_whl_path, [self.src_dir], [],
 f"Looks like sources not changed, not need to rebuild WHLs for our sources"
@@ -2258,13 +2264,10 @@ f"Looks like sources not changed, not need to rebuild WHLs for our sources"
 rm -f {self.our_whl_path}/*
 ''')
         for td_ in self.pp.projects():
-            # , local_ in [ (x, True) for x in self.pp.build ] + [(x, False) for x in (self.pp.terra if self.pp.terra else [])]:
             git_url, git_branch, path_to_dir_, setup_path = self.explode_pp_node(
                 td_)
             path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
-            relwheelpath = os.path.relpath(wheelpath, start=path_to_dir_)
-            # scmd = "pushd %s" % (path_to_dir)
-            # lines.append(scmd)
+            relwheelpath = os.path.relpath(self.our_whl_path, start=path_to_dir_)
             scmd = f"""
 {self.tb_mod} bash -c "pushd {path_to_dir}; $d/.venv/bin/python3 setup.py clean --all; $d/.venv/bin/python3 setup.py bdist_wheel -d {relwheelpath} ;popd"
 """
@@ -2623,7 +2626,7 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
         remove_pips_str = " ".join(remove_pips)
 
         scmd = f"./.venv/bin/python3 -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
-        scmd_srcs = f"{self.tb_mod} ./.venv/bin/python3 -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
+        # scmd_srcs = f"{self.tb_mod} ./.venv/bin/python3 -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
         lines.append(f'''
 {bashash_ok_folders_strings(self.ext_whl_path, [self.src_dir], [scmd, remove_pips_str],
         f"Looks required RPMs already downloaded"
@@ -2637,7 +2640,7 @@ rm -f {self.ext_whl_path}/*
             scmd = f'rm -f {self.ext_whl_path}/{py_}-*'
             lines.append(scmd)
         lines.append(f'''
-{self.tb_mod} python3 -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{bin_dir}/ourwheel')]; os.system('cd {bin_dir}/extwheel; rm -f ' + ' '.join(whls))"
+{self.tb_mod} python3 -c "import os; whls = [d.split('.')[0]+'*' for d in os.listdir('{self.our_whl_path}')]; os.system('cd {self.ext_whl_path}; rm -f ' + ' '.join(whls))"
 {save_state_hash(self.ext_whl_path)}
 ''')
         mn_ = get_method_name()
