@@ -463,12 +463,6 @@ class TerrariumAssembler:
         #         if args.step_from <= fname2num(s_) <= args.step_to:
         #             setattr(self.args, fname2stage(s_).replace('-','_'), True)
 
-        if args.skip_words:
-            for word_ in args.skip_words.split(','):
-                for s_ in self.stages_names:
-                    if word_ in s_:
-                        setattr(self.args, fname2stage(s_).replace('-','_'), False)
-
         if args.steps:
             for step_ in args.steps.split(','):
                 if '-' in step_:
@@ -488,6 +482,12 @@ class TerrariumAssembler:
                 for s_ in self.stages_names:
                     if filter_(s_):
                         setattr(self.args, fname2stage(s_).replace('-','_'), True)
+
+        if args.skip_words:
+            for word_ in args.skip_words.split(','):
+                for s_ in self.stages_names:
+                    if word_ in s_:
+                        setattr(self.args, fname2stage(s_).replace('-','_'), False)
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
