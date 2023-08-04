@@ -2081,6 +2081,7 @@ done
 {self.tb_mod} bash -c "rpm -qa --queryformat '[%{{=NAME}}{ROW_SPLIT}%{{=VERSION}}{ROW_SPLIT}%{{=RELEASE}}{ROW_SPLIT}%{{=BUILDTIME}}{ROW_SPLIT}%{{=BUILDHOST}}{ROW_SPLIT}%{{FILENAMES}}\\n]' > {self.file_package_list_from_rpms} "
 {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --queryformat "%{{name}}" --resolve --recursive --cacheonly --requires {self.terra_package_names} > {self.terra_rpms_closure}
 {self.tb_mod} rpm -qa --queryformat "%{{NAME}} " > tmp/rpm-packages-names-list.txt
+{self.tb_mod} patchelf --print-interpreter /usr/bin/createrepo > {self.ld_so_path}
 ''')
 # {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 # {self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
@@ -2185,7 +2186,6 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
 {self.tb_mod} cat {self.file_list_from_terra_rpms} {self.file_list_from_deps_rpms} > {self.file_list_from_rpms}
-{self.tb_mod} patchelf --print-interpreter /usr/bin/createrepo > {self.ld_so_path}
 """ 
 #{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.doc_list_from_deps_rpms}
 #{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --cacheonly --list {terra_package_names} > {self.doc_list_from_terra_rpms}
