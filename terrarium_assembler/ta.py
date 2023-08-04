@@ -3347,7 +3347,7 @@ rm -f {self.ext_compiled_tar_path}/*
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
-                        if 'libgeos' in f:
+                        if 'dmr_on' in f:
                             wtf  = 1
                         if 'libb2.so.1' in f:    
                             wtf = 1
@@ -3370,7 +3370,7 @@ rm -f {self.ext_compiled_tar_path}/*
                             package_ = file2rpmpackage[f]
                             if package_.package in self.ps.terra_exclude:
                                 continue
-                        if 'tmp/ta/clickhouse-bulk.build/clickhouse-bulk' in f: 
+                        if 'tmp/ta/dmr_on.ok/dmr_on' in f: 
                             wtf = 1   
                         if self.br.is_need_patch(f):
                             relname = self.process_binary(f)

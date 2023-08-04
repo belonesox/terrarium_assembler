@@ -37,7 +37,67 @@ terrarium_assembler --stage-all project.yml
 * названия шагов специально длинные, 
     * пытаются быть обьясняющими (внутри шелл-файла в комментариях расширенное объяснение)
     * можно их отфильтровывать и скипать по отдельным словам (см. дальше)
-    * то, что они длинные — не проблема, для скриптов можно записать, для интерактива можно просто кликнуть по шелл-файлу — т.е. это почти как вызов из меню.
+    * то, что они длинные — не проблема, для скриптов можно записать, для интерактива можно просто кликнуть по шелл-файлу в файловом менеджере или воспользоваться подсказкой — т.е. это почти как вызов из меню.
+* есть опции-комбо, типа `--stage-all`, если спросить 
+
+```
+ terrarium_assembler --help 
+```
+про каждую такую он расскажет из чего она состоии:
+
+```
+  --stage-all           stage-init-box-and-repos + stage-download-base-packages + stage-install-base-rpms + stage-download-rpm-packages + stage-
+                        install-rpms + stage-save-file-rpmpackage-info + stage-download-base-wheels + stage-init-python-env + stage-checkout-
+                        sources + stage-build-wheels + stage-download-wheels + stage-compile-pip-tars + stage-install-wheels + stage-build-
+                        python-projects + stage-build-go + stage-save-sofiles + stage-pack + stage-post-pack + stage-make-packages
+  --stage-rebuild       stage-init-box-and-repos + stage-install-base-rpms + stage-install-rpms + stage-save-file-rpmpackage-info + stage-init-
+                        python-env + stage-build-wheels + stage-compile-pip-tars + stage-install-wheels + stage-build-python-projects + stage-
+                        build-go + stage-save-sofiles + stage-pack + stage-post-pack + stage-make-packages
+```
+
+Т.е. самая простая опция это «--stage-all», если проект еще не чекаутился, то лучше сначала вызвать «--stage-checkout», потом «--stage-all».
+
+* Можно вызывать опции, ссылаясь на номера шагов или их интервалы через запятую:
+    * это не очень надежно для скриптов, номера могут чаще переименовываться при обновлении TA, чтобы «воткнуть новые шаги»
+    * но очень удобно для ad-hoc-вызовов, вот прямо здесь и сейчас.
+    
+
+Например, сломался почему-то контейнер сборки, видите непонятную ругать со словами «контейнер»,
+можно пересобрать контейнер-платформу быстро, типа
+
+```
+  terrarium_assembler dmi-release.yml --steps=0-7
+```
+
+или, если вы знаете, что пакеты уже выкачаны и хотите пропустить (теоретически, оно не должно перевыкачивать, но возможно вы добавили какой-то пакет в спек, но сейчас это неважно, и вы хотите пропустить шаги скачивания)
+
+```
+  terrarium_assembler dmi-release.yml --steps=0,3,7
+```
+
+Ну или наоборот, не трогать контейнер, но полностью пересобрать питоновый виртуаленв, скомпилировать проекты и сделать из них сборку и пакеты
+```
+terrarium_assembler dm-release.yml --steps=21-27,40-59
+```
+
+Еще есть возможность проскипать шаги, используя словарный фильтр.
+Например, вы без интернета, и не хотите, чтобы гигабайты скачанных пакетов пропали, но персобрать контейнер надо, и чекаутить проекты не хотите: 
+
+```
+  terrarium_assembler dmi-release.yml --steps=0-7 --skip-words=download,checkout
+```
+
+И самое важное слово, которого надо избегать (пока я не вернулся из отпуска — «audit») — там хитрые действия, которые выкачают сотни гигов, займут ваш комп на сутки, и пойдут несколько другим, нестандартным путем...
+
+Вот это примерно, что и «--stage-all»
+```
+  terrarium_assembler dmi-release.yml --steps=0-59 --skip-words=audit
+```
+
+## Концептуальная схема для понимания
+
+
+![Концептуальная схема для понимания](./docs/ta-concept.drawio.svg)
 
 
 
