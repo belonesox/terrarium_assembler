@@ -1976,7 +1976,7 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 {self.rm_locales}
-SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
+SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
 for SPEC in `echo $SPECS`
 do
     BASEDIR=`dirname $SPEC`/..
@@ -2218,7 +2218,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
             f"""
 {self.rm_locales}
 {self.tb_mod} sudo dnf --refresh --disablerepo="*" --enablerepo="ta" update -y 
-SPECS=`find in/bin/rpmbuild -wholename "*SPECS/*.spec"`        
+SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
 for SPEC in `echo $SPECS`
 do
     BASEDIR=`dirname $SPEC`/..
@@ -2723,7 +2723,7 @@ rm -f {self.ext_compiled_tar_path}/*
 
         # cloc ./in/bin/rpmbuild/*/BUILD/   ./in/src/
         cloc_for_files('our-cloc', './in/src/')
-        cloc_for_files('rebuilded-rpms-cloc', './in/bin/rpmbuild/*/BUILD/')
+        cloc_for_files('rebuilded-rpms-cloc', f'./{self.rpmbuild_path}/*/BUILD/')
         cloc_for_files('python-rebuilded-cloc', f'./{self.pip_source_path}')
 
         lastdirs = os.path.sep.join(
