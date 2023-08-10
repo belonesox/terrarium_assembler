@@ -3806,9 +3806,10 @@ overrides:
                     print(f'« {scmd} » failed!')    
                     return
             os.chdir(self.curdir)
-            scmd = f'''{self.tb_mod} mkisofs -r -J -o  {isofilename}  {installscriptpath}'''
+            isofilepath = os.path.join(isodir, isofilename)
+            scmd = f'''{self.tb_mod} mkisofs -r -J -o  {isofilepath}  {installscriptpath}'''
             self.cmd(scmd)
-            scmd = f'''{self.tb_mod} md5sum {isofilename}'''
+            scmd = f'''{self.tb_mod} md5sum {isofilepath}'''
             os.chdir(self.curdir)
             md5s_ = subprocess.check_output(
                 scmd, shell=True).decode('utf-8').strip().split()[0]
