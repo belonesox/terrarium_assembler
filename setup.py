@@ -46,7 +46,8 @@ setup(
     description="Generate Portable Linux Applications, just portable folders",
     entry_points={
         'console_scripts': [
-            'ta_exp=terrarium_assembler.cli:main',
+            'terrarium_assembler=terrarium_assembler.cli:main',
+	    'tas=terrarium_assembler.cli:main'
         ],
     },
     install_requires=requirements,
