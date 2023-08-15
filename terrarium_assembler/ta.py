@@ -3688,6 +3688,8 @@ rm -f {self.ext_compiled_tar_path}/*
                     lf.write(f'''
 #!/bin/bash
 {self.spec.post_installer}
+# may be we have to do something when error occurs. rollback???
+exit $?
             '''.strip())
             install_mod ="""
       postinstall: ./postinstall.sh
