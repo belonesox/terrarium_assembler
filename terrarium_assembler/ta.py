@@ -3642,14 +3642,19 @@ rm -f {self.ext_compiled_tar_path}/*
 
         current_time = datetime.datetime.now().replace(microsecond=0)
         time_ = current_time.isoformat().replace(':', '').replace('-', '').replace('T', '')
-        deployname = f"{label.lower()}-{git_version}-{time_}" 
+        version_with_time = f"{git_version}-{time_}" 
+        deployname = f"{label.lower()}-{version_with_time}" 
 
         prev_release_time = current_time + relativedelta(months=-1)
         old_changelogs = sorted([f for f in (Path(self.curdir) / self.changelogdir).glob(f'*.txt') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
 
         for changelog_ in reversed(sorted(old_changelogs)):
+            # переходный период к формату ченджлогов без префиксов (ибо префиксов-меток может быть много).
+            name_ = changelog_.name
+            if not name_[0].isdigit():
+                continue
             tformat_ = '%Y%m%d%H%M%S'
-            timedt_ = '-'.join(changelog_.name.split('-')[2:])[:len(tformat_)]
+            timedt_ = '-'.join(name_.split('-')[1:])[:len(tformat_)]
             prev_release_time = datetime.datetime.strptime(timedt_, tformat_)
             break
 
@@ -3670,7 +3675,7 @@ rm -f {self.ext_compiled_tar_path}/*
                         lines_.append(change_)
         pass
 
-        changelogfilename = (Path(self.curdir) / self.changelogdir) / f'{deployname}.changelog.txt'
+        changelogfilename = (Path(self.curdir) / self.changelogdir) / f'{version_with_time}.changelog.txt'
         open(changelogfilename, 'w', encoding='utf-8').write('\n'.join(lines_))
 
         isofilename = f"{deployname}.iso"
