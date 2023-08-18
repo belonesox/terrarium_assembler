@@ -641,8 +641,13 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.out_dir = 'out'
         if 'output_folder' in self.spec:
             self.out_dir = self.spec.output_folder
+        # self.output_folders = ['out']
+        # if 'output_folders' in self.spec:
+        #     self.output_folders = self.spec.output_folders
+        # elif 'output_folder' in self.spec:
+        #     self.output_folders[0] = self.spec.output_folder
         mkdir_p(self.src_dir)
-        mkdir_p(self.out_dir)
+        # mkdir_p(self.out_dir)
         mkdir_p(self.in_bin)
         mkdir_p('tmp')
 
@@ -2427,7 +2432,7 @@ done
         for python code without packaging
         '''
         os.chdir(self.curdir)
-        os.chdir(self.out_dir)
+        # os.chdir(self.out_dir)
 
         root_dir = self.root_dir
         args = self.args
@@ -2502,7 +2507,7 @@ done
         They should be downloaded before building our packages and creating pipenv environment.
         '''
         os.chdir(self.curdir)
-        os.chdir(self.out_dir)
+        # os.chdir(self.out_dir)
 
         root_dir = self.root_dir
         args = self.args
@@ -2702,6 +2707,7 @@ rm -f {self.ext_compiled_tar_path}/*
             return
 
         spec = self.spec
+        #!!! need to fix !!!
         abs_path_to_out_dir = os.path.abspath(self.out_dir)
 
         def cloc_for_files(clocname, filetemplate):
@@ -2957,30 +2963,18 @@ rm -f {self.ext_compiled_tar_path}/*
 
         args = self.args
         spec = self.spec
-        # root_dir = os.path.realpath(self.out_dir)
-        root_dir = self.root_dir = expandpath(self.out_dir)
+        root_dir = self.root_dir = os.path.realpath(self.out_dir)
 
         t.tic()
+
+        # for out_ in self.output_folders:
+        #     root_dir = self.root_dir = expandpath(out_)
 
         file_package_list, file2rpmpackage = self.load_file_package_list_from_rpms()
         sofile2rpmfile = {}
         for f_ in file2rpmpackage:
             if '.so' in f_:
                 sofile2rpmfile[os.path.split(f_)[-1]] = f_
-
-        # so_files_from_venv_filename2path = {}
-        # so_files_from_venv_path2package = {}
-        # so_files_from_venv_set = {}
-        # with open(self.so_files_from_venv, 'r') as lf:
-        #     for i, line in enumerate(lf.readlines()):
-        #         line = line.strip('\n')
-        #         fname = os.path.split(line)[-1]
-        #         so_files_from_venv_filename2path[fname] = line
-        #         package_ = 'unknown'
-        #         if 'site-packages' in line:
-        #             package_ = line.split('site-packages')[-1].split(os.path.sep)[1]
-        #         so_files_from_venv_path2package[line] = package_
-
 
         so_files_rpips_filename2path = {}
         so_files_rpips_path2package = {}
@@ -3643,7 +3637,8 @@ rm -f {self.ext_compiled_tar_path}/*
         current_time = datetime.datetime.now().replace(microsecond=0)
         time_ = current_time.isoformat().replace(':', '').replace('-', '').replace('T', '')
         version_with_time = f"{git_version}-{time_}" 
-        deployname = f"{label.lower()}-{version_with_time}" 
+        def deployname(label_=label):
+            return f"{label_.lower()}-{version_with_time}" 
 
         prev_release_time = current_time + relativedelta(months=-1)
         old_changelogs = sorted([f for f in (Path(self.curdir) / self.changelogdir).glob(f'*.txt') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
@@ -3678,40 +3673,45 @@ rm -f {self.ext_compiled_tar_path}/*
         changelogfilename = (Path(self.curdir) / self.changelogdir) / f'{version_with_time}.changelog.txt'
         open(changelogfilename, 'w', encoding='utf-8').write('\n'.join(lines_))
 
-        isofilename = f"{deployname}.iso"
-        chp_ = os.path.join(root_dir, 'isodistr.txt')
-        open(chp_, 'w', encoding='utf-8').write(isofilename)
+        labels = [self.spec.label]
+        if isinstance(self.spec.label, list):
+            labels = self.spec.label  
 
-        package_modes = self.package_modes
-        # if self.args.stage_make_packages:
-        #     package_modes = self.args.stage_make_packages.split(',')
+        for label_ in labels:
+            isofilename = f"{deployname(label_)}.iso"
+            chp_ = os.path.join(root_dir, 'isodistr.txt')
+            open(chp_, 'w', encoding='utf-8').write(isofilename)
 
-        os.chdir(nfpm_dir)
-        install_mod = ''            
-        if 'post_installer' in self.spec:
-            with open(os.path.join(nfpm_dir, 'postinstall.sh'), 'w', encoding='utf-8') as lf:
-                lf.write(f'''
+            package_modes = self.package_modes
+
+            os.chdir(nfpm_dir)
+            install_mod = ''            
+            if 'post_installer' in self.spec:
+                with open(os.path.join(nfpm_dir, 'postinstall.sh'), 'w', encoding='utf-8') as lf:
+                    lf.write(f'''
 #!/bin/bash
 {self.spec.post_installer}
+# may be we have to do something when error occurs. rollback???
+exit $?
             '''.strip())
             install_mod ="""
       postinstall: ./postinstall.sh
-"""
+    """
 
-        remove_mod = ''            
-        if 'pre_remove' in self.spec:
-            with open(os.path.join(nfpm_dir, 'pre_remove.sh'), 'w', encoding='utf-8') as lf:
-                lf.write(f'''
+            remove_mod = ''            
+            if 'pre_remove' in self.spec:
+                with open(os.path.join(nfpm_dir, 'pre_remove.sh'), 'w', encoding='utf-8') as lf:
+                    lf.write(f'''
 #!/bin/bash
 {self.spec.pre_remove}
-            '''.strip())
-                remove_mod ="""
+                '''.strip())
+                    remove_mod ="""
       preremove: ./pre_remove.sh
-"""
+    """
 
-        with open(os.path.join(nfpm_dir, 'nfpm.yaml'), 'w', encoding='utf-8') as lf:
-            lf.write(f'''
-name: "{self.spec.label.lower()}"
+            with open(os.path.join(nfpm_dir, 'nfpm.yaml'), 'w', encoding='utf-8') as lf:
+                lf.write(f'''
+name: "{label_.lower()}"
 arch: "amd64"
 platform: "linux"
 version: "v{git_version}-{time_}"
@@ -3734,25 +3734,27 @@ overrides:
     scripts:
 {install_mod}
 {remove_mod}      
-''')
-        for packagetype in ['rpm', 'deb']:
-            if not packagetype in package_modes:
-                continue
-            pkgdir = '../../' + self.out_dir + '.'+ packagetype
-            os.chdir(nfpm_dir)
-            mkdir_p(pkgdir)
-            scmd = f'''
-{self.tb_mod} nfpm pkg --packager {packagetype} --target {pkgdir}        
-    '''.strip()
-            self.cmd(scmd)
+    ''')
+            for packagetype in ['rpm', 'deb']:
+                if not packagetype in package_modes:
+                    continue
+                pkgdir = '../../' + self.out_dir + '.'+ packagetype
+                os.chdir(nfpm_dir)
+                mkdir_p(pkgdir)
+                scmd = f'''
+    {self.tb_mod} nfpm pkg --packager {packagetype} --target {pkgdir}        
+        '''.strip()
+                self.cmd(scmd)
 
-            package_dir = f'out.{packagetype}'
-            os.chdir(self.curdir)
-            os.chdir(package_dir)
-            paths = sorted([f for f in Path('').glob(f'*.{packagetype}') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
-            fname_ = paths[-1]
-            scmd = f'''ln -sf {fname_} last.{packagetype}'''
-            self.cmd(scmd)
+                package_dir = f'out.{packagetype}'
+                os.chdir(self.curdir)
+                os.chdir(package_dir)
+                paths = sorted([f for f in Path('').glob(f'*.{packagetype}') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
+                fname_ = paths[-1]
+                scmd = f'''ln -sf {fname_} last.{packagetype}'''
+                self.cmd(scmd)
+                scmd = f'''ln -sf {fname_} last-{label_}.{packagetype}'''
+                self.cmd(scmd)
         pass
 
         for packagetype in ['iso']:

@@ -47,6 +47,7 @@ setup(
     entry_points={
         'console_scripts': [
             'terrarium_assembler=terrarium_assembler.cli:main',
+	    'tas=terrarium_assembler.cli:main'
         ],
     },
     install_requires=requirements,
