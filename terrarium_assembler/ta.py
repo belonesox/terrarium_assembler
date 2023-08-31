@@ -17,6 +17,7 @@ import csv
 import jinja2.exceptions
 import version_utils.rpm
 import yaml
+import zipfile
 
 from typing import List
 from pydantic import BaseModel, constr, validator
@@ -682,6 +683,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.ext_compiled_tar_path = in_bin_fld("external_python_tars")
         # self.ext_pip_path = in_bin_fld("extpip")
         self.base_whl_path = in_bin_fld("external_python_wheels_fixed_versions")
+        self.extra_whl_path = in_bin_fld("python_wheels_for_rebuild_pip_from_sources")
 
         self.states_path =  in_bin_fld("states")
         self.rpmbuild_path =  in_bin_fld("rpmbuild")
@@ -2136,7 +2138,7 @@ done
         lines = []
         lines.append(f'''
 find .venv -name "*.so*"  > {self.so_files_from_venv}
-find {self.pip_source_path} -name "*.so"  > {self.so_files_from_rebuilded_pips}
+#find {self.pip_source_path} -name "*.so"  > {self.so_files_from_rebuilded_pips}
 find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 ''')
 
@@ -2351,7 +2353,7 @@ rm -f {self.our_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_31_audit_install_depswheels_for_rebuild(self):
+    def stage_34_audit_install_depswheels_for_rebuild(self):
         '''
         Install our and external Python wheels
         '''
@@ -2369,6 +2371,8 @@ rm -f {self.our_whl_path}/*
         )}
 
 {self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+
+{self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl`  --no-cache-dir --no-index
 '''
 
         lines.append(scmd)   # --no-cache-dir
@@ -2383,7 +2387,7 @@ rm -f {self.our_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_34_audit_install_rebuilded_whls(self):
+    def stage_36_audit_install_rebuilded_whls(self):
         '''
         Install our and external Python wheels
         '''
@@ -2391,7 +2395,7 @@ rm -f {self.our_whl_path}/*
         lines = []
 
         # pps = " ".join([''] + [p.replace('-','_') for p in self.pp.rebuild])
-        pps = self.python_rebuild_profiles.get_list_of_pip_packages()
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
         if not pps.strip():
             return 
 
@@ -2533,6 +2537,40 @@ rm -f {self.base_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
         pass
 
+    def stage_31_audit_download_extra_wheels(self):
+        '''
+        Downloading extra python packages with fixed versions for rebuilding
+        pip from source. These packages will be installed to container after
+        installing consistent set of python wheels.
+
+        We need it, because rebuilding of some packages from sources may need
+        different versions of some package (not consistent with our set).
+
+        For example, we need pythran==0.13.1 to build scipy, even
+        if tensorflow does not consistent with it.
+        '''
+        os.chdir(self.curdir)
+
+        lines = []
+
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_install()
+        if not pps.strip():
+            return 
+
+        scmd = f"python3 -m pip download  {pps} --dest {self.extra_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --find-links='{self.ext_whl_path}' --no-dependencies "
+        lines.append(f'''
+{bashash_ok_folders_strings(self.extra_whl_path, [], [pps],
+        f"Looks required extra wheels already downloaded"
+        )}
+rm -f {self.extra_whl_path}/*
+{self.tb_mod} {scmd}
+{self.tb_mod} bash -c "find {self.extra_whl_path} -name '*.tar.*' | xargs -i[] -t python3 -m pip wheel [] --no-deps --wheel-dir {self.extra_whl_path}"
+{save_state_hash(self.extra_whl_path)}
+''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
     def stage_30_audit_download_pip_sources(self):
         '''
         Download PIP sources.
@@ -2543,7 +2581,7 @@ rm -f {self.base_whl_path}/*
         # if not self.ps.rebuild:
         #     return 
         # pps = " ".join([''] + self.pp.rebuild)
-        pps = self.python_rebuild_profiles.get_list_of_pip_packages()
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
         if not pps.strip():
             return 
 
@@ -2576,7 +2614,7 @@ done
         pass
 
 
-    def stage_33_audit_build_pip_sources(self):
+    def stage_35_audit_build_pip_sources(self):
         '''
         Download PIP sources.
         '''
@@ -2587,13 +2625,14 @@ done
         #     return 
         # pps = " ".join([''] + self.pp.rebuild)
 
-        pps = self.python_rebuild_profiles.get_list_of_pip_packages()
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
         if not pps.strip():
             return 
 
         lines.append(f'''
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
+rm -f {self.rebuilded_whl_path}/* 
         ''')
 
         for pp, command, files_ in self.python_rebuild_profiles.get_commands_to_build_packages():
@@ -2978,27 +3017,46 @@ rm -f {self.ext_compiled_tar_path}/*
 
         so_files_rpips_filename2path = {}
         so_files_rpips_path2package = {}
+        so_files_rpips_path2whl = {}
         split_ = os.path.split(self.pip_source_path)[-1]
-        with open(self.so_files_from_rebuilded_pips, 'r') as lf:
-            for i, line in enumerate(lf.readlines()):
-                line = line.strip('\n')
-                path_ =  Path(line).absolute()
-                fname = os.path.split(path_)[-1]
-                ok = False
-                relname = ''
-                if '_skbuild' in line:
-                    if 'cmake-build' in line:
-                        continue
-                    if 'setuptools' in line:
-                        continue
-                for split_ in ['build/lib.linux-x86_64-3', 'build/lib.linux-x86_64-cpython-3', f'''skbuild/linux-x86_64-{self.python_version_for_build().replace('.', '')}/cmake-install''']:
-                    if split_ in line:    
-                        relname = '/'.join(line.split(split_)[1].split('/')[1:])
-                        break
-                assert(relname)    
-                so_files_rpips_filename2path[relname] = line
-                package_name = line.split(split_)[1].split(os.path.sep)[1]
-                so_files_rpips_path2package[line] = package_name
+        # splitters = [
+        #     'build/lib.linux-x86_64-3', 
+        #     'build/lib.linux-x86_64-cpython-3', 
+        #     f'''skbuild/linux-x86_64-{self.python_version_for_build().replace('.', '')}/cmake-install''',
+        #     f'''_skbuild/linux-x86_64-{self.python_version_for_build()}/cmake-install'''
+        #             ]
+
+        # with open(self.so_files_from_rebuilded_pips, 'r') as lf:
+        #     for i, line in enumerate(lf.readlines()):
+        #         line = line.strip('\n')
+        #         path_ =  Path(line).absolute()
+        #         fname = os.path.split(path_)[-1]
+        #         ok = False
+        #         relname = ''
+        #         if '_skbuild' in line:
+        #             if 'cmake-build' in line:
+        #                 continue
+        #             if 'setuptools' in line:
+        #                 continue
+        #         for split_ in splitters:
+        #             if split_ in line:    
+        #                 relname = '/'.join(line.split(split_)[1].split('/')[1:])
+        #                 break
+        #         assert(relname)    
+        #         so_files_rpips_filename2path[relname] = line
+        #         package_name = line.split(split_)[1].split(os.path.sep)[1]
+        #         so_files_rpips_path2package[line] = package_name
+
+        for whl_name in Path(self.rebuilded_whl_path).rglob('*.whl'):
+            with zipfile.ZipFile(whl_name, 'r') as whl_file:
+                for filename in whl_file.namelist():
+                    if filename.endswith('.so'):
+                        relname = filename
+                        soname = filename.split(os.path.sep)[-1]
+                        so_files_rpips_filename2path[soname] = filename
+                        package_name = filename.split(os.path.sep)[0]
+                        so_files_rpips_path2package[filename] = package_name
+                        so_files_rpips_path2whl[filename] = whl_name.name
 
         so_files_from_src_filename2path = {}
         so_files_from_src_path2folder = {}
@@ -3341,7 +3399,7 @@ rm -f {self.ext_compiled_tar_path}/*
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
-                        if 'dmr_on' in f:
+                        if '_cairo.so' in f:
                             wtf  = 1
                         if 'libb2.so.1' in f:    
                             wtf = 1
@@ -3358,8 +3416,8 @@ rm -f {self.ext_compiled_tar_path}/*
                             wrtf=1
                         if sfilename in so_files_from_src_filename2path:
                             f = so_files_from_src_filename2path[sfilename]
-                        elif 'site-packages' in f and f.split('site-packages')[1][1:] in so_files_rpips_filename2path:
-                            f = so_files_rpips_filename2path[f.split('site-packages')[1][1:]]
+                        # elif 'site-packages' in f and f.split('site-packages')[1][1:] in so_files_rpips_filename2path:
+                        #     f = so_files_rpips_filename2path[f.split('site-packages')[1][1:]]
                         if f in file2rpmpackage:
                             package_ = file2rpmpackage[f]
                             if package_.package in self.ps.terra_exclude:
@@ -3417,9 +3475,10 @@ rm -f {self.ext_compiled_tar_path}/*
                                     if f in so_files_from_src_path2folder:
                                         type_ = SourceType.our_source
                                         what_ = so_files_from_src_path2folder[f]
-                                    elif f in so_files_rpips_path2package:
+                                    elif 'site-packages' in f and f.split('site-packages')[1][1:] in so_files_rpips_path2whl:                                        
+                                    # elif f in so_files_rpips_path2package:
                                         type_ = SourceType.rebuilded_python_package
-                                        what_ = so_files_rpips_path2package[f]
+                                        what_ = so_files_rpips_path2whl[f.split('site-packages')[1][1:]]
                                     elif rf in map2package:
                                         if 'skimage' in rf:
                                             wtf = 1
@@ -3527,7 +3586,7 @@ rm -f {self.ext_compiled_tar_path}/*
             if fti_.source_type == 'python_package':
                 row_.extend(["Python-пакет", f"Нужна пересборка Python-пакета {fti_.source}!"])
             if fti_.source_type == 'rebuilded_rpm_package':
-                row_.extend(["Собранный локально RPM-пакет", f"Исходники сборки пакета {fti_.source} в {self.rpmbuild_path}"])
+                row_.extend(["Пересобранный RPM-пакет", f"Исходники сборки пакета {fti_.source} в {self.rpmbuild_path}"])
             if fti_.source_type == 'file_from_folder':
                 row_.extend(["Компиляция Nuitka", f"Компиляция в папке {fti_.source}"])
             if fti_.source_type == 'rebuilded_python_package':

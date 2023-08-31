@@ -24,6 +24,7 @@ class PythonRebuildProfile:
     packages: list = None # utilities to build 
     command: str = "python setup.py bdist_wheel --build-number=99zzz "
     libs: list = None
+    pip: list = None
 
 
     def get_merged_env(self):
@@ -125,12 +126,19 @@ class PythonRebuildProfiles:
             self.profiles[name] = np_
         pass            
 
-    def get_list_of_pip_packages(self):    
+    def get_list_of_pip_packages_to_rebuild(self):    
         plist_ = []
         for _, profile in self.profiles.items():
             plist_.extend(profile.packages)
         return " ".join(plist_)
-    
+
+    def get_list_of_pip_packages_to_install(self):    
+        plist_ = []
+        for _, profile in self.profiles.items():
+            plist_.extend(profile.pip or [])
+        return " ".join(plist_)
+
+
     def get_commands_to_build_packages(self):    
         plist_ = []
         for _, profile in self.profiles.items():
