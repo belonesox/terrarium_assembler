@@ -193,12 +193,14 @@ class BinRegexps:
         return False
 
     def is_need_exclude(self, f):
-        if 'bin/pdftoppm' in f:
+        if 'libzbar.so' in f:
             wtf = 34342
         for re_ in self.ignore_re:
             if re_.match(f):
                 return False
         for re_ in self.need_exclude_re:
+            if 'markupsafe' in re_.pattern:
+                wtf = 1
             if re_.match(f):
                 cnt_ = self.need_exclude_re[re_]
                 if not cnt_:
@@ -396,8 +398,8 @@ class TerrariumAssembler:
         self.bin_files_sources_path = 'tmp/bin-files-sources.yaml'
         # self.files_source_path = 'tmp/files-source.txt'
         # self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
-        self.pipdeptree_graph_dot = 'tmp/pipdeptree-graph.dot'
-        self.pipdeptree_graph_mw = 'tmp/pipdeptree-graph.mw'
+        self.pipdeptree_graph_dot = 'reports/pipdeptree-graph.dot'
+        self.pipdeptree_graph_mw = 'reports/pipdeptree-graph.mw'
         self.pip_list = 'tmp/pip-list.txt'
         self.pip_list_json = 'tmp/pip-list.json'
 
@@ -2239,6 +2241,14 @@ done
         self.lines2sh(mn_, lines, mn_)
         pass
 
+    def backup_rpm_command_because_of_strange_dnf_behaviour(self):
+        '''
+        Command to «hide» and «save» rpm files from local repo, because 'dnf builddep' REMOVES IT.
+        '''
+        relative_dir = os.path.relpath(self.rpms_path, start=self.rpms_backup_pool)
+        return f"""rsync --link-dest={relative_dir} {self.rpms_path}/*.rpm  {self.rpms_backup_pool}/ """    
+
+
     def stage_10_audit_install_build_deps_rpms1(self):
         '''
         Install downloaded RPM packages for building SRPMS
@@ -2247,7 +2257,7 @@ done
 
         lines = [
             f"""
-rsync  {self.rpms_path}/*.rpm  {self.rpms_backup_pool}/     
+{self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
            
 {self.rm_locales}
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
@@ -2335,8 +2345,9 @@ rm -f {self.our_whl_path}/*
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {self.pip_list}
 {self.tb_mod} ./.venv/bin/python3 -m pip list --format json > {self.pip_list_json}
 {self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.md -f markdown || true
+sed '/^Name | Skip Reason/,$ d' < ./tmp/pip-audit-report.md  > ./tmp/pip-audit-report-external.md
 {self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
-{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report.md -o tmp/pip-audit-report.wiki
+{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report-external.md -o reports/pip-audit-report.wiki
 {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
 '''
 
@@ -2803,6 +2814,7 @@ rm -f {self.ext_compiled_tar_path}/*
         for trace_file_glob in tracefiles:
             print(f'Looking strace files in {trace_file_glob}')
             for trace_file in glob.glob(trace_file_glob):
+                print(f'Analysing {trace_file}')
                 re_file = re.compile(
                     r'''.*\([^"]*.\"(?P<filename>[^"]+)\".*''')
                 for linenum, line in enumerate(open(trace_file, 'r', encoding='utf-8').readlines()):
@@ -2840,6 +2852,10 @@ rm -f {self.ext_compiled_tar_path}/*
 
         # terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra)
         packages_from_build = set([r.source for r in file_source_from_packages])
+        rpm_packages_table = sorted(list(set([(pfr.package, pfr.version) for pfr in file_package_list if pfr.package in packages_from_build])))
+        write_doc_table('reports/doc-rpm-packages.htm', ['Packages', 'Version'], rpm_packages_table)
+
+
         not_used_packages = set()
         for p_ in packages_from_build:
             # files_in_package = set([r.filename for r in file_package_list if r.package==p_])
@@ -2906,7 +2922,7 @@ rm -f {self.ext_compiled_tar_path}/*
             if f_ == rel_f:
                 f_ = re.escape(rel_f)
 
-            lines.append(f'      - .*{f_} # \t {s} \t {rel_f}')
+            lines.append(f'      - {f_[1:]} # \t {s} \t {rel_f}')
 
         with open('reports/recommend-for-exclude.txt', 'w') as lf:
             lf.write('\n'.join(lines))
@@ -3051,10 +3067,14 @@ rm -f {self.ext_compiled_tar_path}/*
             with zipfile.ZipFile(whl_name, 'r') as whl_file:
                 for filename in whl_file.namelist():
                     if filename.endswith('.so'):
+                        if 'cups' in filename:
+                            wtf = 1
                         relname = filename
                         soname = filename.split(os.path.sep)[-1]
                         so_files_rpips_filename2path[soname] = filename
                         package_name = filename.split(os.path.sep)[0]
+                        if package_name == filename:
+                            package_name = filename.split('.')[0]
                         so_files_rpips_path2package[filename] = package_name
                         so_files_rpips_path2whl[filename] = whl_name.name
 
@@ -3380,7 +3400,7 @@ rm -f {self.ext_compiled_tar_path}/*
                                 dp_ = ie_['@dest_path']
                                 package_ = ie_['@package']
                                 if '' == package_:
-                                    package_ = 'basicpython'
+                                    package_ = dp_.split('.')[0]
                                 if '.' in package_:
                                     package_ = package_.split('.')[0]
                                 if 'libgeos' in sp_:
@@ -3399,7 +3419,7 @@ rm -f {self.ext_compiled_tar_path}/*
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
-                        if '_cairo.so' in f:
+                        if 'cups.so' in f:
                             wtf  = 1
                         if 'libb2.so.1' in f:    
                             wtf = 1
@@ -3531,6 +3551,8 @@ rm -f {self.ext_compiled_tar_path}/*
             for fib in list(file_source_table.keys()):
                 # rp_ = str(path.absolute())
                 rp_ = fib
+                if 'libzbar.so' in rp_:
+                     wtf = 1
                 if self.br.is_need_exclude(rp_):
                     # rel_file = os.path.relpath(rp_, start = os.getcwd())
                     rel_file = rp_
@@ -3574,6 +3596,7 @@ rm -f {self.ext_compiled_tar_path}/*
         python_packages_recommended_for_rebuild = set()
         lines = []
         binary_files_report = []
+        rpm_packages_report = [] 
 
         for file_, source_ in sorted(self.bin_files_sources.items()):
             fti_ = file_source_table[file_]
@@ -3582,17 +3605,17 @@ rm -f {self.ext_compiled_tar_path}/*
 
             row_ = [file_]
             if fti_.source_type == 'rpm_package':
-                row_.extend(["RPM-пакет", f"Требуется пересборка RPM-пакета {fti_.source}!"])
+                row_.extend(["RPM-пакет", f"<b>Требуется пересборка RPM-пакета {fti_.source}!</b>"])
             if fti_.source_type == 'python_package':
-                row_.extend(["Python-пакет", f"Нужна пересборка Python-пакета {fti_.source}!"])
+                row_.extend(["Python-пакет", f"<b>Нужна пересборка Python-пакета {fti_.source}!</b>"])
             if fti_.source_type == 'rebuilded_rpm_package':
-                row_.extend(["Пересобранный RPM-пакет", f"Исходники сборки пакета {fti_.source} в {self.rpmbuild_path}"])
+                row_.extend(["Пересобранный RPM-пакет", f"Исходники пакета {fti_.source} в {self.rpmbuild_path}"])
             if fti_.source_type == 'file_from_folder':
                 row_.extend(["Компиляция Nuitka", f"Компиляция в папке {fti_.source}"])
             if fti_.source_type == 'rebuilded_python_package':
-                row_.extend(["Пересобранный Python-пакет", f"Исходники сборки пакета {fti_.source} в {self.pip_source_path}"])
+                row_.extend(["Пересобранный Python-пакет", f"Исходники пакета {fti_.source} в {self.pip_source_path}"])
             if fti_.source_type == 'our_source':
-                row_.extend(["Наше расширение", f"Исходники сборки пакета {fti_.source} в {self.src_dir}"])
+                row_.extend(["Наше расширение", f"Исходники пакета {fti_.source} в {self.src_dir}"])
             binary_files_report.append(row_)    
 
             if fti_.source_type == SourceType.rpm_package.value:
@@ -3610,7 +3633,7 @@ rm -f {self.ext_compiled_tar_path}/*
                     wtf  = 1
                 python_packages_recommended_for_rebuild.add(fti_.source)
 
-        write_doc_table(os.path.join(self.curdir, 'tmp/binary-files-report.htm'), ['Файл', 'Тип', 'Исходники сборки'], binary_files_report)
+        write_doc_table(os.path.join(self.curdir, 'reports/binary-files-report.htm'), ['Файл', 'Тип', 'Исходники сборки'], binary_files_report)
 
         lines.append(f'\nRPM packages recommended for rebuild')
         lines.append('\n - '.join([''] + sorted(rpm_packages_recommended_for_rebuild)))
