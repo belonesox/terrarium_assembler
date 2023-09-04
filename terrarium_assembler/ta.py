@@ -2203,6 +2203,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         #--skip-broken
         lines = [
             f"""
+createrepo {self.rpmrepo_path}
 {self.rm_locales}
 {self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {packages}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
@@ -2344,11 +2345,6 @@ rm -f {self.our_whl_path}/*
 {self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {self.pip_list}
 {self.tb_mod} ./.venv/bin/python3 -m pip list --format json > {self.pip_list_json}
-{self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.md -f markdown || true
-sed '/^Name | Skip Reason/,$ d' < ./tmp/pip-audit-report.md  > ./tmp/pip-audit-report-external.md
-{self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
-{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report-external.md -o reports/pip-audit-report.wiki
-{self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
 '''
 
         lines.append(scmd)   # --no-cache-dir
@@ -2755,6 +2751,14 @@ rm -f {self.ext_compiled_tar_path}/*
 
         if not self.args.stage_audit_analyse:
             return
+
+        self.cmd(f'''
+{self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.md -f markdown || true
+sed '/^Name | Skip Reason/,$ d' < ./tmp/pip-audit-report.md  > ./tmp/pip-audit-report-external.md
+{self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
+{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report-external.md -o reports/pip-audit-report.wiki
+{self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
+''')
 
         spec = self.spec
         #!!! need to fix !!!
