@@ -2544,7 +2544,7 @@ rm -f {self.base_whl_path}/*
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_31_audit_download_extra_wheels(self):
+    def stage_32_audit_download_extra_wheels(self):
         '''
         Downloading extra python packages with fixed versions for rebuilding
         pip from source. These packages will be installed to container after
@@ -2609,6 +2609,36 @@ do
         echo $URL
         wget --secure-protocol=TLSv1_2 -c -P $PIP_SOURCE_DIR/ $URL
     fi
+done        
+        ''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+    def stage_31_audit_unpack_pip_sources(self):
+        '''
+        Download PIP sources.
+        '''
+        os.chdir(self.curdir)
+
+        lines = []
+        # if not self.ps.rebuild:
+        #     return 
+        # pps = " ".join([''] + self.pp.rebuild)
+        pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
+        if not pps.strip():
+            return 
+
+
+        lines.append(f'''
+PIP_SOURCE_DIR={self.pip_source_path}
+mkdir -p $PIP_SOURCE_DIR
+for PP in {pps}
+do
+    echo $PP
+    PPD=`echo $PP | tr '_' '-'`
+    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
+    FILENAME=$PP-$VERSION
 
     if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
         if [ -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ]; then
