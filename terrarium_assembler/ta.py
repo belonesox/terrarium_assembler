@@ -2602,11 +2602,15 @@ do
     PPD=`echo $PP | tr '_' '-'`
     VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
     FILENAME=$PP-$VERSION
-    if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
+
+    if [ ! -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ] && [ -f "$PIP_SOURCE_DIR/$FILENAME.zip" ]; then
         echo **$FILENAME--
         URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select( ((.filename|test(\\"$FILENAME.tar.gz\\")) or (.filename|test(\\"$FILENAME.zip\\"))) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
         echo $URL
         wget --secure-protocol=TLSv1_2 -c -P $PIP_SOURCE_DIR/ $URL
+    fi
+
+    if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
         if [ -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ]; then
             tar xf $PIP_SOURCE_DIR/$FILENAME.tar.gz -C $PIP_SOURCE_DIR
         fi
