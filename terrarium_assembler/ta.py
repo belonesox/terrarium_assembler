@@ -674,6 +674,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
             mkdir_p(folder_)
             return folder_
 
+        self.platform_path = in_bin_fld("platform")
         self.rpmrepo_path = in_bin_fld("rpmrepo")
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
 
@@ -726,6 +727,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
 
         scmd = f'''
 toolbox rm -f {self.container_name} -y || true
+podman load --quiet -i  in/bin/fc{self.spec.fc_version}/platform/ 
 toolbox create {self.container_name} --distro fedora --release {self.spec.fc_version} -y;
 '''
         return scmd
@@ -1752,7 +1754,20 @@ fi
         os.system(scmd)
         pass
 
-    def stage_00_init_box_and_repos(self):
+    def stage_00_download_platform(self):
+        '''
+        Download toolbox image for platform
+        '''
+        lines = []
+        lines.append(f'''
+podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_version}/platform/ fedora-toolbox:{self.spec.fc_version}
+''')
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+    def stage_01_init_box_and_repos(self):
         '''
         Create building container/box and install RPM repositories
         '''
@@ -2050,6 +2065,7 @@ for SPEC in `echo $SPECS`
 do
     echo $SPEC
     BASEDIR=`dirname $SPEC`/..
+    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
     rm -rf $BASEDIR/BUILD/*
