@@ -10,7 +10,7 @@ sudo python3 -m pip install -e .
 ```
 
 * Ваш линукс пользователь должен быть в sudoers, без подтвержения паролем (гуглите «sudoers NOPASSWD»)
-  * Запустите — скорее всего поставит нужные системные пакеты в ваш линукс (проверено на Ubuntu 22.04 и Fedora)
+  * Запустите — скорее всего поставит нужные системные пакеты в ваш линукс → → проверено на Ubuntu 22.04 (там есть сложности, см ниже.) и Fedora (от FC36)
 
 
 ```
@@ -30,6 +30,18 @@ terrarium_assembler --stage-checkout project.yml
 ```
 terrarium_assembler --stage-all project.yml
 ```
+
+## Сложности с Ubuntu
+Там собраны старые версии podman, включая совсем сломанные.
+[Например](https://bugs.launchpad.net/ubuntu/+source/podman/+bug/2035025), если у вас версия 
+
+podman 3.4.4+ds1-1ubuntu1.22.04.2,
+то она сломана (видно, как проблемы с sudo), и надо даунгрейдится
+
+```
+sudo apt-get install podman=3.4.4+ds1-1ubuntu1 -y
+```
+
 
 # Управление и опции комадной строки
 

@@ -727,9 +727,24 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
 
         scmd = f'''
 toolbox rm -f {self.container_name} -y || true
-podman load --quiet -i  in/bin/fc{self.spec.fc_version}/platform 
-#toolbox create {self.container_name} --image localhost/in/bin/fc{self.spec.fc_version}/platform:latest -y;
-toolbox create {self.container_name} --distro fedora --release {self.spec.fc_version} -y;
+
+podman_version=$(podman --version  2>&1 | grep -Po '(?<=podman version )(\d\.\d+)')
+
+verlte() {{
+    printf '%s\n' "$1" "$2" | sort -C -V
+}}
+
+verlt() {{
+    ! verlte "$2" "$1"
+}}
+
+if verlt "$podman_version" "4.3"; then
+  toolbox create {self.container_name} --distro fedora --release {self.spec.fc_version} -y;
+else
+  podman load --quiet -i  in/bin/fc{self.spec.fc_version}/platform 
+  toolbox create {self.container_name} --image fedora-toolbox:{self.spec.fc_version} -y;
+fi
+
 '''
         return scmd
 
@@ -1760,11 +1775,17 @@ fi
         Download toolbox image for platform
         '''
         lines = []
+        mn_ = get_method_name()
         lines.append(f'''
+{bashash_ok_folders_strings(self.states_path + '/' + mn_, [], [self.spec.fc_version],
+        f"Looks like required platform {self.spec.fc_version} already downloaded"
+        )}
+toolbox create tmpfc{self.spec.fc_version} --distro fedora --release {self.spec.fc_version} -y        
+toolbox rm -f tmpfc{self.spec.fc_version} -y || true
 podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_version}/platform/ fedora-toolbox:{self.spec.fc_version}
+{save_state_hash(self.states_path + '/' + mn_)}
 ''')
 
-        mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
 
@@ -2249,7 +2270,7 @@ for SPEC in `echo $SPECS`
 do
     BASEDIR=`dirname $SPEC`/..
     echo $BASEDIR
-    {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken $SPEC -y 
+    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken $SPEC -y 
 done        
 #{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SPECS
 """ 

@@ -35,7 +35,7 @@ def save_state_hash(folder):
     return scmd
 
 def bashash4str(varn, msg):
-    hash_ = hashlib.md5(msg.encode('utf-8')).hexdigest()
+    hash_ = hashlib.md5(str(msg).encode('utf-8')).hexdigest()
     scmd =f'''HASH_{varn}="{hash_}"
 '''
     # scmd =f'''HASH_{varn}=`echo "{msg}" | md5sum`
