@@ -2270,11 +2270,14 @@ for SPEC in `echo $SPECS`
 do
     BASEDIR=`dirname $SPEC`/..
     echo $BASEDIR
+    {self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
     {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken $SPEC -y 
+    rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 done        
 #{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SPECS
 """ 
         ]
+
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
