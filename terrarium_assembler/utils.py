@@ -350,9 +350,13 @@ def fucking_magic(f):
 
 
 def get_git_version():
-    tags = subprocess.check_output("git tag --sort=-creatordate --merged", 
-                                    shell=True, universal_newlines=True)
-    for tag in tags.strip().split('\n'):
-        if tag.startswith('v'):
-            return tag[1:] 
+    try:
+        tags = subprocess.check_output("git tag --sort=-creatordate --merged", 
+                                        shell=True, universal_newlines=True)
+        for tag in tags.strip().split('\n'):
+            if tag.startswith('v'):
+                return tag[1:] 
+    except Exception as ex_:
+        print(ex_)
+        pass        
     return '1.0.0'
