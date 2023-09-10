@@ -727,7 +727,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
 
         scmd = f'''
 toolbox rm -f {self.container_name} -y || true
-podman load --quiet -i  in/bin/fc{self.spec.fc_version}/platform/ 
+podman load --quiet -i  in/bin/fc{self.spec.fc_version}/platform 
 toolbox create {self.container_name} --distro fedora --release {self.spec.fc_version} -y;
 '''
         return scmd
