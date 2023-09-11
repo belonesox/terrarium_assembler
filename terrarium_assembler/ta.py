@@ -592,7 +592,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
                               'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs', 'git',
-                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'pandoc', 'python3-devel']
+                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel']
 
         self.minimal_pips = ['wheel']
         self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons', 'graphviz']
@@ -679,17 +679,18 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
 
         self.rpms_backup_pool = in_bin_fld("rpms_backup_pool")
-        self.our_whl_path = in_bin_fld("our_python_wheels")
+        self.our_whl_path = tmp_fld("our_python_wheels")
         self.ext_whl_path = in_bin_fld("external_python_wheels_resolved_dependencies")
-        self.rebuilded_whl_path = in_bin_fld("rebuilded_python_wheels")
+        self.rebuilded_whl_path = tmp_fld("rebuilded_python_wheels")
         self.pip_source_path = in_bin_fld("pip_sources_to_rebuild")
         self.ext_compiled_tar_path = in_bin_fld("external_python_tars")
         # self.ext_pip_path = in_bin_fld("extpip")
         self.base_whl_path = in_bin_fld("external_python_wheels_fixed_versions")
         self.extra_whl_path = in_bin_fld("python_wheels_for_rebuild_pip_from_sources")
 
-        self.states_path =  in_bin_fld("states")
+        self.states_path =  tmp_fld("states")
         self.rpmbuild_path =  in_bin_fld("rpmbuild")
+        self.nuitka_compiled_path =  tmp_fld("nuitka_compiled")
 
         self.rpms_path = rpmrepo("rpms")
         self.srpms_path = rpmrepo("srpms")
@@ -861,8 +862,7 @@ date
         if not self.nuitka_profiles:
             return
 
-        tmpdir = os.path.join(self.curdir, "tmp/ta")
-        tmpdir = os.path.relpath(tmpdir)
+        tmpdir = os.path.relpath(self.nuitka_compiled_path)
         bfiles = []
 
         # First pass
@@ -2826,13 +2826,36 @@ rm -f {self.ext_compiled_tar_path}/*
         if not self.args.stage_audit_analyse:
             return
 
+        wiki_defines_lines = [f'''{{{{#vardefine:fc_version|{self.spec.fc_version}}}}}''']
+        for k, v in  [(path_var, getattr(self, path_var)) for path_var in vars(self) if 'path' in path_var]:
+            wiki_defines_lines.append(f'''{{{{#vardefine:{k}|{v}}}}}''')
+
+        with open('reports/wiki-defines.wiki', 'w') as lf:
+            lf.write(' '.join([''] + sorted(list(wiki_defines_lines))))
+
         self.cmd(f'''
-{self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.md -f markdown || true
-sed '/^Name | Skip Reason/,$ d' < ./tmp/pip-audit-report.md  > ./tmp/pip-audit-report-external.md
+{self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.json -f json || true
+#sed '/^Name | Skip Reason/,$ d' < ./tmp/pip-audit-report.md  > ./tmp/pip-audit-report-external.md
 {self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
-{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report-external.md -o reports/pip-audit-report.wiki
+#{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report-external.md -o reports/pip-audit-report.wiki
 {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
 ''')
+
+        # try:
+        if 1:
+            json_ = json.loads(open('tmp/pip-audit-report.json').read())
+            rows_ = []
+            for r_ in json_['dependencies']:
+                if 'vulns' in r_:
+                    for v_ in r_['vulns']:
+                        rows_.append([r_['name'], r_['version'], v_['id'], ','.join(v_['fix_versions']), v_['description']])
+
+            write_doc_table('reports/pip-audit-report.htm', ['Пакет', 'Версия', 'Возможная уязвимость', 'Исправлено в версиях', 'Описание'], sorted(rows_))
+        # except Exception as ex_:
+        #     print(ex_)
+        #     pass
+
+        return
 
         spec = self.spec
         #!!! need to fix !!!
