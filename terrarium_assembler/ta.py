@@ -18,7 +18,7 @@ import jinja2.exceptions
 import version_utils.rpm
 import yaml
 import zipfile
-import requirements
+#import requirements
 
 from typing import List
 from pydantic import BaseModel, constr, validator
