@@ -26,6 +26,7 @@ requirements = [
     'pydantic',
     'xmltodict',
     'wheel_filename',
+    'requirements-parser'
 ]
 
 test_requirements = ['pytest>=3', ]

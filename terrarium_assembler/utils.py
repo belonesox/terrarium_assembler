@@ -360,3 +360,33 @@ def get_git_version():
         print(ex_)
         pass        
     return '1.0.0'
+
+
+import ast
+
+def generate_imports_from_python_file(code, filename):
+    """
+    Extract import statements from a string containing Python code.
+
+    Generate (i.e. yield) the module names that are imported in the order
+    they appear in the code.
+    """
+
+    try:
+        parsed_code = ast.parse(code, filename=filename)
+    except SyntaxError as exc:
+        print(f"Could not parse code from {filename}: {exc}")
+        return
+    
+    for node in ast.walk(parsed_code):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.name.split(".", 1)[0]
+                yield name
+        elif isinstance(node, ast.ImportFrom):
+            # Relative imports are always relative to the current package, and
+            # will therefore not resolve to a third-party package.
+            # They are therefore uninteresting to us.
+            if node.level == 0 and node.module is not None:
+                name = node.module.split(".", 1)[0]
+                yield name

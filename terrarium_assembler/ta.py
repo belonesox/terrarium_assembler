@@ -18,6 +18,7 @@ import jinja2.exceptions
 import version_utils.rpm
 import yaml
 import zipfile
+import requirements
 
 from typing import List
 from pydantic import BaseModel, constr, validator
@@ -595,7 +596,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
                               'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel']
 
         self.minimal_pips = ['wheel']
-        self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons', 'graphviz']
+        self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons', 'cyclonedx-bom']
 
 
         nflags_ = {}
@@ -2354,7 +2355,7 @@ rm -f {self.our_whl_path}/*
 {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
 {self.tb_mod} rm -f Pipfile*
 {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
-{self.tb_mod} ./.venv/bin/python3 -m pip install {self.base_whl_path}/*.whl --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} ./.venv/bin/python3 -m pip install {self.base_whl_path}/*.whl --force-reinstall  --no-cache-dir --no-index
 '''
 
 #{self.tb_mod} touch Pipfile
@@ -2382,7 +2383,7 @@ rm -f {self.our_whl_path}/*
 
 {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
 {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
-{self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+{self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall  --no-cache-dir --no-index
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {self.pip_list}
 {self.tb_mod} ./.venv/bin/python3 -m pip list --format json > {self.pip_list_json}
 '''
@@ -2643,7 +2644,7 @@ do
     VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
     FILENAME=$PP-$VERSION
 
-    if [ ! -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ] && [ -f "$PIP_SOURCE_DIR/$FILENAME.zip" ]; then
+    if [ ! -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ] && [ ! -f "$PIP_SOURCE_DIR/$FILENAME.zip" ]; then
         echo **$FILENAME--
         URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select( ((.filename|test(\\"$FILENAME.tar.gz\\")) or (.filename|test(\\"$FILENAME.zip\\"))) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
         echo $URL
@@ -2835,14 +2836,111 @@ rm -f {self.ext_compiled_tar_path}/*
 
         self.cmd(f'''
 {self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.json -f json || true
-#sed '/^Name | Skip Reason/,$ d' < ./tmp/pip-audit-report.md  > ./tmp/pip-audit-report-external.md
-{self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
-#{self.tb_mod} pandoc -w mediawiki tmp/pip-audit-report-external.md -o reports/pip-audit-report.wiki
-{self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
+# {self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
+{self.tb_mod} ./.venv/bin/pipdeptree --json > tmp/pipdeptree.json
+{self.tb_mod} ./.venv/bin/python -m pip list --format freeze > tmp/piplist-freeze.txt
+rm -f tmp/cyclonedx-bom.json
+{self.tb_mod} ./.venv/bin/cyclonedx-py --format json -r -i tmp/piplist-freeze.txt  -o tmp/cyclonedx-bom.json
+# {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
 ''')
 
-        # try:
-        if 1:
+        try:
+        # if 1:
+            lines = [f'''
+            digraph G {{
+                rankdir=LR; 
+                ranksep=1;
+                node[shape=box3d, fontsize=8, fontname=Calibry, style=filled fillcolor=aliceblue]; 
+                edge[color=blue, fontsize=6, fontname=Calibry, style=dashed, dir=back]; 
+            ''']
+            json_ = json.loads(open('tmp/pipdeptree.json').read())
+            # temporary hack. 
+            # todo: later we need to rewrite the code, deleting autoorphaned deps from auxiliary packages such as Nuitka
+            ignore_packages = set('''pipdeptree Nuitka cyclonedx-python-lib py-serializeable
+defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock zstandard zstandard pip pip-api          
+rich Pygments markdown-it-py mdurl Jinja2 MarkupSafe
+'''.split() + self.minimal_pips + self.need_pips
+)
+            our_packages = set()
+            for whl in Path(self.our_whl_path).rglob('*.whl'):
+                package_name = whl.stem.lower().split('-')[0].replace('_', '-')
+                our_packages.add(package_name)
+
+            known_packages = set()
+            for r_ in json_:
+                package_ = r_['package']
+                key_  = package_['key']
+                name_ = package_['package_name']
+                if name_ not in ignore_packages:
+                    known_packages.add(name_.lower())
+                    fillcolormod = ''
+                    if name_ in our_packages:
+                        fillcolormod = 'fillcolor=cornsilk '
+                    lines.append(f''' "{key_}" [label="{name_}" {fillcolormod}]; ''')
+            for v1_ in json_:
+                package_ = v1_['package']
+                deps_ = v1_['dependencies']
+                key1_  = package_['key']
+                name1_ = package_['package_name']
+                if key1_ == 'pip-audit':
+                    wtf = 1
+                if name1_ not in ignore_packages:
+                    for v2_ in deps_:
+                        key2_  = v2_['key']
+                        name2_ = v2_['package_name']
+                        if name2_ not in ignore_packages:
+                            lines.append(f''' "{key1_}" -> "{key2_}" ;''')
+            
+            for np_name, np_ in self.nuitka_profiles.profiles.items():
+                for target_ in np_.builds or []:
+                    folder_ = target_.folder
+                    if 'dmprinter' in folder_:
+                        wtf = 1
+                    utility_ = target_.utility
+                    lines.append(f''' "{utility_}-tool" [label="{utility_}" shape=note fillcolor=darkseagreen2] ;''')
+                    # if utility_ in known_packages:
+                    #     lines.append(f''' "{utility_}-tool" -> "{utility_}" ;''')
+
+                    folderfullpath_ = Path(self.src_dir) / folder_
+                    utility_path = folderfullpath_ / (utility_ + '.py')
+                    
+                    if not utility_path.exists():
+                        continue
+
+                    code_ = open(utility_path, 'r', encoding='utf-8').read()            
+
+                    imported_modules = set()    
+                    for module_ in generate_imports_from_python_file(code_, utility_path):
+                        name_ = module_.replace('_', '-')
+                        if name_ == 'trans':
+                            wtf = 1 
+                        if name_ in known_packages:
+                            imported_modules.add(name_)
+
+                    for module_ in sorted(list(imported_modules)):
+                        lines.append(f''' "{utility_}-tool" -> "{module_}" [style=dotted] ;''')
+
+                    # reqs = folderfullpath_ / 'requirements.txt'
+                    # if reqs.exists():
+                    #     with open(reqs, 'r', encoding='utf-8') as fd:
+                    #         for req in requirements.parse(fd):
+                    #             lines.append(f''' "{utility_}-tool" -> "{req.name}" [style=dotted] ;''')
+            
+            lines.append('}')
+
+            with open('reports/pipdeptree.dot', 'w') as lf:
+                lf.write('\n'.join(lines))
+
+            self.cmd(f'''
+dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
+''')
+        except Exception as ex_:
+            print(ex_)
+            pass
+
+
+        try:
+        # if 1:
             json_ = json.loads(open('tmp/pip-audit-report.json').read())
             rows_ = []
             for r_ in json_['dependencies']:
@@ -2851,11 +2949,20 @@ rm -f {self.ext_compiled_tar_path}/*
                         rows_.append([r_['name'], r_['version'], v_['id'], ','.join(v_['fix_versions']), v_['description']])
 
             write_doc_table('reports/pip-audit-report.htm', ['Пакет', 'Версия', 'Возможная уязвимость', 'Исправлено в версиях', 'Описание'], sorted(rows_))
-        # except Exception as ex_:
-        #     print(ex_)
-        #     pass
+        except Exception as ex_:
+            print(ex_)
+            pass
 
-        return
+        try:
+            json_ = json.loads(open(self.pip_list_json).read())
+            rows_ = []
+            for r_ in json_:
+                rows_.append([r_['name'], r_['version']])
+
+            write_doc_table('reports/doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
+        except Exception as ex_:
+            print(ex_)
+            pass
 
         spec = self.spec
         #!!! need to fix !!!
@@ -3310,17 +3417,6 @@ rm -f {self.ext_compiled_tar_path}/*
 
             print("Install templates takes")
             t.toc()
-
-        try:
-            json_ = json.loads(open(self.pip_list_json).read())
-            rows_ = []
-            for r_ in json_:
-                rows_.append([r_['name'], r_['version']])
-
-            write_doc_table('reports/doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
-        except Exception as ex_:
-            print(ex_)
-            pass
 
         # self.remove_exclusions()
 
