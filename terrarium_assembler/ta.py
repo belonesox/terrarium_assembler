@@ -1955,14 +1955,18 @@ rm -rf '{self.srpms_path}'
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 # {filter_egrep_686}
         state_dir = self.states_path + '/build_deps1'
+        glibc_686_download = f'''
+{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --alldeps --resolve --arch=i686 glibc-devel -y 
+'''
         lines.append(f'''
-{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
+{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), glibc_686_download],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 {self.rm_locales}
+{glibc_686_download}
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
-#{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  $SRPMS -y 
+#{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch --alldeps --resolve  $SRPMS -y 
 {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
 {self.rm_locales}
 # SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
@@ -2796,13 +2800,19 @@ rm -f {self.ext_whl_path}/*
 
         pip_args_ = self.pip_args_from_sources()
 
+        # {self.tb_mod} bash -c "find {self.ext_whl_path} -name '*.tar.*' | xargs -i[] -t ./.venv/bin/python3 -m pip wheel [] --no-deps --no-index --wheel-dir {self.ext_compiled_tar_path}"
+
         lines.append(f'''
 {bashash_ok_folders_strings(self.ext_compiled_tar_path, [self.ext_whl_path], [],
         f"Looks like python tars already compiled"
         )}
                
 rm -f {self.ext_compiled_tar_path}/*
-{self.tb_mod} bash -c "find {self.ext_whl_path} -name '*.tar.*' | xargs -i[] -t ./.venv/bin/python3 -m pip wheel [] --no-deps --wheel-dir {self.ext_compiled_tar_path}"
+TARS=`find {self.ext_whl_path} -name '*.tar.*'`
+for TAR in `echo $TARS`
+do
+    {self.tb_mod} .venv/bin/python3 -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
+done
 {save_state_hash(self.ext_compiled_tar_path)}
 ''')
         mn_ = get_method_name()
