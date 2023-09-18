@@ -2226,8 +2226,8 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
             f"""
 {self.rm_locales}
 createrepo {self.rpmrepo_path}
-{self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[ta]\\nname=TA\\nbaseurl=file:///$d/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
-{self.tb_mod} sudo bash -c 'x="$(readlink -f "$0")"; d="$(dirname "$x")"; echo -e "[tar]\\nname=TAR\\nbaseurl=file:///$d/{self.tarrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/tar.repo'
+{self.tb_mod} sudo bash -c 'sudo echo -e "[ta]\\nname=TA\\nbaseurl=file:///$PWD/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
+{self.tb_mod} sudo bash -c 'sudo echo -e "[tar]\\nname=TAR\\nbaseurl=file:///$PWD/{self.tarrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/tar.repo'
 {self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  --skip-broken {packages} -y --allowerasing
 """ 
         ]
