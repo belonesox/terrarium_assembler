@@ -2021,9 +2021,10 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         pls_ = [p for p in self.ps.terra if isinstance(p, str)]
 
         state_dir = self.states_path + '/build_deps2'
+        rebuild_mod = ' '.join([f'--define "without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
 
         lines.append(f'''
-{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download)],
+{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), rebuild_mod],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 {self.rm_locales}
@@ -2032,7 +2033,8 @@ for SPEC in `echo $SPECS`
 do
     BASEDIR=`dirname $SPEC`/..
     echo $BASEDIR
-    {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
+ {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --define "java_arches nono" {rebuild_mod} --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
+#{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --define "java_arches nono" {rebuild_mod} --skip-broken --downloadonly -y--downloaddir {self.rpms_path} $SPECS  
 done        
 {self.rm_locales}
 {self.create_repo_cmd}
@@ -2266,6 +2268,7 @@ createrepo {self.rpmrepo_path}
         '''
         Install downloaded RPM packages for building SRPMS
         '''
+        rebuild_mod = ' '.join([f'--define "without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
         lines = [
             f"""
 {self.rm_locales}
@@ -2276,7 +2279,7 @@ do
     BASEDIR=`dirname $SPEC`/..
     echo $BASEDIR
     {self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
-    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --skip-broken $SPEC -y 
+    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' {rebuild_mod} --define "java_arches nono" --define "_topdir $d/$BASEDIR" --skip-unavailable $SPEC -y 
     rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 done        
 #{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SPECS
