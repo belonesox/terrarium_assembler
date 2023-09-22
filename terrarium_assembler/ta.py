@@ -671,7 +671,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
             return folder_
 
         def tmp_fld(subfolder):
-            folder_ = os.path.join(self.tmp_dir, subfolder)
+            folder_ = os.path.join(self.tmp_dir, f'fc{self.spec.fc_version}', subfolder)
             mkdir_p(folder_)
             return folder_
 
@@ -679,19 +679,20 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.rpmrepo_path = in_bin_fld("rpmrepo")
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
 
-        self.rpms_backup_pool = in_bin_fld("rpms_backup_pool")
         self.our_whl_path = tmp_fld("our_python_wheels")
         self.ext_whl_path = in_bin_fld("external_python_wheels_resolved_dependencies")
         self.rebuilded_whl_path = tmp_fld("rebuilded_python_wheels")
         self.pip_source_path = in_bin_fld("pip_sources_to_rebuild")
-        self.ext_compiled_tar_path = in_bin_fld("external_python_tars")
         # self.ext_pip_path = in_bin_fld("extpip")
         self.base_whl_path = in_bin_fld("external_python_wheels_fixed_versions")
         self.extra_whl_path = in_bin_fld("python_wheels_for_rebuild_pip_from_sources")
 
         self.states_path =  tmp_fld("states")
-        self.rpmbuild_path =  in_bin_fld("rpmbuild")
+        self.rpmbuild_path =  tmp_fld("rpmbuild")
+        self.common_rpmbuild_path =  tmp_fld("common_rpmbuild")
         self.nuitka_compiled_path =  tmp_fld("nuitka_compiled")
+        self.rpms_backup_pool = tmp_fld("rpms_backup_pool")
+        self.ext_compiled_tar_path = tmp_fld("external_python_wheels_compiled_from_tars")
 
         self.rpms_path = rpmrepo("rpms")
         self.srpms_path = rpmrepo("srpms")
@@ -1956,14 +1957,13 @@ rm -rf '{self.srpms_path}'
 # {filter_egrep_686}
         state_dir = self.states_path + '/build_deps1'
         glibc_686_download = f'''
-{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --alldeps --resolve --arch=i686 glibc-devel -y 
+{self.tb_mod} dnf download --downloaddir {self.rpms_path} --alldeps --resolve --arch=i686 glibc-devel -y 
 '''
         lines.append(f'''
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), glibc_686_download],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 {self.rm_locales}
-{glibc_686_download}
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
 #{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch --alldeps --resolve  $SRPMS -y 
@@ -2023,20 +2023,26 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         state_dir = self.states_path + '/build_deps2'
         rebuild_mod = ' '.join([f'--define "without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
 
+        glibc_686_download = f'''
+{self.tb_mod} dnf download --downloaddir {self.rpms_path} --alldeps --resolve --arch=i686 glibc-devel -y 
+'''
+
         lines.append(f'''
-{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), rebuild_mod],
+{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), rebuild_mod, glibc_686_download],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 {self.rm_locales}
-SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
-for SPEC in `echo $SPECS`
-do
-    BASEDIR=`dirname $SPEC`/..
-    echo $BASEDIR
- {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --define "java_arches nono" {rebuild_mod} --skip-broken --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
-#{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --define "java_arches nono" {rebuild_mod} --skip-broken --downloadonly -y--downloaddir {self.rpms_path} $SPECS  
-done        
+
+#SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+#for SPEC in `echo $SPECS`
+#do
+#    BASEDIR=`dirname $SPEC`/..
+#    echo $BASEDIR
+#{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --define "java_arches nono" {rebuild_mod} --skip-broken --skip-unavailable --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
+{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/{self.common_rpmbuild_path}" --define "java_arches nono" {rebuild_mod} --skip-broken -y --downloadonly --downloaddir {self.rpms_path} {self.common_rpmbuild_path}/SPECS/*.spec
+#done        
 {self.rm_locales}
+{glibc_686_download}
 {self.create_repo_cmd}
 {save_state_hash(state_dir)}
 ''')
@@ -2060,10 +2066,15 @@ done
 #     print(res)
 
         lines.append(f'''
-{bashash_ok_folders_strings(self.rpmbuild_path, [self.srpms_path], [],
+{bashash_ok_folders_strings(self.common_rpmbuild_path, [self.srpms_path], [],
          f"Looks all SRPMs already prepared for build"
         )}
 #rm -rf {self.rpmbuild_path}/*
+mkdir -p {self.common_rpmbuild_path}/SPECS
+mkdir -p {self.common_rpmbuild_path}/SOURCES
+rm -rf {self.common_rpmbuild_path}/SPECS/*
+rm -rf {self.common_rpmbuild_path}/SOURCES/*
+
 SRPMS=`find {self.srpms_path} -name "*.src.rpm"`        
 for SRPM in `echo $SRPMS`
 do
@@ -2071,6 +2082,19 @@ do
     BASEDIR=`basename $SRPM`-rpmbuild
     rm -rf $d/{self.rpmbuild_path}/$BASEDIR/BUILD/*
     {self.tb_mod} rpmbuild -rp --nodeps --nobuild --rebuild  --define "_topdir $d/{self.rpmbuild_path}/$BASEDIR" $SRPM
+done        
+
+SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+for SPEC in `echo $SPECS`
+do
+    BASENAME=`basename $SPEC`
+    ln -sf $d/$SPEC {self.common_rpmbuild_path}/SPECS/$BASENAME
+done        
+SOURCES=`find {self.rpmbuild_path} -wholename "*SOURCES/*.*"`        
+for SOURCE in `echo $SOURCES`
+do
+    BASENAME=`basename $SOURCE`
+    ln -sf $d/$SOURCE {self.common_rpmbuild_path}/SOURCES/$BASENAME
 done        
 {save_state_hash(self.rpmbuild_path)}
 ''')
@@ -2271,18 +2295,25 @@ createrepo {self.rpmrepo_path}
         rebuild_mod = ' '.join([f'--define "without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
         lines = [
             f"""
+{self.backup_rpm_command_because_of_strange_dnf_behaviour()}     
 {self.rm_locales}
 {self.tb_mod} sudo dnf --refresh --disablerepo="*" --enablerepo="ta" update -y 
-SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
-for SPEC in `echo $SPECS`
+#SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+#for SPEC in `echo $SPECS`
+#do
+#    BASEDIR=`dirname $SPEC`/..
+#    echo $BASEDIR
+#    {self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
+#    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' {rebuild_mod} --define "java_arches nono" --define "_topdir $d/$BASEDIR" --skip-unavailable $SPEC -y 
+#    rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
+#done        
+for try in 1 2 3 
 do
-    BASEDIR=`dirname $SPEC`/..
-    echo $BASEDIR
-    {self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
-    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' {rebuild_mod} --define "java_arches nono" --define "_topdir $d/$BASEDIR" --skip-unavailable $SPEC -y 
     rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
-done        
-#{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SPECS
+    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' --define "_topdir $d/{self.common_rpmbuild_path}" --define "java_arches nono" {rebuild_mod} --skip-broken --skip-unavailable -y {self.common_rpmbuild_path}/SPECS/*.spec || true
+done   
+rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
+{self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' --define "_topdir $d/{self.common_rpmbuild_path}" --define "java_arches nono" {rebuild_mod} --skip-broken --skip-unavailable -y {self.common_rpmbuild_path}/SPECS/*.spec
 """ 
         ]
 
@@ -2814,7 +2845,8 @@ rm -f {self.ext_compiled_tar_path}/*
 TARS=`find {self.ext_whl_path} -name '*.tar.*'`
 for TAR in `echo $TARS`
 do
-    {self.tb_mod} .venv/bin/python3 -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
+#    {self.tb_mod} .venv/bin/python3 -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
+    {self.tb_mod} python -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
 done
 {save_state_hash(self.ext_compiled_tar_path)}
 ''')
