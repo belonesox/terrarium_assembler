@@ -2846,7 +2846,7 @@ TARS=`find {self.ext_whl_path} -name '*.tar.*'`
 for TAR in `echo $TARS`
 do
 #    {self.tb_mod} .venv/bin/python3 -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
-    {self.tb_mod} python -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
+    {self.tb_mod} python3 -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
 done
 {save_state_hash(self.ext_compiled_tar_path)}
 ''')
