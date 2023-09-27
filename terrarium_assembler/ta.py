@@ -638,7 +638,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.fs = FoldersSpec(folders=fs_)
 
         self.in_bin = 'in/bin'
-        self.src_dir = 'in/src'
+        self.src_dir = self.src_path = 'in/src'
         self.tmp_dir = 'tmp'
         if 'src_dir' in spec:
             self.src_dir = expandpath(self.src_dir)
@@ -680,6 +680,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
 
         self.our_whl_path = tmp_fld("our_python_wheels")
+        self.pure_sources_path = tmp_fld("pure_sources")
         self.ext_whl_path = in_bin_fld("external_python_wheels_resolved_dependencies")
         self.rebuilded_whl_path = tmp_fld("rebuilded_python_wheels")
         self.pip_source_path = in_bin_fld("pip_sources_to_rebuild")
@@ -1624,6 +1625,57 @@ fi
         self.lines2sh(mn_, lines, mn_)
         pass
 
+    def stage_98_checkout_clean_version(self):
+        '''
+        Checking out sources without history to tempdir (for later export).
+        '''
+        if not self.pp:
+            return
+
+        args = self.args
+        lines = []
+        lines2 = []
+        in_src = os.path.relpath(self.src_dir, start=self.curdir)
+        # lines.add("rm -rf %s " % in_src)
+        lines.append(f"""
+rm -rf {self.pure_sources_path}/*
+""")
+        already_checkouted = set()
+        for td_ in self.projects() + self.spec.templates_dirs:
+            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+            if path_to_dir_ not in already_checkouted:
+                probably_package_name = os.path.split(path_to_dir_)[-1]
+                already_checkouted.add(path_to_dir_)
+                path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
+                newpath = os.path.join(self.pure_sources_path, self.src_path, probably_package_name) 
+                # scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
+                scmd = f'''
+git --git-dir=/dev/null clone --depth 1 --branch {git_branch} file://{self.curdir}/{path_to_dir} {newpath}
+pushd {newpath}
+git config core.fileMode false
+git config core.autocrlf input
+git lfs install
+git lfs pull
+popd
+''' 
+                lines.append(scmd)
+
+        psp_ = self.pure_sources_path.replace("/","\/")
+        sd_ = self.src_dir.replace("/","\/")
+
+        lines.append(f'''
+pushd {self.pure_sources_path}        
+tar -cvf  in-src.tar *
+popd
+''')
+
+#--transform "s/^{psp_}/{sd_}/"                     
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+
     def explode_pp_node(self, td_):
         '''
         Преобразует неоднозначное описание yaml-ноды пакета в git_url и branch
@@ -1649,6 +1701,10 @@ fi
         setup_path = path_to_dir
 
         return git_url, git_branch, path_to_dir, setup_path
+
+
+
+
 
     def pip_install_offline_cmd(self, target):
         '''
