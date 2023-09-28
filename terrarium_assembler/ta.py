@@ -2508,12 +2508,10 @@ rm -f {self.our_whl_path}/*
         mn_ = get_method_name()
 
         scmd = f'''
-{bashash_ok_folders_strings(f'tmp/states/{mn_}', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path], [],
+{bashash_ok_folders_strings(f'tmp/states/{mn_}', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path, self.extra_whl_path], ['v3'],
         f"Looks like dont need to do {mn_}"
         )}
-
-{self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
-
+#{self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
 {self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl`  --no-cache-dir --no-index
 '''
 
