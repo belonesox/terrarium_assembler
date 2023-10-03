@@ -1871,15 +1871,26 @@ podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_ver
             #     lines.append(f'{self.tb_mod} sudo dnf install --nogpgcheck {rp_} -y ')
             else:
                 lines.append(f'{self.tb_mod} sudo dnf config-manager --add-repo {rp_} -y ')
-                prp_ = rp_
-                if '://' in prp_:
-                    prp_ = prp_.split('://')[1]
-                prp_ = prp_.replace('/', '_')
-                lines.append(
-                    f'{self.tb_mod} sudo dnf config-manager --save --setopt={prp_}.gpgcheck=0 -y')
-            pass
+                # prp_ = rp_
+                # if prp_.endswith('.repo'):
+                #     prp_ = os.path.splitext(os.path.split(prp_)[-1])[0]
+                # elif '://' in prp_:
+                #     prp_ = prp_.split('://')[1]
+                # prp_ = prp_.replace('/', '_')
+                # lines.append(
+                #     f'{self.tb_mod} sudo dnf config-manager --save --setopt={prp_}.gpgcheck=0 -y')
 
-        lines.append('')
+        lines.append(
+            f'''
+REPS=`toolbox run -c dm-linux-client-building-projects-fc37 bash -c 'grep -Poh "(?<=^\[)[^\]]+" /etc/yum.repos.d/*'`                
+for rep in $REPS 
+do
+  sudo dnf config-manager --save --setopt=$rep.gpgcheck=0 -y  || true
+done
+
+''')           
+# s
+
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
@@ -1907,7 +1918,8 @@ podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_ver
 
         packages = self.strlist_of_minimal_rpm_packages()
 
-        scmd = f'''dnf download --skip-broken --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        #--skip-broken
+        scmd = f'''dnf download  --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
         lines.append(f'''
 {bashash_ok_folders_strings(self.states_path + '/' + mn_, [], [scmd],
         f"Looks required base RPMs already downloaded"
@@ -2174,13 +2186,13 @@ for SPEC in `echo $SPECS`
 do
     echo $SPEC
     BASEDIR=`dirname $SPEC`/..
-    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
+    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp "{{}}" {self.rebuilded_rpms_path}/ 
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
     rm -rf $BASEDIR/BUILD/*
     {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {save_state_hash("$d/$BASEDIR/RPMS")}
-    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" | xargs -i{{}} cp {{}} {self.rebuilded_rpms_path}/ 
+    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp "{{}}" {self.rebuilded_rpms_path}/ 
 done        
 {self.create_rebuilded_repo_cmd}
 ''')
@@ -2823,7 +2835,7 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
                 lines.append(f'''echo -e "{content_}" > $PPDIR/{file_} ''')
             lines.append(f'''
 {self.tb_mod} bash -c "cd $PPDIR; {command} " 
-{self.tb_mod} find $PPDIR -name "*.whl" | xargs -i{{}} cp {{}} {self.rebuilded_whl_path}/ 
+{self.tb_mod} find $PPDIR -name "*.whl" -exec cp "{{}}" {self.rebuilded_whl_path}/ 
         ''')
 # $d/.venv/bin/python -m pip install --keep-outdated --force-reinstall --no-deps -e . 
         mn_ = get_method_name()
