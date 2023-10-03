@@ -2186,13 +2186,13 @@ for SPEC in `echo $SPECS`
 do
     echo $SPEC
     BASEDIR=`dirname $SPEC`/..
-    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp "{{}}" {self.rebuilded_rpms_path}/ 
+    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
     rm -rf $BASEDIR/BUILD/*
     {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {save_state_hash("$d/$BASEDIR/RPMS")}
-    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp "{{}}" {self.rebuilded_rpms_path}/ 
+    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
 done        
 {self.create_rebuilded_repo_cmd}
 ''')
@@ -2835,7 +2835,7 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
                 lines.append(f'''echo -e "{content_}" > $PPDIR/{file_} ''')
             lines.append(f'''
 {self.tb_mod} bash -c "cd $PPDIR; {command} " 
-{self.tb_mod} find $PPDIR -name "*.whl" -exec cp "{{}}" {self.rebuilded_whl_path}/ 
+{self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ 
         ''')
 # $d/.venv/bin/python -m pip install --keep-outdated --force-reinstall --no-deps -e . 
         mn_ = get_method_name()
