@@ -1882,7 +1882,7 @@ podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_ver
 
         lines.append(
             f'''
-REPS=`toolbox run -c dm-linux-client-building-projects-fc37 bash -c 'grep -Poh "(?<=^\[)[^\]]+" /etc/yum.repos.d/*'`                
+REPS=`{self.tb_mod} bash -c 'grep -Poh "(?<=^\[)[^\]]+" /etc/yum.repos.d/*'`                
 for rep in $REPS 
 do
   sudo dnf config-manager --save --setopt=$rep.gpgcheck=0 -y  || true
@@ -2835,7 +2835,7 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
                 lines.append(f'''echo -e "{content_}" > $PPDIR/{file_} ''')
             lines.append(f'''
 {self.tb_mod} bash -c "cd $PPDIR; {command} " 
-{self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ \; 
+{self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ \;  
         ''')
 # $d/.venv/bin/python -m pip install --keep-outdated --force-reinstall --no-deps -e . 
         mn_ = get_method_name()
