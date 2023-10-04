@@ -2835,7 +2835,7 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
                 lines.append(f'''echo -e "{content_}" > $PPDIR/{file_} ''')
             lines.append(f'''
 {self.tb_mod} bash -c "cd $PPDIR; {command} " 
-{self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ 
+{self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ \; 
         ''')
 # $d/.venv/bin/python -m pip install --keep-outdated --force-reinstall --no-deps -e . 
         mn_ = get_method_name()
