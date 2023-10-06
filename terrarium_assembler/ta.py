@@ -247,9 +247,9 @@ class PythonPackages:
 
     def __post_init__(self):
         if not self.build:
-            self.build = PythonPackagesSpec([],[])
+            self.build = PythonPackagesSpec(['pip'], [])
         if not self.terra:
-            self.terra = PythonPackagesSpec([],[])
+            self.terra = PythonPackagesSpec([], [])
         pass
 
 
@@ -2694,6 +2694,8 @@ done
     def base_wheels_string(self):
         pip_targets, _ = self.get_pip_targets_and_reqs_from_sources(terra=False)
         pip_targets_ = " ".join([r for r in pip_targets if '==' in r])
+        if not pip_targets_:
+            pip_targets_ = 'pip==23.2.1'
         return pip_targets_
 
     def stage_21_download_base_wheels(self):
@@ -2714,6 +2716,8 @@ done
         bws =  self.base_wheels_string()
 
         # pipenv environment does not exists we using regular python to download base packages.
+        # scmd = 'date'
+        # if bws:
         scmd = f"python3 -m pip download  {bws} --dest {self.base_whl_path} "
         lines.append(f'''
 {bashash_ok_folders_strings(self.base_whl_path, [], [bws],
@@ -4115,21 +4119,25 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
 
             os.chdir(nfpm_dir)
             install_mod = ''            
+            postinst_script_path_ = os.path.join(nfpm_dir, 'postinstall.sh')            
+            os.unlink(postinst_script_path_)
             if 'post_installer' in self.spec:
-                with open(os.path.join(nfpm_dir, 'postinstall.sh'), 'w', encoding='utf-8') as lf:
+                with open(postinst_script_path_, 'w', encoding='utf-8') as lf:
                     lf.write(f'''
 #!/bin/bash
 {self.spec.post_installer}
 # may be we have to do something when error occurs. rollback???
 exit $?
             '''.strip())
-            install_mod ="""
+                install_mod ="""
       postinstall: ./postinstall.sh
     """
 
             remove_mod = ''            
+            pre_remove_script_path_ = os.path.join(nfpm_dir, 'pre_remove.sh')
+            os.unlink(pre_remove_script_path_)
             if 'pre_remove' in self.spec:
-                with open(os.path.join(nfpm_dir, 'pre_remove.sh'), 'w', encoding='utf-8') as lf:
+                with open(pre_remove_script_path_, 'w', encoding='utf-8') as lf:
                     lf.write(f'''
 #!/bin/bash
 {self.spec.pre_remove}
