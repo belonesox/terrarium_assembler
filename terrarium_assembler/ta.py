@@ -333,6 +333,7 @@ class PackagesSpec:
     repos: Optional[List] = dc.field(default_factory=list)
     build: Optional[List] = dc.field(default_factory=list)
     terra:  Optional[List] = dc.field(default_factory=list)
+    builddep:  Optional[List] = dc.field(default_factory=list)
     rebuild:  Optional[List] = dc.field(default_factory=list)
     rebuild_disable_features: Optional[List] = dc.field(default_factory=list)
     terra_exclude: Optional[List] = dc.field(default_factory=list)
@@ -1986,7 +1987,7 @@ createrepo {self.tarrepo_path}
         # lines.append(scmd)
         # scmd = "sudo yum-config-manager --enable remi"
         # lines.append(scmd)
-        np_ = self.need_packages + self.minimal_packages + self.ps.build + self.ps.terra
+        np_ = self.need_packages + self.minimal_packages + self.ps.build + self.ps.terra + self.ps.builddep
         pls_ = [p for p in np_ if isinstance(p, str)]
         purls_ = [p.url for p in np_  if not isinstance(p, str)]
 
@@ -1994,23 +1995,24 @@ createrepo {self.tarrepo_path}
         packages = " ".join(pls_ + purls_)
             #--arch=x86_64  --arch=x86_64 --arch=noarch         
         scmd = f'''dnf download --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
-        #--skip-broken
-        #str(self.ps.remove_from_download)
+
+        scmd_builddep = '' 
+        if self.ps.builddep:
+            ps_ = " ".join(self.ps.builddep)
+            scmd_builddep = f'''{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} {ps_} -y '''
+
         lines.append(f'''
-{bashash_ok_folders_strings(self.rpms_path, [], [scmd],
+{bashash_ok_folders_strings(self.rpms_path, [], [scmd, scmd_builddep],
         f"Looks required RPMs already downloaded"
         )}
 # rm -rf '{self.rpms_path}'
 {self.rm_locales}
 {self.tb_mod} {scmd}
+{scmd_builddep}
 {self.rm_locales}
 {self.create_repo_cmd}
 {save_state_hash(self.rpms_path)}
 ''')
-        # for pack_ in self.ps.remove_from_download or []:
-        #     scmd = f'rm -f {self.rpms_path}/{pack_}* '
-        #     lines.append(scmd)
-
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
@@ -2214,6 +2216,14 @@ done
         Rebuild SRPM packages.
         '''
         lines = []
+        svace_path = 'app/svace/bin/svace'
+        # svace_init_mod = ''
+        svace_prefix = ''
+        svace_mod = False
+        if Path(svace_path).exists():
+            svace_mod = True
+            svace_prefix = f'{svace_path} build --svace-dir $BASEDIR '
+
 # HOME=$d/tmp
         rebuild_mod = ' --without '.join([''] + self.ps.rebuild_disable_features)
 
@@ -2227,8 +2237,14 @@ do
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
+''')
+        if svace_mod:                
+            lines.append(f'''
+{svace_path} init $BASEDIR            
+''')
+        lines.append(f'''
     rm -rf $BASEDIR/BUILD/*
-    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+    {self.tb_mod} {svace_prefix} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
     {save_state_hash("$d/$BASEDIR/RPMS")}
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
 done        
@@ -2374,13 +2390,21 @@ createrepo {self.rpmrepo_path}
         '''
         Install downloaded RPM packages
         '''
-        packages = " ".join(self.ps.build + self.need_packages + self.ps.terra + self.minimal_packages)
+        packages = " ".join(self.ps.build + self.need_packages 
+                            + self.ps.terra + self.minimal_packages + self.ps.builddep)
+
+        scmd_builddep = '' 
+        if self.ps.builddep:
+            ps_ = " ".join(self.ps.builddep)
+            scmd_builddep = f'''{self.tb_mod} sudo dnf builddep --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {ps_} -y '''
+
         #--skip-broken
         lines = [
             f"""
 createrepo {self.rpmrepo_path}
 {self.rm_locales}
 {self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {packages}
+{scmd_builddep}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
 {self.tb_mod} cat {self.file_list_from_terra_rpms} {self.file_list_from_deps_rpms} > {self.file_list_from_rpms}
