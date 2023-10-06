@@ -1,5 +1,5 @@
 """Main module."""
-from typing import List
+from typing import List, Optional
 import argparse
 import os
 import subprocess
@@ -9,6 +9,7 @@ import stat
 import re
 import json
 import dataclasses as dc
+import pydantic
 import datetime
 import hashlib
 import time
@@ -23,15 +24,15 @@ import zipfile
 from typing import List
 from pydantic import BaseModel, constr, validator
 from pydantic.dataclasses import dataclass
+import dacite
 
-
-class MyBaseModel(BaseModel):
-    """ 
-    Base Pydantic Model
-    """
-    class Config:
-        validate_assignment = True
-        use_enum_values = True
+# class MyBaseModel(BaseModel):
+#     """ 
+#     Base Pydantic Model
+#     """
+#     class Config:
+#         validate_assignment = True
+#         use_enum_values = True
 
 class Config:
     validate_assignment = True
@@ -171,6 +172,10 @@ class BinRegexps:
         add_listrex2list(self.need_patch, self.need_patch_re)
 
         self.need_exclude_re = {}
+        if not self.need_exclude:
+            self.need_exclude = edict()
+            self.need_exclude.common = []
+            self.need_exclude.release = []
         add_listrex2dict(self.need_exclude.common, self.need_exclude_re)
         if self.debug:
             add_listrex2dict(self.need_exclude.debug, self.need_exclude_re)
@@ -222,9 +227,10 @@ class PythonPackagesSpec:
     Specification of set of python packages,
     by pip modules and by git-nodes of some python projects
     '''
-    pip: list = None
-    projects: list = None
+    pip: Optional[List]   = dc.field(default_factory=list)
+    projects: Optional[List]   = dc.field(default_factory=list)
 
+#DefaultPythonPackagesSpec = PythonPackagesSpec([],[])
 
 @dc.dataclass
 class PythonPackages:
@@ -233,33 +239,55 @@ class PythonPackages:
         build: only needed for building on builder host
         terra: needed to be install into terrarium
     '''
-    build: PythonPackagesSpec
-    terra: PythonPackagesSpec
-    rebuild: list = None
-    remove_from_download: list = None
-    shell_commands: list = None
+    build: Optional[PythonPackagesSpec] 
+    terra: Optional[PythonPackagesSpec] 
+    rebuild: Optional[List]   = dc.field(default_factory=list)
+    remove_from_download: Optional[List]  = dc.field(default_factory=list)
+    shell_commands: Optional[List] = dc.field(default_factory=list)
 
     def __post_init__(self):
-        '''
-        Recode from easydicts to objects
-        '''
-        self.build = PythonPackagesSpec(**self.build)
-        self.terra = PythonPackagesSpec(**self.terra)
-        # if 'remove_from_download' not in dir(self):
-        #     self.remove_from_download = []
+        if not self.build:
+            self.build = PythonPackagesSpec([],[])
+        if not self.terra:
+            self.terra = PythonPackagesSpec([],[])
         pass
+
+
+    # def __init__(self, adict: dict):
+    #     '''
+    #     Recode from easydicts to objects
+    #     '''
+    #     for k, v in adict.items():
+    #         if v:
+    #             setattr(self, k, v)
+
+    # def __post_init__(self):
+    #     self.build = PythonPackagesSpec(**self.build)
+    #     self.terra = PythonPackagesSpec(**self.terra)
+    #     pass
 
     def pip(self):
         '''
         Get full list of pip packages
         '''
-        return (self.build.pip or []) + (self.terra.pip or [])
+        res = []
+        if self.build and self.build.pip:
+            res.extend(self.build.pip)
+        if self.terra and self.terra.pip:
+            res.extend(self.terra.pip)
+        return res
+        # return (self.build.pip or []) + (self.terra.pip or [])
 
     def projects(self):
         '''
         Get full list of python projects
         '''
-        return (self.build.projects or []) + (self.terra.projects or [])
+        res = []
+        if self.build and self.build.projects:
+            res.extend(self.build.projects)
+        if self.terra and self.terra.projects:
+            res.extend(self.terra.projects)
+        return res
 
 
 @dc.dataclass
@@ -302,16 +330,22 @@ class PackagesSpec:
     '''
     Packages Spec.
     '''
-    repos: list
-    build:  list
-    terra:  list
-    rebuild:  list
-    rebuild_disable_features: list
-    terra_exclude: list    
-    exclude_prefix: list
-    exclude_suffix: list
-    remove_from_download: list
+    repos: Optional[List] = dc.field(default_factory=list)
+    build: Optional[List] = dc.field(default_factory=list)
+    terra:  Optional[List] = dc.field(default_factory=list)
+    rebuild:  Optional[List] = dc.field(default_factory=list)
+    rebuild_disable_features: Optional[List] = dc.field(default_factory=list)
+    terra_exclude: Optional[List] = dc.field(default_factory=list)
+    exclude_prefix: Optional[List] = dc.field(default_factory=list)
+    exclude_suffix: Optional[List] = dc.field(default_factory=list)
+    remove_from_download: Optional[List] = dc.field(default_factory=list)
 
+    # def __init__(self, adict: dict):
+    #     ...
+    #     for k, v in adict.items():
+    #         if v:
+    #             setattr(self, k, v)
+    #     ...        
     def __post_init__(self):
         '''
         Add some base-packages to «build» list
@@ -320,16 +354,12 @@ class PackagesSpec:
             if p_ not in self.build:
                 self.build.append(p_)
 
-        if not self.rebuild:
-            self.rebuild = []
+        # need for nfpm
+        for p_ in ['https://repo.goreleaser.com/yum/']:
+            if p_ not in self.repos:
+                self.repos.append(p_)
 
-        if not self.terra:
-            self.terra = []
-
-        if not self.terra_exclude:
-            self.terra_exclude = []
-
-        pass
+    #     pass
 
     def is_package_needed(self, package):
         '''
@@ -589,11 +619,16 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         if self.args.stage_make_packages == 'default':
             self.args.stage_make_packages = self.package_modes
 
-        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 'md5deep']
+        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 'system-rpm-config', 'annobin-plugin-gcc', 'gcc-plugin-annobin', 'gcc', 'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
                               'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs', 'git',
-                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel']
+                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel', 
+                              #WTF, why they not downloaded as deps for python3-devel? Todo!
+                              # https://github.com/rpm-software-management/dnf/issues/1998
+                              'pyproject-rpm-macros', 
+                              'python3-rpm-generators', 'python-rpm-macros', 'python3-rpm-macros',
+                              ]
 
         self.minimal_pips = ['wheel']
         self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons', 'cyclonedx-bom']
@@ -626,8 +661,10 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
             spec.python_packages.rebuild = []
 
 
-        self.ps = PackagesSpec(**spec.packages)
-        self.pp = PythonPackages(**spec.python_packages)
+        self.ps = dacite.from_dict(data_class=PackagesSpec, data=spec.packages)
+        # self.ps = PackagesSpec(spec.packages)
+        # self.pp = PythonPackages(spec.python_packages)
+        self.pp = dacite.from_dict(data_class=PythonPackages, data=spec.python_packages)
         self.gp = None
         if 'go_packages' in spec:
             self.gp = GoPackages(**spec.go_packages)
@@ -1956,7 +1993,8 @@ createrepo {self.tarrepo_path}
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
             #--arch=x86_64  --arch=x86_64 --arch=noarch         
-        scmd = f'''dnf download --skip-broken --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        scmd = f'''dnf download --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        #--skip-broken
         #str(self.ps.remove_from_download)
         lines.append(f'''
 {bashash_ok_folders_strings(self.rpms_path, [], [scmd],
@@ -2322,8 +2360,9 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 createrepo {self.rpmrepo_path}
 {self.tb_mod} sudo bash -c 'sudo echo -e "[ta]\\nname=TA\\nbaseurl=file://$PWD/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
 {self.tb_mod} sudo bash -c 'sudo echo -e "[tar]\\nname=TAR\\nbaseurl=file://$PWD/{self.tarrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/tar.repo'
-{self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  --skip-broken {packages} -y --allowerasing
+{self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"   {packages} -y --allowerasing
 """ 
+#--skip-broken
         ]
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)

@@ -24,6 +24,7 @@ requirements = [
     'pydantic',
     'xmltodict',
     'wheel_filename',
+    'dacite',
 #    'requirements-parser'
 ]
 
