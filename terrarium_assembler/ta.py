@@ -4120,7 +4120,7 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
             os.chdir(nfpm_dir)
             install_mod = ''            
             postinst_script_path_ = os.path.join(nfpm_dir, 'postinstall.sh')            
-            os.unlink(postinst_script_path_)
+            Path(postinst_script_path_).unlink(missing_ok=True)
             if 'post_installer' in self.spec:
                 with open(postinst_script_path_, 'w', encoding='utf-8') as lf:
                     lf.write(f'''
@@ -4135,7 +4135,7 @@ exit $?
 
             remove_mod = ''            
             pre_remove_script_path_ = os.path.join(nfpm_dir, 'pre_remove.sh')
-            os.unlink(pre_remove_script_path_)
+            Path(pre_remove_script_path_).unlink(missing_ok=True)
             if 'pre_remove' in self.spec:
                 with open(pre_remove_script_path_, 'w', encoding='utf-8') as lf:
                     lf.write(f'''
