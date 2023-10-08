@@ -758,6 +758,13 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
 {self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.rpmrepo_path}
 '''
         self.create_rebuilded_repo_cmd = f'{self.tb_mod} createrepo -x "*/BUILD/*" -x "*/BUILDROOT/*" {self.tarrepo_path}'
+
+        self.svace_mod = False
+        self.svace_path = 'app/svace/bin/svace'
+        if Path(self.svace_path).exists():
+            self.svace_mod = True
+
+
         pass
 
     def python_version_for_build(self):
@@ -1957,7 +1964,8 @@ done
         packages = self.strlist_of_minimal_rpm_packages()
 
         #--skip-broken
-        scmd = f'''dnf download  --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        scmd = f'''dnf download  --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch  --resolve  {packages} -y '''
+        #--alldeps
         lines.append(f'''
 {bashash_ok_folders_strings(self.states_path + '/' + mn_, [], [scmd],
         f"Looks required base RPMs already downloaded"
@@ -1994,7 +2002,7 @@ createrepo {self.tarrepo_path}
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
             #--arch=x86_64  --arch=x86_64 --arch=noarch         
-        scmd = f'''dnf download --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch --alldeps --resolve  {packages} -y '''
+        scmd = f'''dnf download --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch --resolve  {packages} -y '''
 
         scmd_builddep = '' 
         if self.ps.builddep:
@@ -2065,7 +2073,7 @@ rm -rf '{self.srpms_path}'
 # {filter_egrep_686}
         state_dir = self.states_path + '/build_deps1'
         glibc_686_download = f'''
-{self.tb_mod} dnf download --downloaddir {self.rpms_path} --alldeps --resolve --arch=i686 glibc-devel -y 
+{self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y 
 '''
         lines.append(f'''
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), glibc_686_download],
@@ -2074,7 +2082,7 @@ rm -rf '{self.srpms_path}'
 {self.rm_locales}
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
 SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
-#{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch --alldeps --resolve  $SRPMS -y 
+#{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch  --resolve  $SRPMS -y 
 {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
 {self.rm_locales}
 # SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
@@ -2132,7 +2140,7 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         rebuild_mod = ' '.join([f'--define "without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
 
         glibc_686_download = f'''
-{self.tb_mod} dnf download --downloaddir {self.rpms_path} --alldeps --resolve --arch=i686 glibc-devel -y 
+{self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y 
 '''
 
         lines.append(f'''
@@ -2216,13 +2224,9 @@ done
         Rebuild SRPM packages.
         '''
         lines = []
-        svace_path = 'app/svace/bin/svace'
-        # svace_init_mod = ''
         svace_prefix = ''
-        svace_mod = False
-        if Path(svace_path).exists():
-            svace_mod = True
-            svace_prefix = f'{svace_path} build --svace-dir $BASEDIR '
+        if self.svace_mod:
+            svace_prefix = f'{self.svace_path} build --svace-dir $BASEDIR '
 
 # HOME=$d/tmp
         rebuild_mod = ' --without '.join([''] + self.ps.rebuild_disable_features)
@@ -2238,9 +2242,9 @@ do
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
 ''')
-        if svace_mod:                
+        if self.svace_mod:                
             lines.append(f'''
-{svace_path} init $BASEDIR            
+{self.svace_path} init $BASEDIR            
 ''')
         lines.append(f'''
     rm -rf $BASEDIR/BUILD/*
@@ -2628,10 +2632,10 @@ do
     PPN=`echo $PP | tr '-' '_'`
     PPD=`echo $PP | tr '_' '-'`
     VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
-    FILENAME=$PP-$VERSION
-    if [ -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
+    DIRNAME=$PP-$VERSION
+    FULLDIRNAME=$PIP_SOURCE_DIR/$DIRNAME
+    if [ -d "$FULLDIRNAME" ]; then
 
-#{self.tb_mod} ./.venv/bin/python3 -m pip install --force-reinstall --no-deps  --find-links="{self.our_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index -e $PIP_SOURCE_DIR/$FILENAME
 {self.tb_mod} rm -rf .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 {self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 
@@ -2888,7 +2892,12 @@ mkdir -p $PIP_SOURCE_DIR
 rm -f {self.rebuilded_whl_path}/* 
         ''')
 
-        for pp, command, files_ in self.python_rebuild_profiles.get_commands_to_build_packages():
+        svace_prefix = f''
+        if self.svace_mod:
+            svace_prefix = f'{self.curdir}/{self.svace_path} build --svace-dir {self.curdir}/$PPDIR '
+
+
+        for pp, command, files_ in self.python_rebuild_profiles.get_commands_to_build_packages(svace_prefix):
             lines.append(f'''
 PP={pp}
 PPD=`echo $PP | tr '_' '-'`
@@ -2900,11 +2909,16 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
             for file_ in files_ or []:    
                 content_ = files_[file_].replace('\n','\\n')
                 lines.append(f'''echo -e "{content_}" > $PPDIR/{file_} ''')
+
+            if self.svace_mod:                
+                lines.append(f'''
+{self.svace_path} init $PPDIR
+    ''')
+
             lines.append(f'''
 {self.tb_mod} bash -c "cd $PPDIR; {command} " 
 {self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ \;  
         ''')
-# $d/.venv/bin/python -m pip install --keep-outdated --force-reinstall --no-deps -e . 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass

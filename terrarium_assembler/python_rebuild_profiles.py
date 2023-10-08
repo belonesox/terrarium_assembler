@@ -45,13 +45,13 @@ class PythonRebuildProfile:
         return env
 
 
-    def get_build_command(self):
+    def get_build_command(self, prefix=''):
         '''
         Get build command for python package, using inheritance.
         '''
         env = self.get_merged_env()
         env_str = " ".join([f"{k}='{v}'" for k, v in env.items()])
-        scmd  = f'''{env_str} {self.command}'''
+        scmd  = f'''{env_str} {prefix} {self.command}'''
         return scmd
 
     def get_list_of_libs_dir(self):
@@ -139,9 +139,9 @@ class PythonRebuildProfiles:
         return " ".join(plist_)
 
 
-    def get_commands_to_build_packages(self):    
+    def get_commands_to_build_packages(self, prefix=''):    
         plist_ = []
         for _, profile in self.profiles.items():
-            command_ = profile.get_build_command()
+            command_ = profile.get_build_command(prefix)
             for pp in profile.packages:
                 yield pp, command_, profile.files
