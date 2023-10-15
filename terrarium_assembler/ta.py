@@ -4052,7 +4052,7 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
         '''
         lines = []
 
-        if self.tests and 'profiles' in self.tests:
+        if self.tests and isinstance(self.tests, TestsSpec):
             for p_ in self.tests.profiles:
                 profile_name = p_
                 distro_ = self.tests.profiles[p_].distro
