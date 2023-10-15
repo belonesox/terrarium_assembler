@@ -1,5 +1,5 @@
 """Main module."""
-from typing import List, Optional
+from typing import List, Dict,  Optional
 import argparse
 import os
 import subprocess
@@ -199,14 +199,10 @@ class BinRegexps:
         return False
 
     def is_need_exclude(self, f):
-        if 'libzbar.so' in f:
-            wtf = 34342
         for re_ in self.ignore_re:
             if re_.match(f):
                 return False
         for re_ in self.need_exclude_re:
-            if 'markupsafe' in re_.pattern:
-                wtf = 1
             if re_.match(f):
                 cnt_ = self.need_exclude_re[re_]
                 if not cnt_:
@@ -252,19 +248,6 @@ class PythonPackages:
             self.terra = PythonPackagesSpec([], [])
         pass
 
-
-    # def __init__(self, adict: dict):
-    #     '''
-    #     Recode from easydicts to objects
-    #     '''
-    #     for k, v in adict.items():
-    #         if v:
-    #             setattr(self, k, v)
-
-    # def __post_init__(self):
-    #     self.build = PythonPackagesSpec(**self.build)
-    #     self.terra = PythonPackagesSpec(**self.terra)
-    #     pass
 
     def pip(self):
         '''
@@ -388,6 +371,38 @@ class ModulesSpec:
     modules:   list
 
 
+@dc.dataclass
+class TestProfileSpec:
+    '''
+    Specification for a test profile
+    '''
+    name:       str = ''
+    setup:    str = ''
+
+
+@dc.dataclass
+class TestSpec:
+    '''
+    Specification for a test
+    '''
+    name:       str = ''
+    command:    str = ''
+
+
+@dc.dataclass
+class TestsSpec:
+    '''
+        Specification for tests
+    '''
+    profiles: Optional[Dict] = dc.field(default_factory=list)
+    scripts: Optional[List] = dc.field(default_factory=list)
+
+    def __post_init__(self):
+        if not self.profiles:
+            self.profiles = [TestProfileSpec('ubuntu:22.04', '')]
+        pass
+
+
 class TerrariumAssembler:
     '''
     Генерация переносимой сборки бинарных линукс-файлов (в частности питон)
@@ -428,15 +443,16 @@ class TerrariumAssembler:
         self.glibc_devel_packages = 'tmp/glibc_devel_packages.txt'
         self.files_source_path = 'tmp/files-source.yaml'
         self.bin_files_sources_path = 'tmp/bin-files-sources.yaml'
-        # self.files_source_path = 'tmp/files-source.txt'
-        # self.doc_list_from_rpms = 'tmp/doc-list-from-rpm.txt'
+        self.used_files_path = 'tmp/used-files.yaml'
+        self.files_source_after_minimization_path = 'tmp/files-source-after-minimization.yaml'
+        self.bin_files_sources_after_minimization_path = 'tmp/bin-files-sources-after-minimization.yaml'
         self.pipdeptree_graph_dot = 'reports/pipdeptree-graph.dot'
         self.pipdeptree_graph_mw = 'reports/pipdeptree-graph.mw'
         self.pip_list = 'tmp/pip-list.txt'
         self.pip_list_json = 'tmp/pip-list.json'
 
         self.out_interpreter = "pbin/ld.so"
-        self.bin_files_name = "tmp/bin-files.txt"
+        self.bin_files_path = "tmp/bin-files.txt"
 
         self.bin_files = set()
         self.bin_files_sources = {}
@@ -526,8 +542,8 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop || true
-sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop  || true
+sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox || true
+sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop distrobox  || true
 ''')
             if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
                 self.cmd('sudo ln -sf /usr/bin/createrepo_c /usr/bin/createrepo')
@@ -620,7 +636,10 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         if self.args.stage_make_packages == 'default':
             self.args.stage_make_packages = self.package_modes
 
-        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 'system-rpm-config', 'annobin-plugin-gcc', 'gcc-plugin-annobin', 'gcc', 'md5deep']
+        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 
+                                  'system-rpm-config', 'annobin-plugin-gcc', 'gcc-plugin-annobin', 
+                                  'gcc', 
+                                 'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
                               'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs', 'git',
@@ -666,6 +685,9 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         # self.ps = PackagesSpec(spec.packages)
         # self.pp = PythonPackages(spec.python_packages)
         self.pp = dacite.from_dict(data_class=PythonPackages, data=spec.python_packages)
+        self.tests = None
+        if 'tests' in spec:
+            self.tests = dacite.from_dict(data_class=TestsSpec, data=spec.tests)
         self.gp = None
         if 'go_packages' in spec:
             self.gp = GoPackages(**spec.go_packages)
@@ -721,6 +743,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.pure_sources_path = tmp_fld("pure_sources")
         self.ext_whl_path = in_bin_fld("external_python_wheels_resolved_dependencies")
         self.rebuilded_whl_path = tmp_fld("rebuilded_python_wheels")
+        self.strace_files_path = tmp_fld("strace_files")
         self.pip_source_path = in_bin_fld("pip_sources_to_rebuild")
         # self.ext_pip_path = in_bin_fld("extpip")
         self.base_whl_path = in_bin_fld("external_python_wheels_fixed_versions")
@@ -942,8 +965,18 @@ export PATH="/usr/lib64/ccache:$PATH"
 {bashash_ok_folders_strings(ok_dir, ['.venv', src_dir], [],
         f"Sources for {build_name} not changed, skipping"
         )}
+    """)
 
-        {self.tb_mod} bash -c 'time nice -19 ./.venv/bin/python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > reports/{build_name}.log'
+                svace_prefix = ''
+                if self.svace_mod:                
+                    svace_prefix = f'{self.svace_path} build --svace-dir {build_dir} '
+                    lines.append(f'''
+{self.svace_path} init {build_dir}
+    ''')
+
+        
+                lines.append(fR"""
+{self.tb_mod} bash -c 'time nice -19 {svace_prefix} ./.venv/bin/python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > reports/{build_name}.log'
 {self.tb_mod} ./.venv/bin/python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
 mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
@@ -1069,7 +1102,7 @@ popd
         pass
 
 
-    def stage_52_post_pack(self):
+    def stage_56_post_pack(self):
         '''
         Post pack processing
         '''
@@ -1275,25 +1308,25 @@ popd
 
     #     return packages_
 
-    # def generate_files_from_pips(self, pips):
-    #     '''
-    #     Для заданного списка PIP-пакетов, возвращаем список файлов в этих пакетах, которые нужны нам.
-    #     '''
-    #     file_list = []
-    #     pips_ = [p.split('==')[0] for p in pips]
-    #     import pkg_resources
-    #     for dist in pkg_resources.working_set:
-    #         if dist.key in pips_:
-    #             if dist.has_metadata('RECORD'):
-    #                 lines = dist.get_metadata_lines('RECORD')
-    #                 paths = [line.split(',')[0] for line in lines]
-    #                 paths = [os.path.join(dist.location, p) for p in paths]
-    #                 file_list.extend(paths)
+    def generate_files_from_pips(self, pips):
+        '''
+        Для заданного списка PIP-пакетов, возвращаем список файлов в этих пакетах, которые нужны нам.
+        '''
+        file_list = []
+        pips_ = [p.split('==')[0] for p in pips]
+        import pkg_resources
+        for dist in pkg_resources.working_set:
+            if dist.key in pips_:
+                if dist.has_metadata('RECORD'):
+                    lines = dist.get_metadata_lines('RECORD')
+                    paths = [line.split(',')[0] for line in lines]
+                    paths = [os.path.join(dist.location, p) for p in paths]
+                    file_list.extend(paths)
 
-    #     pass
-    #     res_ = [x for x in file_list if self.should_copy(x)]
-    #     return res_
-    #     pass
+        pass
+        res_ = [x for x in file_list if self.should_copy(x)]
+        return res_
+        pass
 
     def prefix_args_for_toolbox(self):
         args_ = []
@@ -1426,6 +1459,10 @@ popd
             return to_
         except Exception as ex_:
             print("Troubles on adding", to_, "<-", what)
+            if 'svace' in what:
+                wtf = 1
+            if '${cwd}' in what:
+                wtf = 1
             pass
             # raise ex_
             pass
@@ -1785,12 +1822,17 @@ popd
             if os.path.exists(pipdir):
                 break
 
-        if not pipdir:
-            return        
-        os.chdir(pipdir)
-        # os.chdir(os.path.join('in', 'src', 'github-belonesox-pip'))
-        scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
-        os.system(scmd)
+        # if not pipdir:
+        #     return        
+        # os.chdir(pipdir)
+        # # os.chdir(os.path.join('in', 'src', 'github-belonesox-pip'))
+        # scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
+        # os.system(scmd)
+
+        scmd = f'''{self.root_dir}/ebin/python3 -m ensurepip --root / --upgrade '''
+        self.cmd(scmd)
+        scmd = f'''{self.root_dir}/ebin/python3 -m pip install wheel '''
+        self.cmd(scmd)
 
         os.chdir(self.curdir)
         args = self.args
@@ -1799,78 +1841,77 @@ popd
         if self.args.debug:
             terra_ = False
 
-        pip_args_ = self.pip_args_from_sources(terra=terra_)
 
-        our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
-        ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
-        ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
-
-        findlinks_mod = f''' --find-links="{our_whl_path}" --find-links="{ext_whl_path}" --find-links="{ext_compiled_tar_path}"  ''' 
-
+        findlinks_mod = f''' --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.base_whl_path}"  ''' 
 
         # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
 
+        pip_args_ = self.pip_args_from_sources(terra=terra_)
+
+#         if self.args.debug:
+#             pip_args_ = self.pip_args_from_sources()
+# #             scmd = f'''
+# # {self.root_dir}/ebin/python3 -m pip install pip {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
+# #             '''
+#         else:
+#             pip_args_ = self.pip_args_from_sources(terra=terra_)
+
+#             scmd = f'''
+# {self.root_dir}/ebin/python3 -m pip install {pip_args_} {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location --no-index
+#             '''
         scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install setuptools {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
+{self.root_dir}/ebin/python3 -m pip install {pip_args_}  {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location 
         '''
-        self.cmd(scmd)
-
-        if self.args.debug:
-            scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install pip {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
-            '''
-        else:
-            scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install {pip_args_} {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
-            '''
-
         os.chdir(self.curdir)
         self.cmd(scmd)
+
+        # os.chdir(self.curdir)
+        # self.cmd(scmd)
         # не спрашивайте. Теоретически, должно ставится за прошлый раз, но иногда нет.
-        self.cmd(scmd)
+        # self.cmd(scmd)
 
         # if self.tvars.fc_version == '32':
         #     os.system(
         #         f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*")
 
-        if self.pp.terra.projects:
-            nodes_ = self.pp.terra.projects
-            if self.args.debug:
-                nodes_ += (self.pp.build.projects or [])
-            for td_ in nodes_:
-                git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(
-                    td_)
+        # if self.pp.terra.projects:
+        #     nodes_ = self.pp.terra.projects
+        #     if self.args.debug:
+        #         nodes_ += (self.pp.build.projects or [])
+        #     for td_ in nodes_:
+        #         git_url, git_branch, path_to_dir, setup_path = self.explode_pp_node(
+        #             td_)
 
-                os.chdir(setup_path)
-                # make_setup_if_not_exists()
-                if setup_path.endswith('pip'):
-                    continue
-                # if 'dm-psi' in setup_path:
-                #     wrrr = 1
-                # if '18' in setup_path:
-                #     wrrr = 1
+        #         os.chdir(setup_path)
+        #         # make_setup_if_not_exists()
+        #         if setup_path.endswith('pip'):
+        #             continue
+        #         # if 'dm-psi' in setup_path:
+        #         #     wrrr = 1
+        #         # if '18' in setup_path:
+        #         #     wrrr = 1
 
-                release_mod = ''
+        #         release_mod = ''
 
-                # scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
-                # --no-deps
-                self.cmd(
-                    f"{root_dir}/ebin/python3 setup.py install --single-version-externally-managed  {release_mod} --root / --force  ")
+        #         # scmd = "%(root_dir)s/ebin/python3 setup.py install --single-version-externally-managed  %(release_mod)s --root / --force   " % vars()
+        #         # --no-deps
+        #         self.cmd(
+        #             f"{root_dir}/ebin/python3 setup.py install --single-version-externally-managed  {release_mod} --root / --force  ")
 
-                # os.chdir(setup_path)
-                # for reqs_ in glob.glob(f'**/package.json', recursive=True):
-                #     if not 'node_modules' in reqs_:
-                #         os.chdir(setup_path)
-                #         dir_ = os.path.split(reqs_)[0]
-                #         if dir_:
-                #             os.chdir(dir_)
-                #         os.system(f"yarn install ")
-                #         os.system(f"yarn build ")
+        #         # os.chdir(setup_path)
+        #         # for reqs_ in glob.glob(f'**/package.json', recursive=True):
+        #         #     if not 'node_modules' in reqs_:
+        #         #         os.chdir(setup_path)
+        #         #         dir_ = os.path.split(reqs_)[0]
+        #         #         if dir_:
+        #         #             os.chdir(dir_)
+        #         #         os.system(f"yarn install ")
+        #         #         os.system(f"yarn build ")
 
-        if self.tvars.fc_version == '32':
-            scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
-        print(scmd)
-        os.system(scmd)
+        # if self.tvars.fc_version == '32':
+        #     scmd = f"rm -f {root_dir}/local/lib/python3.8/site-packages/typing.*"
+        # print(scmd)
+        # os.system(scmd)
         pass
 
     def stage_00_download_platform(self):
@@ -1964,6 +2005,7 @@ done
         packages = self.strlist_of_minimal_rpm_packages()
 
         #--skip-broken
+
         scmd = f'''dnf download  --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch  --resolve  {packages} -y '''
         #--alldeps
         lines.append(f'''
@@ -2238,6 +2280,7 @@ for SPEC in `echo $SPECS`
 do
     echo $SPEC
     BASEDIR=`dirname $SPEC`/..
+    SPECNAME=`basename $SPEC`
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
@@ -2248,7 +2291,13 @@ do
 ''')
         lines.append(f'''
     rm -rf $BASEDIR/BUILD/*
+
+if [[ "$SPECNAME" =~ ^(gcc.spec|tesseract-tessdata.spec)$ ]]; then
+    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+else
     {self.tb_mod} {svace_prefix} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+fi
+
     {save_state_hash("$d/$BASEDIR/RPMS")}
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
 done        
@@ -2339,6 +2388,44 @@ find .venv -name "*.so*"  > {self.so_files_from_venv}
 find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 ''')
 
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
+    def generate_tests(self, strace=False):
+        '''
+        Generate tests files by specs
+        '''
+        lines = []
+        if not self.tests:
+            return lines
+
+        for p_ in self.tests.profiles:
+            profile_name = p_
+            box_name = '-'.join(['test', profile_name, self.container_name])
+            for s_ in self.tests.scripts:
+                script_name = s_.name
+                strace_mod = ''
+                lines2 = []
+                shell_name = '-'.join(['test', profile_name, script_name])
+                if strace:
+                    strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
+                    shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
+                lines2.append(f'''
+DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {s_.command}
+                ''')
+# DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {p_}  || true               
+                self.lines2sh(shell_name, lines2, None)
+                lines.append(f'./ta-{shell_name}.sh')
+
+        return lines
+
+
+    def stage_58_run_tests(self):
+        '''
+        Run tests just after terrarium minimization
+        '''
+        lines = self.generate_tests()
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
@@ -2591,7 +2678,10 @@ rm -f {self.our_whl_path}/*
         f"Looks like dont need to do {mn_}"
         )}
 #{self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
-{self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl`  --no-cache-dir --no-index
+
+if ./{self.extra_whl_path}/*.whl 1> /dev/null 2>&1; then
+    {self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl`  --no-cache-dir --no-index
+fi    
 '''
 
         lines.append(scmd)   # --no-cache-dir
@@ -2845,10 +2935,20 @@ done
         if not pps.strip():
             return 
 
-
         lines.append(f'''
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
+        ''')
+
+        if self.svace_mod:
+            lines.append(f'''
+for DIR_ in `ls -d {self.pip_source_path}/*/` 
+do
+    rm -rf $DIR_
+done    
+            ''')
+
+        lines.append(f'''
 for PP in {pps}
 do
     echo $PP
@@ -3201,56 +3301,19 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
             tracefiles[i_] = str(Path(tracefiles[i_]).resolve())
             tracefiles[i_] = os.path.expandvars(tracefiles[i_])
 
-        file_source_table = yaml.unsafe_load(open(self.files_source_path, 'r'))
+        file_source_table = yaml.unsafe_load(open(self.files_source_after_minimization_path, 'r'))
         file_source = list(file_source_table.values())
 
-        bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_path, 'r'))
+        bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_after_minimization_path, 'r'))
         file_source = list(file_source_table.values())
 
         # ToDo — pydantic, enums, etc
         file_source_from_packages = [r for r in file_source if r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value]
 
-        used_files = set()
-        for trace_file_glob in tracefiles:
-            print(f'Looking strace files in {trace_file_glob}')
-            for trace_file in glob.glob(trace_file_glob):
-                print(f'Analysing {trace_file}')
-                re_file = re.compile(
-                    r'''.*\([^"]*.\"(?P<filename>[^"]+)\".*''')
-                for linenum, line in enumerate(open(trace_file, 'r', encoding='utf-8').readlines()):
-                    m_ = re_file.match(line)
-                    if m_:
-                        fname = m_.group('filename')
-                        # Heuristic to process strace files from Vagrant virtualboxes
-                        fname = fname.replace('/run/host', '')
-                        fname = fname.replace('/vagrant', self.curdir)
-                        # Heuristic to process strace files from remote VM, mounted by sshmnt
-                        fname = re.sub(
-                            fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
-                        fname = re.sub(self.spec.install_dir,
-                                       abs_path_to_out_dir, fname)
-                        if os.path.isabs(fname):
-                            fname = os.path.abspath(fname)
-                            if fname.startswith(abs_path_to_out_dir):
-                                if os.path.islink(fname):
-                                    link_ = os.readlink(fname)
-                                    fname = os.path.abspath(os.path.join(
-                                        os.path.split(fname)[0], link_))
-                                used_files.add(os.path.abspath(fname))
+        used_files = yaml.unsafe_load(open(self.used_files_path, 'r'))
 
         file_package_list, file2package = self.load_file_package_list_from_rpms()
-        # file_source, _ = self.load_files_source()
 
-
-        # with open(os.path.join(self.curdir, self.files_source_path), 'w') as lf:
-        #     # lf.write('\n'.join(lines))
-        #     lf.write(yaml.dump(file_source_table))
-
-
-        # terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra + self.ps.rebuild)
-        # pps = self.python_rebuild_profiles.get_list_of_pip_packages().strip().split()
-
-        # terra_packages = set([p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra)
         packages_from_build = set([r.source for r in file_source_from_packages])
         rpm_packages_table = sorted(list(set([(pfr.package, pfr.version) for pfr in file_package_list if pfr.package in packages_from_build])))
         write_doc_table('reports/doc-rpm-packages.htm', ['Packages', 'Version'], rpm_packages_table)
@@ -3326,7 +3389,6 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
 
         with open('reports/recommend-for-exclude.txt', 'w') as lf:
             lf.write('\n'.join(lines))
-        # print("\n".join([f'{f}: \t {s}' for f,s in top10]))
 
         pass
 
@@ -3595,15 +3657,6 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                             if not os.path.isdir(out_fname_):
                                 shutil.copymode(fname_, out_fname_)
 
-            # from ctypes.util import _findLib_ld
-            # libc_path = _findLib_ld('c')
-            # libc_path = "/lib64/libc-2.31.so"  # temp hack #wtf!!!!
-
-            # from ctypes.util import _findSoname_ldconfig
-            # libc_path = "/lib64/" + _findSoname_ldconfig('c')
-            # shutil.copy2(
-            #     libc_path, f'{root_dir}/lib64/libc.so', follow_symlinks=True)
-
             ebin_ = os.path.join(root_dir, 'ebin')
             self.cmd(f'chmod a+x {ebin_}/*')
 
@@ -3624,7 +3677,7 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
             packages_to_deploy = self.ps.terra
             pips_to_deploy = self.pp.terra.pip or []
 
-        # fs_ = self.generate_files_from_pips(pips_to_deploy)
+        fs__ = self.generate_files_from_pips(pips_to_deploy)
 
         # packages_ = []
         # for p_ in (Path(self.in_bin) / rpms).glob('*.rpm'):
@@ -3771,6 +3824,8 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
 
         if self.fs:
             for folder_ in self.fs.folders:
+                if 'install' in folder_:
+                    wtf  = 1
                 nuitka_report = {}
                 map2source = {}
                 map2package = {}
@@ -3781,7 +3836,9 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                         import xmltodict
                         with open(report_xml, 'r', encoding='utf8') as lf:
                             nuitka_report = xmltodict.parse(lf.read())['nuitka-compilation-report']
-                            ies_ = nuitka_report['included_extension']
+                            ies_ = []
+                            if 'included_extension' in nuitka_report:
+                                ies_ += nuitka_report['included_extension']
                             if 'included_dll' in nuitka_report:
                                 ies_ += nuitka_report['included_dll']
                             for ie_ in ies_:
@@ -3808,10 +3865,10 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                 for dirpath, dirnames, filenames in os.walk(folder_):
                     for filename in filenames:
                         f = os.path.join(dirpath, filename)
-                        if 'cups.so' in f:
+                        if 'libsvace.so' in f:
+                            continue
+                        if 'svace' in f:
                             wtf  = 1
-                        if 'libb2.so.1' in f:    
-                            wtf = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
                         if 'libgcc_s.so' in f:
@@ -3831,15 +3888,18 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                             package_ = file2rpmpackage[f]
                             if package_.package in self.ps.terra_exclude:
                                 continue
-                        if 'tmp/ta/dmr_on.ok/dmr_on' in f: 
-                            wtf = 1   
+                        if '{cwd}' in f:
+                            wtf  = 1
                         if self.br.is_need_patch(f):
                             relname = self.process_binary(f)
                             if os.path.isabs(relname):
                                 wtf = 1
                             file_source_table[relname] = FileInBuild(relname, SourceType.file_from_folder, folder_, f)
                             continue
+
                         m = ''
+                        if '{cwd}' in f:
+                            wtf  = 1
                         try:
                             tf = self.toolbox_path(f)
                             m = fucking_magic(tf)
@@ -3848,8 +3908,8 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                             raise ex_
                         if m.startswith('ELF') and 'shared' in m  or 'symbolic' in m:
                             # startswith('application/x-sharedlib') or m.startswith('application/x-pie-executable'):
-                            if 'zlib.so' in filename:
-                                wtf = 1
+                            if '{cwd}' in f:
+                                wtf  = 1
                             if '.libs' in rf:
                                 wtf = 1
                             relname = 'pbin/' + filename
@@ -3910,7 +3970,7 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
         self.cmd(f"ln -s {libc_name} {self.out_dir}/libc.so")
 
         install_templates(root_dir, args)
-        # self.install_terra_pythons()
+        self.install_terra_pythons()
         # install_templates(root_dir, args)
         # self.install_terra_pythons()
 
@@ -3932,135 +3992,256 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
         #     pass
         # size_ = sum(file.stat().st_size for file in Path(self.root_dir).rglob('*'))
         # Postprocessing, removing not needed files after installing python modules, etc
-        def remove_exclusions():
-            '''
-            Postprocessing, removing not needed files after installing python modules, etc
-            '''
-            # for path in Path(self.root_dir).rglob('*'):
-            for fib in list(file_source_table.keys()):
-                # rp_ = str(path.absolute())
-                rp_ = fib
-                if 'libzbar.so' in rp_:
-                     wtf = 1
-                if self.br.is_need_exclude(rp_):
-                    # rel_file = os.path.relpath(rp_, start = os.getcwd())
-                    rel_file = rp_
-                    del file_source_table[fib]
-                    if rel_file in self.bin_files_sources:
-                        del self.bin_files_sources[ rel_file ]
-                    Path(rel_file).unlink(missing_ok=True)
 
-            # killing broken links
-            for path in Path(self.root_dir).rglob('*'):
-                # rp_ = str(path.absolute())
-                if path.is_symlink() and not path.resolve().exists():
-                    path.unlink(missing_ok=True)
-            pass
+        # def remove_exclusions():
+        #     '''
+        #     Postprocessing, removing not needed files after installing python modules, etc
+        #     '''
+        #     # for path in Path(self.root_dir).rglob('*'):
+        #     for fib in list(file_source_table.keys()):
+        #         # rp_ = str(path.absolute())
+        #         rp_ = fib
+        #         if 'libzbar.so' in rp_:
+        #              wtf = 1
+        #         if self.br.is_need_exclude(rp_):
+        #             # rel_file = os.path.relpath(rp_, start = os.getcwd())
+        #             rel_file = rp_
+        #             del file_source_table[fib]
+        #             if rel_file in self.bin_files_sources:
+        #                 del self.bin_files_sources[ rel_file ]
+        #             Path(rel_file).unlink(missing_ok=True)
 
-        remove_exclusions()
+        #     # killing broken links
+        #     for path in Path(self.root_dir).rglob('*'):
+        #         # rp_ = str(path.absolute())
+        #         if path.is_symlink() and not path.resolve().exists():
+        #             path.unlink(missing_ok=True)
+        #     pass
 
-        with open(f'{self.curdir}/reports/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
-            lf.write('obsoletes excludes \n')
-            for re_, cnt_ in self.br.need_exclude_re.items():
-                if cnt_ == 0:
-                    pat_ = re_.pattern
-                    lf.write(f'   {pat_} \n')
+        # remove_exclusions()
 
-        bf_ = [os.path.abspath(f) for f in self.bin_files if os.path.isabs(f)] + [os.path.join(root_dir, f) for f in self.bin_files if not os.path.isabs(f)]
+        # bf_ = [os.path.abspath(f) for f in self.bin_files if os.path.isabs(f)] + [os.path.join(root_dir, f) for f in self.bin_files if not os.path.isabs(f)]
 
-        with open(Path(self.curdir) / self.bin_files_name, 'wt') as lf:
-                for i, it in enumerate(split_seq([f for f in sorted(bf_) if os.path.exists(f)], 100)):
-                    with open(Path(self.curdir) / (self.bin_files_name + f'.chunk{i:02}'), 'wt') as lc:
-                        lc.write("\n".join(it))
-                    lf.write("\n".join(it))
+
+        # with open(f'{self.curdir}/reports/obsoletes_excludes.txt', 'wt', encoding='utf-8') as lf:
+        #     lf.write('obsoletes excludes \n')
+        #     for re_, cnt_ in self.br.need_exclude_re.items():
+        #         if cnt_ == 0:
+        #             pat_ = re_.pattern
+        #             lf.write(f'   {pat_} \n')
+
+        # with open(Path(self.curdir) / self.bin_files_path, 'wt') as lf:
+        #         for i, it in enumerate(split_seq([f for f in sorted(bf_) if os.path.exists(f)], 100)):
+        #             with open(Path(self.curdir) / (self.bin_files_path + f'.chunk{i:02}'), 'wt') as lc:
+        #                 lc.write("\n".join(it))
+        #             lf.write("\n".join(it))
 
         size_ = folder_size(self.root_dir, follow_symlinks=False)
 
         print("Size ", size_/1024/1024, 'Mb')
 
-        rpm_packages_recommended_for_rebuild = set()
-        rbs_ = set(self.ps.rebuild)
-        rpm_packages_not_need_to_be_rebuilded = set(self.ps.rebuild)
-        rpm_packages_rebuilded_but_not_declared = set()
-        python_packages_recommended_for_rebuild = set()
-        lines = []
-        binary_files_report = []
-        rpm_packages_report = [] 
-
-        for file_, source_ in sorted(self.bin_files_sources.items()):
-            fti_ = file_source_table[file_]
-            if fti_.source == 'geos':
-                wtf = 1
-
-            row_ = [file_]
-            if fti_.source_type == 'rpm_package':
-                row_.extend(["RPM-пакет", f"<b>Требуется пересборка RPM-пакета {fti_.source}!</b>"])
-            if fti_.source_type == 'python_package':
-                row_.extend(["Python-пакет", f"<b>Нужна пересборка Python-пакета {fti_.source}!</b>"])
-            if fti_.source_type == 'rebuilded_rpm_package':
-                row_.extend(["Пересобранный RPM-пакет", f"Исходники пакета {fti_.source} в {self.rpmbuild_path}"])
-            if fti_.source_type == 'file_from_folder':
-                row_.extend(["Компиляция Nuitka", f"Компиляция в папке {fti_.source}"])
-            if fti_.source_type == 'rebuilded_python_package':
-                row_.extend(["Пересобранный Python-пакет", f"Исходники пакета {fti_.source} в {self.pip_source_path}"])
-            if fti_.source_type == 'our_source':
-                row_.extend(["Наше расширение", f"Исходники пакета {fti_.source} в {self.src_dir}"])
-            binary_files_report.append(row_)    
-
-            if fti_.source_type == SourceType.rpm_package.value:
-                if not fti_.source in rbs_:
-                    rpm_packages_recommended_for_rebuild.add(fti_.source)
-                if fti_.source in rpm_packages_not_need_to_be_rebuilded:
-                    rpm_packages_not_need_to_be_rebuilded.remove(fti_.source)
-            elif fti_.source_type == SourceType.rebuilded_rpm_package.value:
-                if fti_.source in rpm_packages_not_need_to_be_rebuilded:
-                    rpm_packages_not_need_to_be_rebuilded.remove(fti_.source)
-                if fti_.source not in rbs_:
-                    rpm_packages_rebuilded_but_not_declared.add(fti_.source)    
-            elif fti_.source_type == SourceType.python_package.value:
-                if 'skimage' in fti_.source:
-                    wtf  = 1
-                python_packages_recommended_for_rebuild.add(fti_.source)
-
-        write_doc_table(os.path.join(self.curdir, 'reports/binary-files-report.htm'), ['Файл', 'Тип', 'Исходники сборки'], binary_files_report)
-
-        lines.append(f'\nRPM packages recommended for rebuild')
-        lines.append('\n - '.join([''] + sorted(rpm_packages_recommended_for_rebuild)))
-
-        lines.append(f'\nRPM packages not needed to be rebuilded')
-        lines.append('\n - '.join([''] + sorted(rpm_packages_not_need_to_be_rebuilded)))
-
-        lines.append(f'\nRPM packages rebuilded but not declared as rebuilded')
-        lines.append('\n - '.join([''] + sorted(rpm_packages_rebuilded_but_not_declared)))
-
-        lines.append(f'\nPython packages recommended for rebuild')
-        lines.append('\n - '.join([''] + sorted(python_packages_recommended_for_rebuild)))
-
-        with open(os.path.join(self.curdir, self.report_binary_files_path), 'w') as lf:
-            lf.write('\n'.join(lines))
-
-        lines = []
-        # for relpath, fpl_ in file_source_table.items():
-        #     lines.append(f'{fpl_.relname} {ROW_SPLIT} {fpl_.source_type} {ROW_SPLIT} {fpl_.source} {ROW_SPLIT} {fpl_.source_path} ')
-
         with open(os.path.join(self.curdir, self.files_source_path), 'w') as lf:
-            # lf.write('\n'.join(lines))
-            # lf.write(yaml.dump(file_source_table))
-            # lf.write(file_source_table.to_yaml())
             lf.write(yaml.dump(file_source_table))
-            # lf.write(json.dumps(file_source_table))
 
         with open(os.path.join(self.curdir, self.bin_files_sources_path), 'w') as lf:
-            lf.write(yaml.dump(self.bin_files_sources_path))
+            lf.write(yaml.dump(self.bin_files_sources))
 
-        unique_packages = set([row.source for row in file_source_table.values() if row.source_type == SourceType.rebuilded_rpm_package.value])
-        not_need_packages_to_rebuild = []
-        for p in self.packages_to_rebuild:
-            if p not in unique_packages:
-                not_need_packages_to_rebuild.append(p)
+    def stage_51_tests_setup(self):
+        '''
+        Setup tests boxes
+        '''
+        lines = []
 
-        with open(os.path.join(self.curdir, self.not_need_packages_to_rebuild_in_terra_path), 'w') as lf:
-            lf.write('\n - '.join([''] + not_need_packages_to_rebuild))
+        if self.tests and 'profiles' in self.tests:
+            for p_ in self.tests.profiles:
+                profile_name = p_
+                distro_ = self.tests.profiles[p_].distro
+                setup_cmd = ''
+                if 'setup' in self.tests.profiles[p_]:
+                    setup_cmd = self.tests.profiles[p_].setup
+                box_name = '-'.join(['test', profile_name, self.container_name])
+                lines.append(f'''
+DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {distro_}  || true               
+DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
+                ''')
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
+    def stage_52_run_tests(self):
+        '''
+        Run tests just after terrarium forming
+        '''
+        lines = self.generate_tests()
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+    def stage_53_run_tests_with_strace(self):
+        '''
+        Run tests just after terrarium forming
+        '''
+        lines = self.generate_tests(strace=True)
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
+    def write_shell_file_for_method(self, mn_):
+        '''
+        Write shell file how to call a function
+        '''
+        stage_ = fname2stage(mn_).replace('_', '-')
+        lines = [
+            f'''
+{sys.executable} {sys.argv[0]} "{self.args.specfile}" --{stage_}                
+            ''']
+        self.lines2sh(mn_, lines, mn_)
+        return
+
+
+    def stage_54_analyze_used_files(self):
+        '''
+        Analyze strace files, getted from tests.
+        '''
+        if not self.build_mode:
+            mn_ = get_method_name()
+            self.write_shell_file_for_method(mn_)
+
+        if not self.args.stage_analyze_used_files:
+            return
+
+        tracefiles = []
+
+        tracefiles.append(self.strace_files_path)
+
+        if 'tests' in self.spec and 'tracefile' in self.spec.tests:
+            if isinstance(self.spec.tests.tracefile, str):
+                tracefiles.append(self.spec.tests.tracefile)
+            if isinstance(self.spec.tests.tracefile, list):
+                tracefiles.extend(self.spec.tests.tracefile)
+
+        for i_ in range(len(tracefiles)):
+            tracefiles[i_] = str(Path(tracefiles[i_]).resolve())
+            tracefiles[i_] = os.path.expandvars(tracefiles[i_])
+
+        abs_path_to_out_dir = os.path.abspath(self.out_dir)
+        lastdirs = os.path.sep.join(
+            abs_path_to_out_dir.split(os.path.sep)[-2:])
+
+        used_files = set()
+        # for trace_file_glob in tracefiles:
+        for trace_file_dir in tracefiles:
+            print(f'Looking strace files in {trace_file_dir}')
+            # for trace_file in glob.glob(trace_file_glob):
+            for trace_file in os.listdir(trace_file_dir):
+                print(f'Analysing {trace_file}')
+                re_file = re.compile(
+                    r'''.*\([^"]*.\"(?P<filename>[^"]+)\".*''')
+                for linenum, line in enumerate(open(Path(trace_file_dir) / trace_file, 'r', encoding='utf-8').readlines()):
+                    if 'ENOENT' in line:
+                        continue
+                    if 'libtiff.so.5' in line:
+                        wtf = 1
+                    m_ = re_file.match(line)
+                    if m_:
+                        fname = m_.group('filename')
+                        # Heuristic to process strace files from Vagrant virtualboxes
+                        fname = fname.replace('/run/host', '')
+                        fname = fname.replace('/vagrant', self.curdir)
+                        # Heuristic to process strace files from remote VM, mounted by sshmnt
+                        fname = re.sub(
+                            fr'''/mnt/.*{lastdirs}''', abs_path_to_out_dir, fname)
+                        fname = re.sub(self.spec.install_dir,
+                                       abs_path_to_out_dir, fname)
+                        if os.path.isabs(fname):
+                            fname = os.path.abspath(fname)
+                            if fname.startswith(abs_path_to_out_dir):
+                                if os.path.islink(fname):
+                                    link_ = os.readlink(fname)
+                                    fname = os.path.join(os.path.split(fname)[0], link_)
+                                relpath = os.path.relpath(os.path.abspath(fname), start=self.out_dir)    
+                                used_files.add(relpath)
+
+        with open(os.path.join(self.curdir, self.used_files_path), 'w') as lf:
+            lf.write(yaml.dump(sorted(list(used_files))))
+
+
+    def stage_55_mininize_terrarium(self):
+        '''
+        Minimize Terrarium.
+        Postprocessing, removing unused files. 
+        '''
+        if not self.build_mode:
+            mn_ = get_method_name()
+            self.write_shell_file_for_method(mn_)
+            return
+
+        if not self.args.stage_mininize_terrarium:
+            return
+
+        used_files = yaml.unsafe_load(open(self.used_files_path, 'r'))
+
+        file_source_table = yaml.unsafe_load(open(self.files_source_path, 'r'))
+        file_source = list(file_source_table.values())
+
+        bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_path, 'r'))
+
+        removed_paths = []
+
+        used_files_resolved = set()
+        out_dir_ = Path(os.path.abspath(self.out_dir))
+        for uf in used_files:
+            if 'libzbar.so' in uf:
+                wtf = 1
+            path_ = out_dir_ / uf
+            while path_.is_symlink():
+                path_ = path_.resolve()
+            if path_.exists() and path_.is_relative_to(out_dir_):
+                rpp_ = str(path_.relative_to(out_dir_))
+                used_files_resolved.add(rpp_)
+                    
+        for fib in list(file_source_table.keys()):
+            rp_ = fib
+            if 'libtiff.so.5' in rp_:
+                wtf = 1
+            if used_files and not self.br.is_needed(rp_) and rp_ not in used_files_resolved: 
+                rel_file = rp_
+                path_ = Path(self.out_dir) / rel_file    
+                if not path_.is_symlink():
+                    del file_source_table[fib]
+                    if rel_file in self.bin_files_sources:
+                        del self.bin_files_sources[ rel_file ]
+                    path_.unlink(missing_ok=True)
+                    removed_paths.append(rel_file)
+
+        # killing broken links
+        for path in Path(self.out_dir).rglob('*'):
+            # rp_ = str(path.absolute())
+            if 'libtiff.so.5' in rp_:
+                wtf = 1
+            if path.is_symlink() and not path.resolve().exists():
+                path.unlink(missing_ok=True)
+        pass
+
+        with open(os.path.join(self.curdir, 'tmp/last-removed-paths.yml'), 'w') as lf:
+            lf.write(yaml.dump(removed_paths))
+
+        with open(os.path.join(self.curdir, self.files_source_after_minimization_path), 'w') as lf:
+            lf.write(yaml.dump(file_source_table))
+
+        with open(os.path.join(self.curdir, self.bin_files_sources_after_minimization_path), 'w') as lf:
+            lf.write(yaml.dump(bin_files_sources))
+
+        # bf_ = [os.path.abspath(f) for f in self.bin_files if os.path.isabs(f)] + [os.path.join(root_dir, f) for f in self.bin_files if not os.path.isabs(f)]
+        bf_ = [Path(os.path.abspath(self.out_dir)) / f for f in bin_files_sources]
+
+        with open(Path(self.curdir) / self.bin_files_path, 'wt') as lf:
+                for i, it in enumerate(split_seq([str(f) for f in sorted(bf_) if f.exists()], 100)):
+                    chunk = "\n".join(it)
+                    with open(Path(self.curdir) / (self.bin_files_path + f'.chunk{i:02}'), 'wt') as lc:
+                        lc.write(chunk)
+                    lf.write(chunk)
+        ...
 
 
     def get_version(self):
