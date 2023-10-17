@@ -2417,7 +2417,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         self.lines2sh(mn_, lines, mn_)
 
 
-    def generate_tests(self, strace=False):
+    def generate_tests(self): #, strace=False):
         '''
         Generate tests files by specs
         '''
@@ -2425,22 +2425,30 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         if not self.tests:
             return lines
 
-        for p_ in self.tests.profiles:
-            profile_name = p_
-            distro_ = self.tests.profiles[p_].distro
-            box_name = test_box_name(self.container_name, profile_name, distro_)
-            for s_ in self.tests.scripts:
+        # for p_ in self.tests.profiles:
+        #     profile_name = p_
+        #     distro_ = self.tests.profiles[p_].distro
+        #     box_name = test_box_name(self.container_name, profile_name, distro_)
+        for s_ in self.tests.scripts:
+            strace = False
+            if 'strace' in s_ and s_.strace:
+                strace = True
+            for p_ in s_.profiles:
+                profile_name = p_
+                distro_ = self.tests.profiles[p_].distro
+                box_name = test_box_name(self.container_name, profile_name, distro_)
+
                 script_name = s_.name
                 strace_mod = ''
                 lines2 = []
                 shell_name = '-'.join(['test', profile_name, script_name])
                 if strace:
                     strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
-                    shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
+                    # shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
                 lines2.append(f'''
 DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {s_.command}
                 ''')
-# DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {p_}  || true               
+    # DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {p_}  || true               
                 self.lines2sh(shell_name, lines2, None)
                 lines.append(f'./ta-{shell_name}.sh')
 
@@ -4102,18 +4110,14 @@ DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
         '''
         lines = []
 
-        if self.tests and isinstance(self.tests, TestsSpec):
-            for p_ in self.tests.profiles:
-                profile_name = p_
-                distro_ = self.tests.profiles[p_].distro
-                setup_cmd = ''
-                if 'setup' in self.tests.profiles[p_]:
-                    setup_cmd = self.tests.profiles[p_].setup
-                box_name = '-'.join(['test', profile_name, self.container_name])
-                lines.append(f'''
-DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {distro_}  || true               
-DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
-                ''')
+
+        lines.append(f'''
+TESTBOXES=`distrobox list --no-color | grep -oh "{self.container_name}-T-[[:alnum:]]*" || true`        
+for BOX in `echo $TESTBOXES`
+do
+    distrobox rm --force $BOX
+done
+''')
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -4127,13 +4131,13 @@ DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_53_run_tests_with_strace(self):
-        '''
-        Run tests just after terrarium forming
-        '''
-        lines = self.generate_tests(strace=True)
-        mn_ = get_method_name()
-        self.lines2sh(mn_, lines, mn_)
+    # def stage_53_run_tests_with_strace(self):
+    #     '''
+    #     Run tests just after terrarium forming
+    #     '''
+    #     lines = self.generate_tests(strace=True)
+    #     mn_ = get_method_name()
+    #     self.lines2sh(mn_, lines, mn_)
 
 
     def write_shell_file_for_method(self, mn_):
