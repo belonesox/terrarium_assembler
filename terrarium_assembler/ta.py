@@ -9,7 +9,7 @@ import stat
 import re
 import json
 import dataclasses as dc
-import pydantic
+# import pydantic
 import datetime
 import hashlib
 import time
@@ -19,6 +19,7 @@ import jinja2.exceptions
 import version_utils.rpm
 import yaml
 import zipfile
+import socket
 #import requirements
 
 from typing import List
@@ -34,7 +35,7 @@ import dacite
 #         validate_assignment = True
 #         use_enum_values = True
 
-class Config:
+class DCConfig:
     validate_assignment = True
     use_enum_values = True
 
@@ -105,7 +106,7 @@ class PackageFileRow:
 
 
 # @dc.dataclass
-@dataclass(config=Config)
+@dataclass(config=DCConfig)
 class FileInBuild:
     '''
     Info about file in out build
@@ -376,8 +377,32 @@ class TestProfileSpec:
     '''
     Specification for a test profile
     '''
-    name:       str = ''
+    distro:   str = ''
     setup:    str = ''
+
+    def canonical_distro_name(self):
+        name_ = self.distro.replace(':', '-')
+
+def canonical_distro_name(distro):
+    # Temp hack  https://github.com/konradhalas/dacite/issues/247
+    # todo: replace it with method above
+    return distro.replace(':', '-')
+
+
+def test_box_name(container_name, profile_name, distro_):
+    # Temp hack  https://github.com/konradhalas/dacite/issues/247
+    # todo: replace it with method
+    hostname = socket.gethostname()
+    distro_canon = canonical_distro_name(distro_)
+    # https://github.com/89luca89/distrobox/issues/1017    
+    uniq_ = hashlib.md5((profile_name + distro_canon).encode('utf-8')).hexdigest()
+    box_name = '-'.join([container_name, 'T', uniq_])[:63-len(hostname)]
+    return box_name
+
+
+
+class TestProfiles(Dict[str, TestProfileSpec]):
+    ...
 
 
 @dc.dataclass
@@ -394,12 +419,12 @@ class TestsSpec:
     '''
         Specification for tests
     '''
-    profiles: Optional[Dict] = dc.field(default_factory=list)
+    profiles: Optional[TestProfiles] = dc.field(default_factory=TestProfiles)
     scripts: Optional[List] = dc.field(default_factory=list)
 
     def __post_init__(self):
         if not self.profiles:
-            self.profiles = [TestProfileSpec('ubuntu:22.04', '')]
+            self.profiles = TestProfiles({'ubuntu': TestProfileSpec('ubuntu:22.04', '')})
         pass
 
 
@@ -687,7 +712,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.pp = dacite.from_dict(data_class=PythonPackages, data=spec.python_packages)
         self.tests = None
         if 'tests' in spec:
-            self.tests = dacite.from_dict(data_class=TestsSpec, data=spec.tests)
+            self.tests = dacite.from_dict(data_class=TestsSpec, data=spec.tests, config=dacite.Config(cast=[TestProfiles, TestProfileSpec]))
         self.gp = None
         if 'go_packages' in spec:
             self.gp = GoPackages(**spec.go_packages)
@@ -2402,7 +2427,8 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 
         for p_ in self.tests.profiles:
             profile_name = p_
-            box_name = '-'.join(['test', profile_name, self.container_name])
+            distro_ = self.tests.profiles[p_].distro
+            box_name = test_box_name(self.container_name, profile_name, distro_)
             for s_ in self.tests.scripts:
                 script_name = s_.name
                 strace_mod = ''
@@ -4047,6 +4073,30 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
             lf.write(yaml.dump(self.bin_files_sources))
 
     def stage_51_tests_setup(self):
+        '''
+        Setup tests boxes
+        '''
+        lines = []
+
+        if self.tests and isinstance(self.tests, TestsSpec):
+            hostname = socket.gethostname()
+            for p_ in self.tests.profiles:
+                profile_name = p_
+                distro_ = self.tests.profiles[p_].distro
+                setup_cmd = ''
+                if 'setup' in self.tests.profiles[p_]:
+                    setup_cmd = self.tests.profiles[p_].setup
+                box_name = test_box_name(self.container_name, profile_name, distro_)
+                lines.append(f'''
+DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {distro_}  || true               
+DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
+                ''')
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
+    def stage_91_clean(self):
         '''
         Setup tests boxes
         '''
