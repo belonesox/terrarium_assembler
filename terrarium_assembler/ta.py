@@ -2417,7 +2417,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         self.lines2sh(mn_, lines, mn_)
 
 
-    def generate_tests(self): #, strace=False):
+    def generate_tests(self, ignore_strace=False):
         '''
         Generate tests files by specs
         '''
@@ -2431,7 +2431,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         #     box_name = test_box_name(self.container_name, profile_name, distro_)
         for s_ in self.tests.scripts:
             strace = False
-            if 'strace' in s_ and s_.strace:
+            if 'trace' in s_ and s_.trace:
                 strace = True
             for p_ in s_.profiles:
                 profile_name = p_
@@ -2442,9 +2442,9 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                 strace_mod = ''
                 lines2 = []
                 shell_name = '-'.join(['test', profile_name, script_name])
-                if strace:
+                if strace and not ignore_strace:
                     strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
-                    # shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
+                    shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
                 lines2.append(f'''
 DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {s_.command}
                 ''')
