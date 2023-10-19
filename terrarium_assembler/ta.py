@@ -567,7 +567,7 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox || true
+sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc || true
 sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop distrobox  || true
 ''')
             if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
@@ -4103,6 +4103,21 @@ DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
+
+    def stage_97_view_test_screen(self):
+        '''
+        View test screen
+        '''
+        lines = []
+
+
+        lines.append(f'''
+nohup x11vnc -display :96 -forever -autoport 5901 --auth /tmp/test.xvfb.auth &  
+vncviewer localhost:5901
+        ''')
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
 
     def stage_91_clean(self):
         '''
