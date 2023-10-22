@@ -449,6 +449,7 @@ class TerrariumAssembler:
 
         mkdir_p('reports')
 
+        self.src_tar_filename = 'in-src.tar'
         self.report_binary_files_path = 'reports/binary-files-report.txt'
         self.not_need_packages_to_rebuild_in_terra_path = 'reports/not-need-packages-to-rebuild-in-terra.txt'
         self.file_list_from_terra_rpms = 'tmp/file-list-from-terra-rpms.txt'
@@ -567,8 +568,9 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc || true
+sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc xorg-x11-server-Xvfb xcompmgr || true
 sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop distrobox  || true
+sudo apt-get install -y firefox-esr xcompmgr || true
 ''')
             if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
                 self.cmd('sudo ln -sf /usr/bin/createrepo_c /usr/bin/createrepo')
@@ -765,7 +767,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         self.tarrepo_path = in_bin_fld("rebuilded-repo")
 
         self.our_whl_path = tmp_fld("our_python_wheels")
-        self.pure_sources_path = tmp_fld("pure_sources")
+        # self.pure_sources_path = tmp_fld("pure_sources")
         self.ext_whl_path = in_bin_fld("external_python_wheels_resolved_dependencies")
         self.rebuilded_whl_path = tmp_fld("rebuilded_python_wheels")
         self.strace_files_path = tmp_fld("strace_files")
@@ -773,6 +775,7 @@ sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf
         # self.ext_pip_path = in_bin_fld("extpip")
         self.base_whl_path = in_bin_fld("external_python_wheels_fixed_versions")
         self.extra_whl_path = in_bin_fld("python_wheels_for_rebuild_pip_from_sources")
+        self.extra_whl_deps_path = in_bin_fld("python_wheel_deps_for_rebuild_pip_from_sources")
 
         self.states_path =  tmp_fld("states")
         self.rpmbuild_path =  tmp_fld("rpmbuild")
@@ -1676,7 +1679,8 @@ popd
         lines.append(f"""
 mkdir -p tmp/snaphots-src
 snapshotdir=$(date +"tmp/snaphots-src/snapshot-src-before-%Y-%m-%d-%H-%M-%S")
-mv in/src $snapshotdir
+mv {self.src_dir} $snapshotdir
+rm -f {self.src_dir}/{self.src_tar_filename} || true
 mkdir -p {in_src}
 """)
         already_checkouted = set()
@@ -1687,10 +1691,10 @@ mkdir -p {in_src}
                 already_checkouted.add(path_to_dir_)
                 path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
                 newpath = path_to_dir + '.new'
-                lines.append('rm -rf "%(newpath)s"' % vars())
+                # lines.append('rm -rf "%(newpath)s"' % vars())
                 # scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
                 scmd = f'''
-git --git-dir=/dev/null clone  {git_url} {newpath}
+git --git-dir=/dev/null clone --branch {git_branch} {git_url} {newpath}
 pushd {newpath}
 git checkout {git_branch}
 git config core.fileMode false
@@ -1698,32 +1702,37 @@ git config core.autocrlf input
 git lfs install
 git lfs pull
 popd
+mv "{newpath}" "{path_to_dir}" || true
 ''' 
                 lines.append(scmd)
 
-                lines2.append(f'''
-pushd "{path_to_dir}"
-git config core.fileMode false
-git config core.autocrlf input
-git pull
-./.venv/bin/python3 -m pip uninstall  {probably_package_name} -y
-./.venv/bin/python3 setup.py develop
-popd
-''' )
+#                 lines2.append(f'''
+# pushd "{path_to_dir}"
+# git config core.fileMode false
+# git config core.autocrlf input
+# git pull
+# ./.venv/bin/python3 -m pip uninstall  {probably_package_name} -y
+# ./.venv/bin/python3 setup.py develop
+# popd
+# ''' )
 
                 # Fucking https://www.virtualbox.org/ticket/19086 + https://www.virtualbox.org/ticket/8761
-                lines.append(f"""
-if [ -d "{newpath}" ]; then
-  echo 2 > /proc/sys/vm/drop_caches || true
-  find  "{path_to_dir}" -type f -delete || true;
-  find  "{path_to_dir}" -type f -exec rm -rf {{}} \ || true;
-  rm -rf "{path_to_dir}" || true
-  mv "{newpath}" "{path_to_dir}" || true
-  rm -rf "{newpath}"
-fi
-""")
+# if [ -d "{newpath}" ]; then
+#   echo 2 > /proc/sys/vm/drop_caches || true
+#   find  "{path_to_dir}" -type f -delete || true;
+#   find  "{path_to_dir}" -type f -exec rm -rf {{}} \ || true;
+#   rm -rf "{path_to_dir}" || true
+#   rm -rf "{newpath}"
+# fi
+#                 lines.append(f"""
+# mv "{newpath}" "{path_to_dir}" || true
+#                 """)
 
         lines.append(f"""
+tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
+popd
+
+        
 # We need to update all shell files after checkout.
 #terrarium_assembler "{self.args.specfile}"
 """)
@@ -1732,56 +1741,55 @@ fi
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_98_checkout_clean_version(self):
-        '''
-        Checking out sources without history to tempdir (for later export).
-        '''
-        if not self.pp:
-            return
+#     def stage_98_checkout_clean_version(self):
+#         '''
+#         Checking out sources without history to tempdir (for later export).
+#         '''
+#         if not self.pp:
+#             return
 
-        args = self.args
-        lines = []
-        lines2 = []
-        in_src = os.path.relpath(self.src_dir, start=self.curdir)
-        # lines.add("rm -rf %s " % in_src)
-        lines.append(f"""
-rm -rf {self.pure_sources_path}/*
-""")
-        already_checkouted = set()
-        for td_ in self.projects() + self.spec.templates_dirs:
-            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
-            if path_to_dir_ not in already_checkouted:
-                probably_package_name = os.path.split(path_to_dir_)[-1]
-                already_checkouted.add(path_to_dir_)
-                path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
-                newpath = os.path.join(self.pure_sources_path, self.src_path, probably_package_name) 
-                # scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
-                scmd = f'''
-git --git-dir=/dev/null clone --depth 1 --branch {git_branch} file://{self.curdir}/{path_to_dir} {newpath}
-pushd {newpath}
-git config core.fileMode false
-git config core.autocrlf input
-git lfs install
-git lfs pull
-popd
-''' 
-                lines.append(scmd)
+#         args = self.args
+#         lines = []
+#         lines2 = []
+#         in_src = os.path.relpath(self.src_dir, start=self.curdir)
+#         # lines.add("rm -rf %s " % in_src)
+#         lines.append(f"""
+# rm -rf {self.pure_sources_path}/*
+# """)
+#         already_checkouted = set()
+#         for td_ in self.projects() + self.spec.templates_dirs:
+#             git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+#             if path_to_dir_ not in already_checkouted:
+#                 probably_package_name = os.path.split(path_to_dir_)[-1]
+#                 already_checkouted.add(path_to_dir_)
+#                 path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
+#                 newpath = os.path.join(self.pure_sources_path, self.src_path, probably_package_name) 
+#                 # scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
+#                 scmd = f'''
+# git --git-dir=/dev/null clone --depth 1 --branch {git_branch} file://{self.curdir}/{path_to_dir} {newpath}
+# pushd {newpath}
+# git config core.fileMode false
+# git config core.autocrlf input
+# git lfs install
+# git lfs pull
+# popd
+# ''' 
+#                 lines.append(scmd)
 
-        psp_ = self.pure_sources_path.replace("/","\/")
-        sd_ = self.src_dir.replace("/","\/")
+#         psp_ = self.pure_sources_path.replace("/","\/")
+#         sd_ = self.src_dir.replace("/","\/")
 
-        lines.append(f'''
-pushd {self.pure_sources_path}        
-tar -cvf  in-src.tar *
-popd
-''')
+#         lines.append(f'''
+# pushd {self.pure_sources_path}        
+# tar -cvf  in-src.tar *
+# popd
+# ''')
 
-#--transform "s/^{psp_}/{sd_}/"                     
+# #--transform "s/^{psp_}/{sd_}/"                     
 
-        mn_ = get_method_name()
-        self.lines2sh(mn_, lines, mn_)
-        pass
-
+#         mn_ = get_method_name()
+#         self.lines2sh(mn_, lines, mn_)
+#         pass
 
     def explode_pp_node(self, td_):
         '''
@@ -2429,28 +2437,31 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         #     profile_name = p_
         #     distro_ = self.tests.profiles[p_].distro
         #     box_name = test_box_name(self.container_name, profile_name, distro_)
-        for s_ in self.tests.scripts:
-            strace = False
-            if 'trace' in s_ and s_.trace:
-                strace = True
-            for p_ in s_.profiles:
-                profile_name = p_
-                distro_ = self.tests.profiles[p_].distro
-                box_name = test_box_name(self.container_name, profile_name, distro_)
+        for strace in [False, True]:
+            for s_ in self.tests.scripts:
+                for p_ in s_.profiles:
+                    profile_name = p_
+                    distro_ = self.tests.profiles[p_].distro
+                    box_name = test_box_name(self.container_name, profile_name, distro_)
 
-                script_name = s_.name
-                strace_mod = ''
-                lines2 = []
-                shell_name = '-'.join(['test', profile_name, script_name])
-                if strace and not ignore_strace:
+                    script_name = s_.name
+                    if not strace and 'trace' in s_ and s_.trace in ['yes']:
+                        # от отказываемся от обычного прогона без трейса
+                        continue
+                    if strace and not ('trace' in s_ and s_.trace in ['yes', 'both']):
+                        # от отказываемся от трейса-прогона
+                        continue
+                    strace_mod = ''
+                    lines2 = []
+                    shell_name = '-'.join(['test', profile_name, script_name])
                     strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
-                    shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
-                lines2.append(f'''
+                    if strace and not ignore_strace:
+                        shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
+                    lines2.append(f'''
 DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {s_.command}
-                ''')
-    # DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {p_}  || true               
-                self.lines2sh(shell_name, lines2, None)
-                lines.append(f'./ta-{shell_name}.sh')
+                    ''')
+                    self.lines2sh(shell_name, lines2, None)
+                    lines.append(f'./ta-{shell_name}.sh')
 
         return lines
 
@@ -2708,13 +2719,13 @@ rm -f {self.our_whl_path}/*
         mn_ = get_method_name()
 
         scmd = f'''
-{bashash_ok_folders_strings(f'tmp/states/{mn_}', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path, self.extra_whl_path], ['v3'],
+{bashash_ok_folders_strings(f'tmp/states/{mn_}', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path, self.extra_whl_path], ['v1'],
         f"Looks like dont need to do {mn_}"
         )}
-#{self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index
+#{self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}" --find-links="{self.extra_whl_deps_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index   
 
-if ./{self.extra_whl_path}/*.whl 1> /dev/null 2>&1; then
-    {self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl`  --no-cache-dir --no-index
+if ls ./{self.extra_whl_path}/*.whl 1> /dev/null 2>&1; then
+    {self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}" --find-links="{self.extra_whl_deps_path}" --no-cache-dir --no-index
 fi    
 '''
 
@@ -2905,12 +2916,15 @@ rm -f {self.base_whl_path}/*
             return 
 
         scmd = f"python3 -m pip download  {pps} --dest {self.extra_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --find-links='{self.ext_whl_path}' --no-dependencies "
+        scmd2 = f"python3 -m pip download  {pps} --dest {self.extra_whl_deps_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --find-links='{self.ext_whl_path}'"
         lines.append(f'''
-{bashash_ok_folders_strings(self.extra_whl_path, [], [pps],
+{bashash_ok_folders_strings(self.extra_whl_path, [], [pps, scmd, scmd2],
         f"Looks required extra wheels already downloaded"
         )}
 rm -f {self.extra_whl_path}/*
+rm -f {self.extra_whl_deps_path}/*
 {self.tb_mod} {scmd}
+{self.tb_mod} {scmd2}
 {self.tb_mod} bash -c "find {self.extra_whl_path} -name '*.tar.*' | xargs -i[] -t python3 -m pip wheel [] --no-deps --wheel-dir {self.extra_whl_path}"
 {save_state_hash(self.extra_whl_path)}
 ''')
@@ -3829,6 +3843,8 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
         def register_rpmpackage_file(relpath, f, pfr):
             if not relpath:
                 return                        
+            if 'libdl.so' in relpath:
+                wtf = 1
             if '.' in pfr.release and self.disttag in pfr.release.split('.'):
                 file_source_table[relpath] = FileInBuild(relpath, SourceType.rebuilded_rpm_package, pfr.package, f)
             else:                
@@ -3836,7 +3852,7 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
-            if 'nettle' in fpl_.filename:    
+            if 'libdl.so' in fpl_.filename:    
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
                 ok = True
@@ -4104,7 +4120,7 @@ DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
         self.lines2sh(mn_, lines, mn_)
 
 
-    def stage_97_view_test_screen(self):
+    def stage_96_view_virtual_screen(self):
         '''
         View test screen
         '''
@@ -4115,6 +4131,55 @@ DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
 nohup x11vnc -display :96 -forever -autoport 5901 --auth /tmp/test.xvfb.auth &  
 vncviewer localhost:5901
         ''')
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+    def stage_99_export_for_audit(self):
+        '''
+        Export source for reproduceable audit build
+        '''
+        lines = []
+
+        lines.append(f'''
+DST=$1
+mkdir -p $DST
+for pyth in python3.10 python3.11 
+do
+  rm -f $DST/ta/$pyth/* || true
+  $pyth -m pip wheel /home/stas/projects/terrarium_assembler --wheel-dir $DST/ta/$pyth
+done
+
+for adir in {self.platform_path} {self.base_whl_path} {self.ext_whl_path} {self.pip_source_path} {self.base_whl_path} {self.rpmrepo_path} {self.strace_files_path}
+do
+   rsync -av --mkpath --delete --exclude='*/'  --exclude *.md5 $adir/ $DST/$adir
+done 
+
+# перенести в основной чекаут. может там вообще сделать основным, чекаут двух типов с убиранием лишних папок?
+# вообще может не тащить все ветки каждый раз, ускорит?
+# ./ta-98-checkout-clean-version.sh
+rsync --checksum {self.src_dir}/in-src.tar $DST/
+
+rsync *.yml $DST/
+        ''')
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+    def stage_91_clean(self):
+        '''
+        Setup tests boxes
+        '''
+        lines = []
+
+
+        lines.append(f'''
+TESTBOXES=`distrobox list --no-color | grep -oh "{self.container_name}-T-[[:alnum:]]*" || true`        
+for BOX in `echo $TESTBOXES`
+do
+    distrobox rm --force $BOX
+done
+''')
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -4175,6 +4240,7 @@ done
         if not self.build_mode:
             mn_ = get_method_name()
             self.write_shell_file_for_method(mn_)
+            return
 
         if not self.args.stage_analyze_used_files:
             return
