@@ -997,6 +997,9 @@ export PATH="/usr/lib64/ccache:$PATH"
 
                 svace_prefix = ''
                 if self.svace_mod:                
+                    lines.append(fR"""
+rm -rf {build_dir}/.svace-dir                    
+                    """)
                     svace_prefix = f'{self.svace_path} build --svace-dir {build_dir} '
                     lines.append(f'''
 {self.svace_path} init {build_dir}
@@ -2300,10 +2303,12 @@ done
         '''
         lines = []
         svace_prefix = ''
+        svace_clean_mod = ''
+
         if self.svace_mod:
             svace_prefix = f'{self.svace_path} build --svace-dir $BASEDIR '
+            svace_clean_mod = fR'rm -rf $BASEDIR/.svace-dir'                    
 
-# HOME=$d/tmp
         rebuild_mod = ' --without '.join([''] + self.ps.rebuild_disable_features)
 
         lines.append(f'''
@@ -2320,6 +2325,7 @@ do
 ''')
         if self.svace_mod:                
             lines.append(f'''
+{svace_clean_mod}            
 {self.svace_path} init $BASEDIR            
 ''')
         lines.append(f'''
