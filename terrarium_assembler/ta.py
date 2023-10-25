@@ -1733,7 +1733,6 @@ mv "{newpath}" "{path_to_dir}" || true
 
         lines.append(f"""
 tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
-popd
 
         
 # We need to update all shell files after checkout.
@@ -2431,7 +2430,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         self.lines2sh(mn_, lines, mn_)
 
 
-    def generate_tests(self, ignore_strace=False):
+    def generate_tests(self, before_compile=False):
         '''
         Generate tests files by specs
         '''
@@ -2447,8 +2446,18 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
             for s_ in self.tests.scripts:
                 for p_ in s_.profiles:
                     profile_name = p_
-                    distro_ = self.tests.profiles[p_].distro
-                    box_name = test_box_name(self.container_name, profile_name, distro_)
+
+                    if before_compile:
+                        if profile_name != 'builder':
+                            continue
+                    else:
+                        if profile_name == 'builder':
+                            continue
+
+                    box_name = self.container_name
+                    if profile_name != 'builder':
+                        distro_ = self.tests.profiles[p_].distro
+                        box_name = test_box_name(self.container_name, profile_name, distro_)
 
                     script_name = s_.name
                     if not strace and 'trace' in s_ and s_.trace in ['yes']:
@@ -2463,9 +2472,20 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                     if strace:
                         strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
                         shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
-                    lines2.append(f'''
+                    if profile_name != 'builder':
+                        box_name = test_box_name(self.container_name, profile_name, distro_)
+                    scmd = ''
+                    if profile_name == 'builder':
+                        scmd = f'''
+toolbox -c {box_name} run {s_.command}
+                        '''
+                    else:
+                        scmd = f'''
 DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {s_.command}
-                    ''')
+                        '''
+
+
+                    lines2.append(scmd)
                     self.lines2sh(shell_name, lines2, None)
                     lines.append(f'./ta-{shell_name}.sh')
 
@@ -4205,6 +4225,14 @@ do
 done
 ''')
 
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+    def stage_39_run_tests(self):
+        '''
+        Run tests before nuitka compiling
+        '''
+        lines = self.generate_tests(before_compile=True)
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
