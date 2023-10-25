@@ -2460,8 +2460,8 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                     strace_mod = ''
                     lines2 = []
                     shell_name = '-'.join(['test', profile_name, script_name])
-                    strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
-                    if strace and not ignore_strace:
+                    if strace:
+                        strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
                         shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
                     lines2.append(f'''
 DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {s_.command}
