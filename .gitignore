@@ -114,3 +114,5 @@ demo/out*
 .vagrant
 .packit.yaml
 *.tar.gz
+docs/.$*
+wtfm
