@@ -4209,6 +4209,9 @@ for BOX in `echo $TESTBOXES`
 do
     distrobox rm --force $BOX
 done
+toolbox rm {self.container_name} -y || true
+rm -rf {self.tmp_dir}
+rm -rf {self.in_bin}
 ''')
 
         mn_ = get_method_name()
