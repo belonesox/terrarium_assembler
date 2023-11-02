@@ -2460,7 +2460,11 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                         box_name = test_box_name(self.container_name, profile_name, distro_)
 
                     script_name = s_.name
-                    if not strace and 'trace' in s_ and s_.trace not in ['both']:
+                    if script_name == 'screen-fast':
+                        wtf = 1
+
+
+                    if not strace and 'trace' in s_ and s_.trace and s_.trace not in ['both']:
                         # от отказываемся от обычного прогона без трейса
                         continue
                     if strace and not ('trace' in s_ and s_.trace):

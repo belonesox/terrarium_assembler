@@ -20,6 +20,6 @@ __version__ = '0.1.0'
 #import importlib
 #import pkgutil
 
-from .ta import *
+
 from .nuitkaflags import *
 from .utils import *
