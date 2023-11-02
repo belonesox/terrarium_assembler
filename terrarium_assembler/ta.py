@@ -4232,7 +4232,7 @@ done
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    def stage_39_run_tests(self):
+    def stage_39_run_tests_before_compile(self):
         '''
         Run tests before nuitka compiling
         '''
