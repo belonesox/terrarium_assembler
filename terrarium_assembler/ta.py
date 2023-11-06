@@ -4158,7 +4158,7 @@ DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
 
 
         lines.append(f'''
-nohup x11vnc -display :96 -forever -autoport 5901 --auth /tmp/test.xvfb.auth &  
+nohup x11vnc -display :96 -forever -autoport 5901 --auth ./tmp/test.xvfb.auth &  
 vncviewer localhost:5901
         ''')
 
