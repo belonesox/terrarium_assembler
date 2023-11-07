@@ -816,6 +816,11 @@ sudo apt-get install -y firefox-esr xcompmgr || true
             self.svace_mod = True
 
 
+        self.piplist2version = '''
+    PPD=`echo $PP | tr '_' '-'`
+    PPN=`echo $PP | tr '-' '_'`
+    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\" or .name==\\"$PPN\\")) | .[0].version"`
+        '''
         pass
 
     def python_version_for_build(self):
@@ -2794,9 +2799,7 @@ mkdir -p tmp/syslibs
 
 for PP in {pps}
 do
-    PPN=`echo $PP | tr '-' '_'`
-    PPD=`echo $PP | tr '_' '-'`
-    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
+    {self.piplist2version}
     DIRNAME=$PP-$VERSION
     FULLDIRNAME=$PIP_SOURCE_DIR/$DIRNAME
     if [ -d "$FULLDIRNAME" ]; then
@@ -2983,8 +2986,7 @@ mkdir -p $PIP_SOURCE_DIR
 for PP in {pps}
 do
     echo $PP
-    PPD=`echo $PP | tr '_' '-'`
-    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
+    {self.piplist2version}
     FILENAME=$PP-$VERSION
 
     if [ ! -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ] && [ ! -f "$PIP_SOURCE_DIR/$FILENAME.zip" ]; then
@@ -3030,8 +3032,7 @@ done
 for PP in {pps}
 do
     echo $PP
-    PPD=`echo $PP | tr '_' '-'`
-    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
+    {self.piplist2version}
     FILENAME=$PP-$VERSION
 
     if [ ! -d "$PIP_SOURCE_DIR/$FILENAME" ]; then
@@ -3051,7 +3052,7 @@ done
 
     def stage_35_audit_build_pip_sources(self):
         '''
-        Download PIP sources.
+        Build PIP packages from sources.
         '''
         os.chdir(self.curdir)
 
@@ -3072,15 +3073,12 @@ rm -f {self.rebuilded_whl_path}/*
 
         svace_prefix = f''
         if self.svace_mod:
-            svace_prefix = f'{self.curdir}/{self.svace_path} build --svace-dir {self.curdir}/$PPDIR '
-
+            svace_prefix = f'''{self.curdir}/{self.svace_path} build --svace-dir {self.curdir}/$PPDIR ''' 
 
         for pp, command, files_ in self.python_rebuild_profiles.get_commands_to_build_packages(svace_prefix):
             lines.append(f'''
 PP={pp}
-PPD=`echo $PP | tr '_' '-'`
-VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\")) | .[0].version"`
-PPN=`echo $PP | tr '-' '_'`
+{self.piplist2version}
 FILENAME=$PP-$VERSION
 PPDIR=$PIP_SOURCE_DIR/$FILENAME
         ''')
@@ -3090,6 +3088,7 @@ PPDIR=$PIP_SOURCE_DIR/$FILENAME
 
             if self.svace_mod:                
                 lines.append(f'''
+rm -rf {self.curdir}/$PPDIR/.svace-dir || true; 
 {self.svace_path} init $PPDIR
     ''')
 

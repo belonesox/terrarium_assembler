@@ -25,6 +25,7 @@ class PythonRebuildProfile:
     command: str = "python setup.py bdist_wheel --build-number=99zzz "
     libs: list = None
     pip: list = None
+    disable_svace: bool = False    
 
 
     def get_merged_env(self):
@@ -51,7 +52,12 @@ class PythonRebuildProfile:
         '''
         env = self.get_merged_env()
         env_str = " ".join([f"{k}='{v}'" for k, v in env.items()])
-        scmd  = f'''{env_str} {prefix} {self.command}'''
+        prefix_ = prefix
+        if 'pydantic_core' in self.packages:
+            wtf = 1
+        if self.disable_svace:
+            prefix_ = ''
+        scmd  = f'''{env_str} {prefix_} {self.command}'''
         return scmd
 
     def get_list_of_libs_dir(self):
@@ -121,6 +127,9 @@ class PythonRebuildProfiles:
             inherit_profile = None
             if 'inherit' in spec:
                 inherit_profile = self.profiles[spec.inherit]
+
+            if name == 'pydantic_core':
+                wtf = 1   
 
             np_ = PythonRebuildProfile(inherited=inherit_profile, **spec)
             self.profiles[name] = np_
