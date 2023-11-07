@@ -3204,135 +3204,136 @@ done
         with open('reports/wiki-defines.wiki', 'w') as lf:
             lf.write(' '.join([''] + sorted(list(wiki_defines_lines))))
 
-        self.cmd(f'''
-{self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.json -f json || true
-# {self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
-{self.tb_mod} ./.venv/bin/pipdeptree --json > tmp/pipdeptree.json
-{self.tb_mod} ./.venv/bin/python -m pip list --format freeze > tmp/piplist-freeze.txt
-rm -f tmp/cyclonedx-bom.json
-{self.tb_mod} ./.venv/bin/cyclonedx-py --format json -r -i tmp/piplist-freeze.txt  -o tmp/cyclonedx-bom.json
-# {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
-''')
-
-        try:
-        # if 1:
-            lines = [f'''
-            digraph G {{
-                rankdir=LR; 
-                ranksep=1;
-                node[shape=box3d, fontsize=8, fontname=Calibry, style=filled fillcolor=aliceblue]; 
-                edge[color=blue, fontsize=6, fontname=Calibry, style=dashed, dir=back]; 
-            ''']
-            json_ = json.loads(open('tmp/pipdeptree.json').read())
-            # temporary hack. 
-            # todo: later we need to rewrite the code, deleting autoorphaned deps from auxiliary packages such as Nuitka
-            ignore_packages = set('''pipdeptree Nuitka cyclonedx-python-lib py-serializeable
-defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock zstandard zstandard pip pip-api          
-rich Pygments markdown-it-py mdurl Jinja2 MarkupSafe
-'''.split() + self.minimal_pips + self.need_pips
-)
-            our_packages = set()
-            for whl in Path(self.our_whl_path).rglob('*.whl'):
-                package_name = whl.stem.lower().split('-')[0].replace('_', '-')
-                our_packages.add(package_name)
-
-            known_packages = set()
-            for r_ in json_:
-                package_ = r_['package']
-                key_  = package_['key']
-                name_ = package_['package_name']
-                if name_ not in ignore_packages:
-                    known_packages.add(name_.lower())
-                    fillcolormod = ''
-                    if name_ in our_packages:
-                        fillcolormod = 'fillcolor=cornsilk '
-                    lines.append(f''' "{key_}" [label="{name_}" {fillcolormod}]; ''')
-            for v1_ in json_:
-                package_ = v1_['package']
-                deps_ = v1_['dependencies']
-                key1_  = package_['key']
-                name1_ = package_['package_name']
-                if key1_ == 'pip-audit':
-                    wtf = 1
-                if name1_ not in ignore_packages:
-                    for v2_ in deps_:
-                        key2_  = v2_['key']
-                        name2_ = v2_['package_name']
-                        if name2_ not in ignore_packages:
-                            lines.append(f''' "{key1_}" -> "{key2_}" ;''')
-            
-            for np_name, np_ in self.nuitka_profiles.profiles.items():
-                for target_ in np_.builds or []:
-                    folder_ = target_.folder
-                    if 'dmprinter' in folder_:
-                        wtf = 1
-                    utility_ = target_.utility
-                    lines.append(f''' "{utility_}-tool" [label="{utility_}" shape=note fillcolor=darkseagreen2] ;''')
-                    # if utility_ in known_packages:
-                    #     lines.append(f''' "{utility_}-tool" -> "{utility_}" ;''')
-
-                    folderfullpath_ = Path(self.src_dir) / folder_
-                    utility_path = folderfullpath_ / (utility_ + '.py')
-                    
-                    if not utility_path.exists():
-                        continue
-
-                    code_ = open(utility_path, 'r', encoding='utf-8').read()            
-
-                    imported_modules = set()    
-                    for module_ in generate_imports_from_python_file(code_, utility_path):
-                        name_ = module_.replace('_', '-')
-                        if name_ == 'trans':
-                            wtf = 1 
-                        if name_ in known_packages:
-                            imported_modules.add(name_)
-
-                    for module_ in sorted(list(imported_modules)):
-                        lines.append(f''' "{utility_}-tool" -> "{module_}" [style=dotted] ;''')
-
-                    # reqs = folderfullpath_ / 'requirements.txt'
-                    # if reqs.exists():
-                    #     with open(reqs, 'r', encoding='utf-8') as fd:
-                    #         for req in requirements.parse(fd):
-                    #             lines.append(f''' "{utility_}-tool" -> "{req.name}" [style=dotted] ;''')
-            
-            lines.append('}')
-
-            with open('reports/pipdeptree.dot', 'w') as lf:
-                lf.write('\n'.join(lines))
-
+        def analyze_venv():
             self.cmd(f'''
-dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
-''')
-        except Exception as ex_:
-            print(ex_)
-            pass
+    {self.tb_mod} ./.venv/bin/pip-audit -o tmp/pip-audit-report.json -f json || true
+    # {self.tb_mod} ./.venv/bin/pipdeptree --graph-output dot > {self.pipdeptree_graph_dot}
+    {self.tb_mod} ./.venv/bin/pipdeptree --json > tmp/pipdeptree.json
+    {self.tb_mod} ./.venv/bin/python -m pip list --format freeze > tmp/piplist-freeze.txt
+    rm -f tmp/cyclonedx-bom.json
+    {self.tb_mod} ./.venv/bin/cyclonedx-py --format json -r -i tmp/piplist-freeze.txt  -o tmp/cyclonedx-bom.json
+    # {self.tb_mod} bash -c "(echo '<graph>'; cat {self.pipdeptree_graph_dot}; echo '</graph>') > {self.pipdeptree_graph_mw}"
+    ''')
+
+            try:
+            # if 1:
+                lines = [f'''
+                digraph G {{
+                    rankdir=LR; 
+                    ranksep=1;
+                    node[shape=box3d, fontsize=8, fontname=Calibry, style=filled fillcolor=aliceblue]; 
+                    edge[color=blue, fontsize=6, fontname=Calibry, style=dashed, dir=back]; 
+                ''']
+                json_ = json.loads(open('tmp/pipdeptree.json').read())
+                # temporary hack. 
+                # todo: later we need to rewrite the code, deleting autoorphaned deps from auxiliary packages such as Nuitka
+                ignore_packages = set('''pipdeptree Nuitka cyclonedx-python-lib py-serializeable
+    defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock zstandard zstandard pip pip-api          
+    rich Pygments markdown-it-py mdurl Jinja2 MarkupSafe
+    '''.split() + self.minimal_pips + self.need_pips
+    )
+                our_packages = set()
+                for whl in Path(self.our_whl_path).rglob('*.whl'):
+                    package_name = whl.stem.lower().split('-')[0].replace('_', '-')
+                    our_packages.add(package_name)
+
+                known_packages = set()
+                for r_ in json_:
+                    package_ = r_['package']
+                    key_  = package_['key']
+                    name_ = package_['package_name']
+                    if name_ not in ignore_packages:
+                        known_packages.add(name_.lower())
+                        fillcolormod = ''
+                        if name_ in our_packages:
+                            fillcolormod = 'fillcolor=cornsilk '
+                        lines.append(f''' "{key_}" [label="{name_}" {fillcolormod}]; ''')
+                for v1_ in json_:
+                    package_ = v1_['package']
+                    deps_ = v1_['dependencies']
+                    key1_  = package_['key']
+                    name1_ = package_['package_name']
+                    if key1_ == 'pip-audit':
+                        wtf = 1
+                    if name1_ not in ignore_packages:
+                        for v2_ in deps_:
+                            key2_  = v2_['key']
+                            name2_ = v2_['package_name']
+                            if name2_ not in ignore_packages:
+                                lines.append(f''' "{key1_}" -> "{key2_}" ;''')
+                
+                for np_name, np_ in self.nuitka_profiles.profiles.items():
+                    for target_ in np_.builds or []:
+                        folder_ = target_.folder
+                        if 'dmprinter' in folder_:
+                            wtf = 1
+                        utility_ = target_.utility
+                        lines.append(f''' "{utility_}-tool" [label="{utility_}" shape=note fillcolor=darkseagreen2] ;''')
+                        # if utility_ in known_packages:
+                        #     lines.append(f''' "{utility_}-tool" -> "{utility_}" ;''')
+
+                        folderfullpath_ = Path(self.src_dir) / folder_
+                        utility_path = folderfullpath_ / (utility_ + '.py')
+                        
+                        if not utility_path.exists():
+                            continue
+
+                        code_ = open(utility_path, 'r', encoding='utf-8').read()            
+
+                        imported_modules = set()    
+                        for module_ in generate_imports_from_python_file(code_, utility_path):
+                            name_ = module_.replace('_', '-')
+                            if name_ == 'trans':
+                                wtf = 1 
+                            if name_ in known_packages:
+                                imported_modules.add(name_)
+
+                        for module_ in sorted(list(imported_modules)):
+                            lines.append(f''' "{utility_}-tool" -> "{module_}" [style=dotted] ;''')
+
+                        # reqs = folderfullpath_ / 'requirements.txt'
+                        # if reqs.exists():
+                        #     with open(reqs, 'r', encoding='utf-8') as fd:
+                        #         for req in requirements.parse(fd):
+                        #             lines.append(f''' "{utility_}-tool" -> "{req.name}" [style=dotted] ;''')
+                
+                lines.append('}')
+
+                with open('reports/pipdeptree.dot', 'w') as lf:
+                    lf.write('\n'.join(lines))
+
+                self.cmd(f'''
+    dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
+    ''')
+            except Exception as ex_:
+                print(ex_)
+                pass
 
 
-        try:
-        # if 1:
-            json_ = json.loads(open('tmp/pip-audit-report.json').read())
-            rows_ = []
-            for r_ in json_['dependencies']:
-                if 'vulns' in r_:
-                    for v_ in r_['vulns']:
-                        rows_.append([r_['name'], r_['version'], v_['id'], ','.join(v_['fix_versions']), v_['description']])
+            try:
+            # if 1:
+                json_ = json.loads(open('tmp/pip-audit-report.json').read())
+                rows_ = []
+                for r_ in json_['dependencies']:
+                    if 'vulns' in r_:
+                        for v_ in r_['vulns']:
+                            rows_.append([r_['name'], r_['version'], v_['id'], ','.join(v_['fix_versions']), v_['description']])
 
-            write_doc_table('reports/pip-audit-report.htm', ['Пакет', 'Версия', 'Возможная уязвимость', 'Исправлено в версиях', 'Описание'], sorted(rows_))
-        except Exception as ex_:
-            print(ex_)
-            pass
+                write_doc_table('reports/pip-audit-report.htm', ['Пакет', 'Версия', 'Возможная уязвимость', 'Исправлено в версиях', 'Описание'], sorted(rows_))
+            except Exception as ex_:
+                print(ex_)
+                pass
 
-        try:
-            json_ = json.loads(open(self.pip_list_json).read())
-            rows_ = []
-            for r_ in json_:
-                rows_.append([r_['name'], r_['version']])
+            try:
+                json_ = json.loads(open(self.pip_list_json).read())
+                rows_ = []
+                for r_ in json_:
+                    rows_.append([r_['name'], r_['version']])
 
-            write_doc_table('reports/doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
-        except Exception as ex_:
-            print(ex_)
-            pass
+                write_doc_table('reports/doc-python-packages.htm', ['Package', 'Version'], sorted(rows_))
+            except Exception as ex_:
+                print(ex_)
+                pass
 
         spec = self.spec
         #!!! need to fix !!!
@@ -3355,29 +3356,8 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                 write_doc_table(f'tmp/{clocname}.htm', ['Файлов', 'Язык', 'Пустых', 'Комментариев', 'Строчек кода', 'Мощность языка', 'COCOMO строк'],
                                 table_csv)
 
-        # cloc ./in/bin/rpmbuild/*/BUILD/   ./in/src/
-        cloc_for_files('our-cloc', './in/src/')
-        cloc_for_files('rebuilded-rpms-cloc', f'./{self.rpmbuild_path}/*/BUILD/')
-        cloc_for_files('python-rebuilded-cloc', f'./{self.pip_source_path}')
-
         lastdirs = os.path.sep.join(
             abs_path_to_out_dir.split(os.path.sep)[-2:])
-
-        trace_file = None
-        if not 'tracefile' in spec.tests:
-            print('You should specify tests→tracefile')
-            return
-
-        tracefiles = []
-        if isinstance(spec.tests.tracefile, str):
-            tracefiles.append(spec.tests.tracefile)
-
-        if isinstance(spec.tests.tracefile, list):
-            tracefiles.extend(spec.tests.tracefile)
-
-        for i_ in range(len(tracefiles)):
-            tracefiles[i_] = str(Path(tracefiles[i_]).resolve())
-            tracefiles[i_] = os.path.expandvars(tracefiles[i_])
 
         file_source_table = yaml.unsafe_load(open(self.files_source_after_minimization_path, 'r'))
         file_source = list(file_source_table.values())
@@ -3386,9 +3366,10 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
         file_source = list(file_source_table.values())
 
         # ToDo — pydantic, enums, etc
-        file_source_from_packages = [r for r in file_source if r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value]
+        file_source_from_packages = [r for r in file_source 
+                                     if r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value]
 
-        used_files = yaml.unsafe_load(open(self.used_files_path, 'r'))
+        used_files = set(yaml.unsafe_load(open(self.used_files_path, 'r')))
 
         file_package_list, file2package = self.load_file_package_list_from_rpms()
 
@@ -3420,53 +3401,80 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
             for filename in filenames:
                 fname_ = os.path.join(abs_path_to_out_dir, dirpath, filename)
                 fname_ = os.path.abspath(fname_)
+                fname__ = os.path.relpath(fname_, start=abs_path_to_out_dir)
                 if 'cv2.cpython-38-x86_64-linux-gnu.so' in filename:
                     wtff = 1
-                if fname_ not in used_files:
+                if fname__ not in used_files:
                     if not os.path.islink(fname_):
                         size_ = os.stat(fname_).st_size
                         existing_files[fname_] = size_
+        # Код выше пока оставлю, пока не понял, какого хрена остаются гитигноры и шаблоны.
 
-        top10 = sorted(existing_files.items(), key=lambda x: -x[1])[:4000]
-        for f, s in top10:
-            rel_f = f.replace(abs_path_to_out_dir, '')
-            ignore_ = False
-            for re_ in self.br.ignore_re:
-                if re_.match(f):
-                    ignore_ = True
-                    break
-            if ignore_:
-                continue
-            unban_ = False
-            for unban in [  # '/usr/lib64/python3.9','/lib64/python3.9'
-            ]:
-                if unban in rel_f:
-                    unban_ = True
-                    breakpoint
-            if unban_:
-                continue
-            # f_ = re.escape(rel_f)
-            f_ = rel_f
-            for rex_ in [
-                # act\.so\.4\.0\.1 → act\.so\.\d\.\d\.\d
-                r"\.so\.[\d]+\.[\d]+\.[\d]+",
-                r"\.so\.[\d]+\.[\d]+",
-                r"\.so\.[\d]+",
-                r"[\d]+\.[\d]+\.so",
-                r"[\d]+\.so",
-                r"-[\d]+\.[\d]+-[\d]+",
-                r"c\+\+",
-            ]:
-                def replacement_f(mobj):
-                    return rex_
-                f_ = re.sub(rex_, replacement_f, f_)
-            if f_ == rel_f:
-                f_ = re.escape(rel_f)
 
-            lines.append(f'      - {f_[1:]} # \t {s} \t {rel_f}')
+        rpm_packages_recommended_for_rebuild = set()
+        rbs_ = set(self.ps.rebuild)
+        rpm_packages_not_need_to_be_rebuilded = set(self.ps.rebuild)
+        rpm_packages_rebuilded_but_not_declared = set()
+        python_packages_recommended_for_rebuild = set()
+        binary_files_report = []
+        for file_, source_ in sorted(bin_files_sources.items()):
+            fti_ = file_source_table[file_]
+            if fti_.source == 'geos':
+                wtf = 1
 
-        with open('reports/recommend-for-exclude.txt', 'w') as lf:
+            row_ = [file_]
+            if fti_.source_type == 'rpm_package':
+                row_.extend(["RPM-пакет", f"<b>Требуется пересборка RPM-пакета {fti_.source}!</b>"])
+            if fti_.source_type == 'python_package':
+                row_.extend(["Python-пакет", f"<b>Нужна пересборка Python-пакета {fti_.source}!</b>"])
+            if fti_.source_type == 'rebuilded_rpm_package':
+                row_.extend(["Пересобранный RPM-пакет", f"Исходники пакета {fti_.source} в {self.rpmbuild_path}"])
+            if fti_.source_type == 'file_from_folder':
+                row_.extend(["Компиляция Nuitka", f"Компиляция в папке {fti_.source}"])
+            if fti_.source_type == 'rebuilded_python_package':
+                row_.extend(["Пересобранный Python-пакет", f"Исходники пакета {fti_.source} в {self.pip_source_path}"])
+            if fti_.source_type == 'our_source':
+                row_.extend(["Наше расширение", f"Исходники пакета {fti_.source} в {self.src_dir}"])
+            binary_files_report.append(row_)    
+
+            if fti_.source_type == SourceType.rpm_package.value:
+                if not fti_.source in rbs_:
+                    rpm_packages_recommended_for_rebuild.add(fti_.source)
+                if fti_.source in rpm_packages_not_need_to_be_rebuilded:
+                    rpm_packages_not_need_to_be_rebuilded.remove(fti_.source)
+            elif fti_.source_type == SourceType.rebuilded_rpm_package.value:
+                if fti_.source in rpm_packages_not_need_to_be_rebuilded:
+                    rpm_packages_not_need_to_be_rebuilded.remove(fti_.source)
+                if fti_.source not in rbs_:
+                    rpm_packages_rebuilded_but_not_declared.add(fti_.source)    
+            elif fti_.source_type == SourceType.python_package.value:
+                if 'skimage' in fti_.source:
+                    wtf  = 1
+                python_packages_recommended_for_rebuild.add(fti_.source)
+
+        write_doc_table(os.path.join(self.curdir, 'reports/binary-files-report.htm'), ['Файл', 'Тип', 'Исходники сборки'], binary_files_report)
+
+        lines.append(f'\nRPM packages recommended for rebuild')
+        lines.append('\n - '.join([''] + sorted(rpm_packages_recommended_for_rebuild)))
+
+        lines.append(f'\nRPM packages not needed to be rebuilded')
+        lines.append('\n - '.join([''] + sorted(rpm_packages_not_need_to_be_rebuilded)))
+
+        lines.append(f'\nRPM packages rebuilded but not declared as rebuilded')
+        lines.append('\n - '.join([''] + sorted(rpm_packages_rebuilded_but_not_declared)))
+
+        lines.append(f'\nPython packages recommended for rebuild')
+        lines.append('\n - '.join([''] + sorted(python_packages_recommended_for_rebuild)))
+
+        with open(os.path.join(self.curdir, self.report_binary_files_path), 'w') as lf:
             lf.write('\n'.join(lines))
+
+        cloc_for_files('our-cloc', './in/src/')
+        cloc_for_files('rebuilded-rpms-cloc', f'./{self.rpmbuild_path}/*/BUILD/')
+        cloc_for_files('python-rebuilded-cloc', f'./{self.pip_source_path}')
+        analyze_venv()
+
+
 
         pass
 
@@ -3575,33 +3583,6 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
         so_files_rpips_path2package = {}
         so_files_rpips_path2whl = {}
         split_ = os.path.split(self.pip_source_path)[-1]
-        # splitters = [
-        #     'build/lib.linux-x86_64-3', 
-        #     'build/lib.linux-x86_64-cpython-3', 
-        #     f'''skbuild/linux-x86_64-{self.python_version_for_build().replace('.', '')}/cmake-install''',
-        #     f'''_skbuild/linux-x86_64-{self.python_version_for_build()}/cmake-install'''
-        #             ]
-
-        # with open(self.so_files_from_rebuilded_pips, 'r') as lf:
-        #     for i, line in enumerate(lf.readlines()):
-        #         line = line.strip('\n')
-        #         path_ =  Path(line).absolute()
-        #         fname = os.path.split(path_)[-1]
-        #         ok = False
-        #         relname = ''
-        #         if '_skbuild' in line:
-        #             if 'cmake-build' in line:
-        #                 continue
-        #             if 'setuptools' in line:
-        #                 continue
-        #         for split_ in splitters:
-        #             if split_ in line:    
-        #                 relname = '/'.join(line.split(split_)[1].split('/')[1:])
-        #                 break
-        #         assert(relname)    
-        #         so_files_rpips_filename2path[relname] = line
-        #         package_name = line.split(split_)[1].split(os.path.sep)[1]
-        #         so_files_rpips_path2package[line] = package_name
 
         for whl_name in Path(self.rebuilded_whl_path).rglob('*.whl'):
             with zipfile.ZipFile(whl_name, 'r') as whl_file:
@@ -3645,6 +3626,7 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                 # All standard python copy_tree is broken
                 # https://bugs.python.org/issue41134
                 # https://stackoverflow.com/questions/53090360/python-distutils-copy-tree-fails-to-update-if-there-are-symlinks
+                # !!! переписать, неучтенные файлы!!!
                 if from_.strip():
                     scmd = f'rsync -rav {from_}/ {to_}'
                     print(scmd)
@@ -3670,6 +3652,8 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                     if '.git' in dirpath:
                         continue
                     for dir_ in dirnames:
+                        if '.git' in dir_:
+                            continue
                         out_dir = os.path.join(root_dir, dirpath, dir_)
                         print(out_dir)
                         mkdir_p(out_dir)
@@ -3708,7 +3692,8 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
                                     path_ = os.path.join(self.curdir, path_)
                                 if path_.strip() and os.path.isdir(path_):
                                     # shutil.copytree(path_, out_fname_)
-                                    scmd = f'rsync -rav --exclude ".git" {path_}/ {out_fname_}'
+                                    # !!!! Переписать, неучтенные файлы!!!
+                                    scmd = f'rsync -rav --exclude ".git*" {path_}/ {out_fname_}'
                                     self.cmd(scmd)
                                 else:
                                     shutil.copy2(path_, out_fname_)
@@ -4047,7 +4032,7 @@ dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
 {self.tb_mod} python3 -c "from ctypes.util import _findSoname_ldconfig;print(_findSoname_ldconfig('c'))"      
 """            
         libc_name = subprocess.check_output(scmd, shell=True).decode('utf-8').strip()
-        self.cmd(f"ln -s {libc_name} {self.out_dir}/libc.so")
+        self.cmd(f"ln -s {libc_name} {self.out_dir}/lib64/libc.so")
 
         install_templates(root_dir, args)
         self.install_terra_pythons()
@@ -4312,11 +4297,11 @@ done
             for trace_file in os.listdir(trace_file_dir):
                 print(f'Analysing {trace_file}')
                 re_file = re.compile(
-                    r'''.*\([^"]*.\"(?P<filename>[^"]+)\".*''')
+                    r'''.*\([^"]*\"(?P<filename>[^"]+)\".*''')
                 for linenum, line in enumerate(open(Path(trace_file_dir) / trace_file, 'r', encoding='utf-8').readlines()):
                     if 'ENOENT' in line:
                         continue
-                    if 'libtiff.so.5' in line:
+                    if 'pbin/ld.so' in line:
                         wtf = 1
                     m_ = re_file.match(line)
                     if m_:
@@ -4378,17 +4363,20 @@ done
                     
         for fib in list(file_source_table.keys()):
             rp_ = fib
-            if 'libtiff.so.5' in rp_:
+            if '.gitattributes' in rp_:
                 wtf = 1
-            if used_files and not self.br.is_needed(rp_) and rp_ not in used_files_resolved: 
-                rel_file = rp_
-                path_ = Path(self.out_dir) / rel_file    
-                if not path_.is_symlink():
+            if 'sotruss-lib.so' in rp_:
+                wtf = 1
+            if used_files and not self.br.is_needed(rp_): 
+                if rp_ not in used_files_resolved:    
+                    if rp_ in bin_files_sources:
+                        del bin_files_sources[ rp_ ]
                     del file_source_table[fib]
-                    if rel_file in self.bin_files_sources:
-                        del self.bin_files_sources[ rel_file ]
-                    path_.unlink(missing_ok=True)
-                    removed_paths.append(rel_file)
+                    path_ = Path(self.out_dir) / rp_
+                    if path_.exists():
+                        if not path_.is_symlink():
+                            path_.unlink(missing_ok=True)
+                            removed_paths.append(rp_)
 
         # killing broken links
         for path in Path(self.out_dir).rglob('*'):
