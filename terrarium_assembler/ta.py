@@ -819,7 +819,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         self.piplist2version = '''
     PPD=`echo $PP | tr '_' '-'`
     PPN=`echo $PP | tr '-' '_'`
-    VERSION=`cat tmp/pip-list.json | jq -j "map(select(.name==\\"$PPD\\" or .name==\\"$PPN\\")) | .[0].version"`
+    VERSION=`cat tmp/pip-list.json | jq -j "map(select((.name | ascii_downcase)==(\\"$PPD\\"|ascii_downcase) or (.name|ascii_downcase)==(\\"$PPN\\"|ascii_downcase))) | .[0].version"`
         '''
         pass
 
@@ -2991,7 +2991,7 @@ do
 
     if [ ! -f "$PIP_SOURCE_DIR/$FILENAME.tar.gz" ] && [ ! -f "$PIP_SOURCE_DIR/$FILENAME.zip" ]; then
         echo **$FILENAME--
-        URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select( ((.filename|test(\\"$FILENAME.tar.gz\\")) or (.filename|test(\\"$FILENAME.zip\\"))) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
+        URL=`curl -s https://pypi.org/pypi/$PP/json | jq -r '.releases[][] ' | jq "select( ((.filename|ascii_downcase|test(\\"$FILENAME.tar.gz\\" | ascii_downcase)) or (.filename|ascii_downcase|test(\\"$FILENAME.zip\\" | ascii_downcase))) and (.packagetype==\\"sdist\\") and (.python_version==\\"source\\"))" | jq -j '.url'`
         echo $URL
         wget --secure-protocol=TLSv1_2 -c -P $PIP_SOURCE_DIR/ $URL
     fi
@@ -4164,9 +4164,14 @@ do
   $pyth -m pip wheel /home/stas/projects/terrarium_assembler --wheel-dir $DST/ta/$pyth
 done
 
-for adir in {self.platform_path} {self.base_whl_path} {self.ext_whl_path} {self.pip_source_path} {self.base_whl_path} {self.rpmrepo_path} {self.strace_files_path}
+for adir in {self.base_whl_path} {self.ext_whl_path} {self.pip_source_path} {self.extra_whl_path} {self.extra_whl_deps_path}
 do
    rsync -av --mkpath --delete --exclude='*/'  --exclude *.md5 $adir/ $DST/$adir
+done 
+
+for adir in {self.platform_path} {self.rpmrepo_path} 
+do
+   rsync -rav --mkpath --delete --exclude *.md5 $adir/ $DST/$adir
 done 
 
 # перенести в основной чекаут. может там вообще сделать основным, чекаут двух типов с убиранием лишних папок?
@@ -4175,6 +4180,8 @@ done
 rsync --checksum {self.src_dir}/in-src.tar $DST/
 
 rsync *.yml $DST/
+rsync {self.used_files_path} $DST/{self.used_files_path}
+
         ''')
 
         mn_ = get_method_name()
