@@ -2914,7 +2914,7 @@ done
         # pipenv environment does not exists we using regular python to download base packages.
         # scmd = 'date'
         # if bws:
-        scmd = f"python3 -m pip download  {bws} --dest {self.base_whl_path} "
+        scmd = f"python3 -m pip download  {bws} --dest {self.base_whl_path}  --default-timeout=1000 "
         lines.append(f'''
 {bashash_ok_folders_strings(self.base_whl_path, [], [bws],
         f"Looks required base wheels already downloaded"
@@ -3119,7 +3119,7 @@ rm -rf {self.curdir}/$PPDIR/.svace-dir || true;
         remove_pips = self.pp.remove_from_download or []
         remove_pips_str = " ".join(remove_pips)
 
-        scmd = f"./.venv/bin/python3 -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}'  "
+        scmd = f"./.venv/bin/python3 -m pip download wheel {pip_args_} --dest {self.ext_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --default-timeout=1000  "
         # scmd_srcs = f"{self.tb_mod} ./.venv/bin/python3 -m pip download --no-build-isolation {self.base_wheels_string()} {pip_args_} --dest {self.ext_pip_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --no-binary :all: "
         lines.append(f'''
 {bashash_ok_folders_strings(self.ext_whl_path, [self.src_dir], [scmd, remove_pips_str],
