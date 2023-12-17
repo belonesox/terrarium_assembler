@@ -535,11 +535,6 @@ class TerrariumAssembler:
             
         self.args = args = ap.parse_args()
 
-        # if args.step_from or args.step_to:
-        #     for s_ in self.stages_names:
-        #         if args.step_from <= fname2num(s_) <= args.step_to:
-        #             setattr(self.args, fname2stage(s_).replace('-','_'), True)
-
         if args.steps:
             for step_ in args.steps.split(','):
                 if '-' in step_:
@@ -786,13 +781,17 @@ sudo apt-get install -y firefox-esr xcompmgr || true
 
         self.rpms_path = rpmrepo("rpms")
         self.srpms_path = rpmrepo("srpms")
+        self.rpm_specs_path = tmp_fld("rpm-all-specs")
+        self.rpm_sources_path = tmp_fld("rpm-all-specs/SOURCES")
         self.build_deps_rpms = rpmrepo("build-deps-rpms")
 
         self.rebuilded_rpms_path = rebuildedrepo("rebuilded-rpms")
 
         self.nuitka_plugins_dir = os.path.realpath(os.path.join(
             os.path.split(__file__)[0], '..', 'nuitka_plugins'))
-        self.installed_packages_ = None
+        # self.installed_packages_ = None
+
+
 
         self.optional_bin_patcher = None
         if 'optional_bin_patcher' in self.spec and os.path.exists(self.spec.optional_bin_patcher):
@@ -821,7 +820,9 @@ sudo apt-get install -y firefox-esr xcompmgr || true
     PPN=`echo $PP | tr '-' '_'`
     VERSION=`cat tmp/pip-list.json | jq -j "map(select((.name | ascii_downcase)==(\\"$PPD\\"|ascii_downcase) or (.name|ascii_downcase)==(\\"$PPN\\"|ascii_downcase))) | .[0].version"`
         '''
-        pass
+
+        self.clean_old_versions_in_rpmbuild()
+        ...
 
     def python_version_for_build(self):
         return '.'.join([str(self.spec.python_major_version), str(self.spec.python_minor_version)])
@@ -853,22 +854,58 @@ fi
 '''
         return scmd
 
-    @property
-    def installed_packages(self):
+    def clean_old_versions_in_rpmbuild(self):
         # Later we made refreshing using atomic_transformation
-        if not self.installed_packages_:
-            ip_file = './tmp/installed_packages'
-            self.cmd(f'rpm -qa > {ip_file}')
-            ps_ = []
-            with open(ip_file, 'r', encoding='utf-8') as lf:
-                ps_ = lf.read().strip().split('\n')
-            self.installed_packages_ = []    
-            for p_ in ps_:
-                try:
-                    self.installed_packages_.append(version_utils.rpm.package(p_))
-                except:
-                    pass              
-        return self.installed_packages_
+        def clean_dir_from_old_versions(dir_, suffix):
+            packages_ = {}
+            for dirname in os.listdir(dir_):
+                def delete_dir_of_file(file_or_dir):
+                    if file_or_dir.is_dir():
+                        for root, dirs, files in file_or_dir.walk(top_down=False):
+                            for name in files:
+                                (root / name).unlink()
+                            for name in dirs:
+                                (root / name).rmdir()
+                    file_or_dir.unlink()
+                    ...            
+
+                if dirname.endswith(suffix):
+                    if 'acl-' in dirname:
+                        wtf = 1
+                    package_name = dirname[:-len(suffix)]
+                    p_ = version_utils.rpm.package(package_name)
+                    if not p_.name in packages_:
+                        packages_[p_.name] = (package_name, p_)
+                    else:
+                        current_package = packages_[p_.name][0]
+                        if version_utils.rpm.compare_packages(package_name, current_package) > 0:
+                            delete_dir_of_file( Path(dir_) / (current_package + suffix)  )
+                            packages_[p_.name] = (package_name, p_)
+                        else:    
+                            delete_dir_of_file( Path(dir_) / (package_name + suffix)  )
+        # clean_dir_from_old_versions(self.rpms_path, '.rpm')                            
+        clean_dir_from_old_versions(self.rpmbuild_path, '-rpmbuild')                            
+        clean_dir_from_old_versions(self.srpms_path, '.rpm')                            
+        # clean_dir_from_old_versions(self.rpms_backup_pool, '.rpm')                            
+        ...
+
+
+    # @property
+    # def installed_packages(self):
+    #     # Later we made refreshing using atomic_transformation
+    #     if not self.installed_packages_:
+    #         ip_file = './tmp/installed_packages'
+    #         self.cmd(f'rpm -qa > {ip_file}')
+    #         ps_ = []
+    #         with open(ip_file, 'r', encoding='utf-8') as lf:
+    #             ps_ = lf.read().strip().split('\n')
+    #         self.installed_packages_ = []    
+    #         for p_ in ps_:
+    #             try:
+    #                 self.installed_packages_.append(version_utils.rpm.package(p_))
+    #             except:
+    #                 pass              
+    #     return self.installed_packages_
 
     def cmd(self, scmd):
         '''
@@ -2122,6 +2159,10 @@ rm -rf '{self.srpms_path}'
 {self.rm_locales}
 {self.tb_mod} {scmd}
 {self.create_repo_cmd}
+rm -f {self.rpm_specs_path}/*.spec
+rm -f {self.rpm_specs_path}/SOURCES/*
+#{self.tb_mod} find "{self.srpms_path}" -name "*.src.rpm" | xargs -i{{}} -t bash -c "rpm2cpio {{}} | cpio -D {self.rpm_specs_path} -civ '*.spec' "
+{self.tb_mod} find "{self.srpms_path}" -name "*.src.rpm" | xargs -i{{}} -t bash -c "rpm2cpio {{}} | cpio -D {self.rpm_sources_path} -civ '*.*' "
 {save_state_hash(self.srpms_path)}
 ''')
 
@@ -2137,6 +2178,7 @@ rm -rf '{self.srpms_path}'
         '''
         Download Build Deps for SRPM packages.
         '''
+        rebuild_mod = self.get_rebuild_mod_for_dnf()
         lines = []
         lines_src = []
         in_bin = os.path.relpath(self.in_bin, start=self.curdir)
@@ -2158,14 +2200,15 @@ rm -rf '{self.srpms_path}'
 {self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y 
 '''
         lines.append(f'''
-{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), glibc_686_download],
+{bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), glibc_686_download, rebuild_mod],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
 {self.rm_locales}
 # SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
-SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
+# SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
+SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`        
 #{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch  --resolve  $SRPMS -y 
-{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
+{self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
 {self.rm_locales}
 # SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
 # SRC_DEPS_PACKAGES_MAIN=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep -v i686 | tr '\\n' ' '`
@@ -2209,6 +2252,10 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
+    def get_rebuild_mod_for_dnf(self):
+        rebuild_mod = ' '.join([f'--define "_without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
+        return rebuild_mod
+
     def stage_13_audit_download_build_deps_rpms2(self):
         '''
         Download Build Deps for SRPM packages.
@@ -2219,7 +2266,7 @@ SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         pls_ = [p for p in self.ps.terra if isinstance(p, str)]
 
         state_dir = self.states_path + '/build_deps2'
-        rebuild_mod = ' '.join([f'--define "without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
+        rebuild_mod = self.get_rebuild_mod_for_dnf()
 
         glibc_686_download = f'''
 {self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y 
@@ -2312,6 +2359,7 @@ done
         if self.svace_mod:
             svace_prefix = f'{self.svace_path} build --svace-dir $BASEDIR '
             svace_clean_mod = fR'rm -rf $BASEDIR/.svace-dir'                    
+
 
         rebuild_mod = ' --without '.join([''] + self.ps.rebuild_disable_features)
 
@@ -2666,14 +2714,16 @@ rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
         Install downloaded RPM packages for building SRPMS
         '''
 
+        rebuild_mod = self.get_rebuild_mod_for_dnf()
 
+# SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
         lines = [
             f"""
 {self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
            
 {self.rm_locales}
-SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
-{self.tb_mod} sudo dnf builddep --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
+SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`        
+{self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
 {self.rm_locales}
 rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 """ 
@@ -4636,9 +4686,9 @@ overrides:
             self.cmd(f'chmod a+x {root_dir}/install-me')
 
 
-            res_ = list(p for p in self.installed_packages if p.name=='makeself')
+            # res_ = list(p for p in self.installed_packages if p.name=='makeself')
             add_opts = ''
-            if len(res_) >= 0:
+            if 1:
                 version_ = res_[0].version
                 if version.parse(version_) >= version.parse("2.4.5"):
                     add_opts = ' --tar-format posix '
