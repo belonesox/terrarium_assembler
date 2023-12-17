@@ -2326,19 +2326,49 @@ do
     {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
-''')
+        ''')
         if self.svace_mod:                
             lines.append(f'''
 {svace_clean_mod}            
 {self.svace_path} init $BASEDIR            
-''')
+            ''')
         lines.append(f'''
     rm -rf $BASEDIR/BUILD/*
 
-if [[ "$SPECNAME" =~ ^(gcc.spec|tesseract-tessdata.spec)$ ]]; then
-    {self.tb_mod} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+{self.tb_mod} sudo bash -c 'echo "_unpackaged_files_terminate_build 0" > /usr/lib/rpm/macros.d/macros.tas'
+        ''')
+
+        if 'rebuild_patches' in self.spec.packages:
+            for package in self.spec.packages.rebuild_patches:
+                lines.append(f'''
+    if [[ "$SPECNAME" =~ ^({package}.spec)$ ]]; then
+                ''')
+                for sed_patch in self.spec.packages.rebuild_patches[package]:
+                    lines.append(f'''
+                        {self.tb_mod} sed -e '{sed_patch}' -i $SPEC 
+                    ''')
+                lines.append(f'''
+    fi
+                ''')
+
+            lines.append(f'''
+NO_SVACE=0
+            ''')
+        if 'rebuild_disable_svace' in self.spec.packages:
+            specs_disable_svace_ = '|'.join([f'{f}.spec' for f in self.spec.packages.rebuild_disable_svace])
+            lines.append(f'''
+    if [[ "$SPECNAME" =~ ^({specs_disable_svace_})$ ]]; then
+        NO_SVACE=1
+    fi
+            ''')    
+
+        rpmbuild_cmd = f'''rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC'''
+
+        lines.append(f'''
+if [[ $NO_SVACE -ne 0 ]]; then
+    {self.tb_mod} {rpmbuild_cmd}
 else
-    {self.tb_mod} {svace_prefix} rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
+    {self.tb_mod} {svace_prefix} {rpmbuild_cmd}
 fi
 
     {save_state_hash("$d/$BASEDIR/RPMS")}
