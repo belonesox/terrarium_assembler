@@ -861,12 +861,9 @@ fi
             for dirname in os.listdir(dir_):
                 def delete_dir_of_file(file_or_dir):
                     if file_or_dir.is_dir():
-                        for root, dirs, files in file_or_dir.walk(top_down=False):
-                            for name in files:
-                                (root / name).unlink()
-                            for name in dirs:
-                                (root / name).rmdir()
-                    file_or_dir.unlink()
+                        shutil.rmtree(file_or_dir)
+                    else:    
+                        file_or_dir.unlink()
                     ...            
 
                 if dirname.endswith(suffix):
