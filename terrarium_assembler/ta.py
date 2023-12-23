@@ -3255,6 +3255,53 @@ done
         self.lines2sh(mn_, lines, mn_)
         pass
 
+    def stage_89_rpm_graph(self):
+        '''
+        Get RPM Graph of dependencies
+        '''
+        from .vis4rpm import compute_graph, graph_to_dot, dot_to_graph_svg
+
+
+        if not self.build_mode:
+            mn_ = get_method_name()
+            lines = [
+                f'''
+{sys.executable} {sys.argv[0]} "{self.args.specfile}" --stage-rpm-graph
+                ''']
+            self.lines2sh(mn_, lines, mn_)
+            return
+
+        if not self.args.stage_rpm_graph:
+            return
+
+        file_source_table = yaml.unsafe_load(open(self.files_source_after_minimization_path, 'r'))
+        file_source = list(file_source_table.values())
+
+        bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_after_minimization_path, 'r'))
+        bin_files_relnames = set(bin_files_sources.values())
+
+        packages = yaml.unsafe_load(open('tmp/rpm-packages-info.yaml', 'r'))
+        file_source_from_packages = [r for r in file_source 
+                                     if (r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value
+                                        ) and r.source_path in bin_files_relnames]
+
+        file_package_list, file2package = self.load_file_package_list_from_rpms()
+
+        packages_from_build = set([r.source for r in file_source_from_packages])
+        # rpm_packages_table = sorted(list(set([(pfr.package, pfr.version) for pfr in file_package_list if pfr.package in packages_from_build])))
+
+        for pname_ in list(packages.keys()):
+            if pname_ not in packages_from_build:
+                del packages[pname_]
+
+        graph = compute_graph(packages)
+        dot = graph_to_dot(graph, sizes=False, highlights=None)
+        output = dot_to_graph_svg(dot)
+        with open('reports/rpm-graph.svg', "w") as outfile:
+            outfile.write(output)
+
+        ...
+
 
     def stage_90_audit_analyse(self):
         '''
@@ -3439,7 +3486,6 @@ done
         file_source = list(file_source_table.values())
 
         bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_after_minimization_path, 'r'))
-        file_source = list(file_source_table.values())
 
         # ToDo — pydantic, enums, etc
         file_source_from_packages = [r for r in file_source 
@@ -3801,6 +3847,13 @@ done
 
             print("Install templates takes")
             t.toc()
+
+            tb_path = self.toolbox_path('/')
+            from .vis4rpm import load_packages_from_path
+            packages = load_packages_from_path(tb_path)
+
+            with open(os.path.join(self.curdir, 'tmp/rpm-packages-info.yaml'), 'w') as lf:
+                lf.write(yaml.dump(packages))
 
         # self.remove_exclusions()
 
