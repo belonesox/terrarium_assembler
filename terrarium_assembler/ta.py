@@ -696,6 +696,9 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         if not 'terra_exclude' in spec.packages:
             spec.packages.terra_exclude = []
 
+        if 'python3-libs' in spec.packages.terra_exclude:
+            wtf = 1    
+
         if not 'rebuild_disable_features' in spec.packages:
             spec.packages.rebuild_disable_features = ['tests', 'doc']
 
@@ -1029,7 +1032,7 @@ export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
                 lines.append(fR"""
-{bashash_ok_folders_strings(ok_dir, ['.venv', src_dir], [],
+{bashash_ok_folders_strings(ok_dir, ['.venv', src_dir], [flags_, nflags],
         f"Sources for {build_name} not changed, skipping"
         )}
     """)
@@ -2559,17 +2562,20 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                     if profile_name != 'builder':
                         box_name = test_box_name(self.container_name, profile_name, distro_)
                     scmd = ''
-                    if profile_name == 'builder':
-                        scmd = f'''
-toolbox -c {box_name} run {s_.command}
-                        '''
-                    else:
-                        scmd = f'''
-DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {s_.command}
-                        '''
 
+                    scmds = []
+                    for line in s_.command.split('\n'):
+                        if profile_name == 'builder':
+                            scmd = f'''
+    toolbox -c {box_name} run {line}
+                            '''
+                        else:
+                            scmd = f'''
+    DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {line}
+                            '''
+                        scmds.append(scmd)
 
-                    lines2.append(scmd)
+                    lines2.append("\n".join(scmds))
                     self.lines2sh(shell_name, lines2, None)
                     lines.append(f'./ta-{shell_name}.sh')
 
@@ -3996,7 +4002,7 @@ done
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
-            if 'libdl.so' in fpl_.filename:    
+            if 'libpython3.11.so.1.0' in fpl_.filename:    
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
                 ok = True
