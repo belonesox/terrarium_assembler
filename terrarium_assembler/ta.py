@@ -2208,7 +2208,7 @@ rm -f {self.rpm_specs_path}/SOURCES/*
 # SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
 SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`        
 #{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch  --resolve  $SRPMS -y 
-{self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
+{self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --exclude 'fedora-release-*' --skip-broken  --allowerasing  --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
 {self.rm_locales}
 # SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
 # SRC_DEPS_PACKAGES_MAIN=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep -v i686 | tr '\\n' ' '`
