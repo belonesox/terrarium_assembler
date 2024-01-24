@@ -3855,11 +3855,15 @@ done
             t.toc()
 
             tb_path = self.toolbox_path('/')
-            from .vis4rpm import load_packages_from_path
-            packages = load_packages_from_path(tb_path)
+            try:
+                from .vis4rpm import load_packages_from_path
+                packages = load_packages_from_path(tb_path)
 
-            with open(os.path.join(self.curdir, 'tmp/rpm-packages-info.yaml'), 'w') as lf:
-                lf.write(yaml.dump(packages))
+                with open(os.path.join(self.curdir, 'tmp/rpm-packages-info.yaml'), 'w') as lf:
+                    lf.write(yaml.dump(packages))
+            except:
+                # Cursed dnf module not working on Non-Fedoras now. But should not block building.
+                pass        
 
         # self.remove_exclusions()
 
