@@ -2410,7 +2410,7 @@ NO_SVACE=0
     fi
             ''')    
 
-        rpmbuild_cmd = f'''rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC'''
+        rpmbuild_cmd = f'''rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "_smp_mflags -j8" --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC'''
 
         lines.append(f'''
 if [[ $NO_SVACE -ne 0 ]]; then
