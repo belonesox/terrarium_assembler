@@ -1889,6 +1889,13 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
         if not self.pp.terra.pip and not self.pp.terra.projects:
             return
 
+        terra_ = False
+        if self.args.debug:
+            terra_ = True
+
+        if not terra_:
+            return    
+
         # Пока хардкодим вставку нашего питон-пипа. потом конечно надо бы избавится.
         root_dir = self.root_dir
         os.chdir(self.curdir)
@@ -1906,17 +1913,13 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
         # scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
         # os.system(scmd)
 
-        scmd = f'''{self.root_dir}/ebin/python3 -m ensurepip --root / --upgrade '''
+        scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 -m ensurepip --root / --upgrade '''
         self.cmd(scmd)
-        scmd = f'''{self.root_dir}/ebin/python3 -m pip install wheel '''
+        scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 -m pip install wheel '''
         self.cmd(scmd)
 
         os.chdir(self.curdir)
         args = self.args
-
-        terra_ = True
-        if self.args.debug:
-            terra_ = False
 
 
         findlinks_mod = f''' --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.base_whl_path}"  ''' 
