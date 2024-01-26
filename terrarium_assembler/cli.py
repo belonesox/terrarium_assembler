@@ -4,6 +4,7 @@ import sys
 from   .ta import TerrariumAssembler
 
 def main():
+    print(f'Running TA from {__file__}')
     ta = TerrariumAssembler()
     ta.process()
     pass
