@@ -3284,10 +3284,12 @@ done
         if not self.args.stage_rpm_graph:
             return
 
-        file_source_table = yaml.unsafe_load(open(self.files_source_after_minimization_path, 'r'))
+        fn_ = self.files_source_after_minimization_path if Path(self.files_source_after_minimization_path).exists() else self.files_source_path
+        file_source_table = yaml.unsafe_load(open(fn_, 'r'))
         file_source = list(file_source_table.values())
 
-        bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_after_minimization_path, 'r'))
+        fn_ = self.bin_files_sources_after_minimization_path if Path(self.bin_files_sources_after_minimization_path).exists() else self.bin_files_sources_path
+        bin_files_sources = yaml.unsafe_load(open(fn_, 'r'))
         bin_files_relnames = set(bin_files_sources.values())
 
         packages = yaml.unsafe_load(open('tmp/rpm-packages-info.yaml', 'r'))
@@ -3492,16 +3494,24 @@ done
         lastdirs = os.path.sep.join(
             abs_path_to_out_dir.split(os.path.sep)[-2:])
 
-        file_source_table = yaml.unsafe_load(open(self.files_source_after_minimization_path, 'r'))
+
+        fn_ = self.files_source_after_minimization_path if Path(self.files_source_after_minimization_path).exists() else self.files_source_path
+        file_source_table = yaml.unsafe_load(open(fn_, 'r'))
         file_source = list(file_source_table.values())
 
-        bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_after_minimization_path, 'r'))
+        fn_ = self.bin_files_sources_after_minimization_path if Path(self.bin_files_sources_after_minimization_path).exists() else self.bin_files_sources_path
+        bin_files_sources = yaml.unsafe_load(open(fn_, 'r'))
+
+        # file_source_table = yaml.unsafe_load(open(self.files_source_after_minimization_path, 'r'))
+        # file_source = list(file_source_table.values())
+
+        # bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_after_minimization_path, 'r'))
 
         # ToDo — pydantic, enums, etc
         file_source_from_packages = [r for r in file_source 
                                      if r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value]
 
-        used_files = set(yaml.unsafe_load(open(self.used_files_path, 'r')))
+        used_files = set(yaml.unsafe_load(open(self.used_files_path, 'r'))) if Path(self.used_files_path).exists() else set([v.relname for v in file_source])
 
         file_package_list, file2package = self.load_file_package_list_from_rpms()
 
