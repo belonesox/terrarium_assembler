@@ -4334,7 +4334,7 @@ done
 rsync --checksum {self.src_dir}/in-src.tar $DST/
 
 rsync *.yml $DST/
-rsync {self.used_files_path} $DST/{self.used_files_path}
+rsync --mkpath {self.used_files_path} $DST/{self.used_files_path} || true
 
         ''')
 
