@@ -25,7 +25,7 @@ requirements = [
     'xmltodict',
     'wheel_filename',
     'dacite',
-#    'requirements-parser'
+    'requirements-parser'
 ]
 
 test_requirements = ['pytest>=3', ]
