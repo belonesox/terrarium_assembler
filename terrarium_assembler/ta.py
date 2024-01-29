@@ -3271,7 +3271,7 @@ done
         Get RPM Graph of dependencies
         '''
         from .vis4rpm import compute_graph, graph_to_dot, dot_to_graph_svg
-
+        os.chdir(self.curdir)
 
         if not self.build_mode:
             mn_ = get_method_name()
@@ -4127,7 +4127,7 @@ Nuitka zstandard
                             wtf  = 1
                         sfilename = filename
                         rf = os.path.relpath(f, start=folder_)
-                        if 'libgcc_s.so' in f:
+                        if f.endswith('dmr_on'):
                             wtf  = 1
                         if rf in map2source:
                             f = map2source[rf]
