@@ -20,7 +20,7 @@ import version_utils.rpm
 import yaml
 import zipfile
 import socket
-#import requirements
+import requirements
 
 from typing import List
 from pydantic import BaseModel, constr, validator
@@ -452,6 +452,7 @@ class TerrariumAssembler:
         self.src_tar_filename = 'in-src.tar'
         self.report_binary_files_path = 'reports/binary-files-report.txt'
         self.not_need_packages_to_rebuild_in_terra_path = 'reports/not-need-packages-to-rebuild-in-terra.txt'
+        self.not_linked_python_packages_path = 'tmp/not-linked-python-packages-path.yml'
         self.file_list_from_terra_rpms = 'tmp/file-list-from-terra-rpms.txt'
         self.terra_rpms_closure = 'tmp/terra-rpms-closure.txt'
         self.doc_list_from_terra_rpms = 'tmp/doc-list-from-terra-rpms.txt'
@@ -3362,20 +3363,44 @@ done
                 json_ = json.loads(open('tmp/pipdeptree.json').read())
                 # temporary hack. 
                 # todo: later we need to rewrite the code, deleting autoorphaned deps from auxiliary packages such as Nuitka
-                ignore_packages = set('''pipdeptree Nuitka cyclonedx-python-lib py-serializeable
-    defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock zstandard zstandard pip pip-api          
-    rich Pygments markdown-it-py mdurl Jinja2 MarkupSafe
+                ignore_packages = set('''pipdeptree 
+pip pip-api 
+Jinja2 MarkupSafe
+Nuitka zstandard
     '''.split() + self.minimal_pips + self.need_pips
     )
+
+# Nuitka cyclonedx-python-lib py-serializeable
+#     defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock  pip pip-api          
+#     rich Pygments markdown-it-py mdurl Jinja2 MarkupSafe
+
                 our_packages = set()
                 for whl in Path(self.our_whl_path).rglob('*.whl'):
                     package_name = whl.stem.lower().split('-')[0].replace('_', '-')
                     our_packages.add(package_name)
 
+                linked_packages = set()
+                for v1_ in json_:
+                    package_ = v1_['package']
+                    deps_ = v1_['dependencies']
+                    key1_  = package_['key']
+                    name1_ = package_['package_name']
+                    if name1_ not in ignore_packages:
+                        for v2_ in deps_:
+                            linked_packages.add(key1_)
+                            key2_  = v2_['key']
+                            name2_ = v2_['package_name']
+                            if name2_ not in ignore_packages:
+                                linked_packages.add(key2_)
+
                 known_packages = set()
+                not_linked_packages = set()
                 for r_ in json_:
                     package_ = r_['package']
                     key_  = package_['key']
+                    if key_ not in linked_packages:
+                        not_linked_packages.add(key_)
+                        continue
                     name_ = package_['package_name']
                     if name_ not in ignore_packages:
                         known_packages.add(name_.lower())
@@ -3383,10 +3408,16 @@ done
                         if name_ in our_packages:
                             fillcolormod = 'fillcolor=cornsilk '
                         lines.append(f''' "{key_}" [label="{name_}" {fillcolormod}]; ''')
+
+                with open(self.not_linked_python_packages_path, 'w') as lf:
+                    lf.write(yaml.dump(not_linked_packages))
+
                 for v1_ in json_:
                     package_ = v1_['package']
                     deps_ = v1_['dependencies']
                     key1_  = package_['key']
+                    if key1_ not in linked_packages:
+                        continue
                     name1_ = package_['package_name']
                     if key1_ == 'pip-audit':
                         wtf = 1
@@ -3426,11 +3457,17 @@ done
                         for module_ in sorted(list(imported_modules)):
                             lines.append(f''' "{utility_}-tool" -> "{module_}" [style=dotted] ;''')
 
-                        # reqs = folderfullpath_ / 'requirements.txt'
-                        # if reqs.exists():
-                        #     with open(reqs, 'r', encoding='utf-8') as fd:
-                        #         for req in requirements.parse(fd):
-                        #             lines.append(f''' "{utility_}-tool" -> "{req.name}" [style=dotted] ;''')
+                        reqs = folderfullpath_ / 'requirements.txt'
+                        if reqs.exists():
+                            with open(reqs, 'r', encoding='utf-8') as fd:
+                                try:
+                                    parsed_ = requirements.parse(fd)
+                                    for req in parsed_:
+                                        lines.append(f''' "{utility_}-tool" -> "{req.name}" [style=dotted] ;''')
+                                except Exception as ex_:
+                                    print(f'Failed to parse {reqs}')        
+                                    print(ex_)        
+
                 
                 lines.append('}')
 
@@ -3484,8 +3521,9 @@ done
                 with open(cloc_csv, newline='') as csvfile:
                     csv_r = csv.reader(csvfile, delimiter=',', quotechar='|')
                     for row in list(csv_r)[1:]:
-                        row[-1] = int(float(row[-1]))
-                        table_csv.append(row)
+                        if 'Dockerfile' != row[1]:
+                            row[-1] = int(float(row[-1]))
+                            table_csv.append(row)
 
                 table_csv[-1][-2], table_csv[-1][-1] = table_csv[-1][-1], table_csv[-1][-2]
                 write_doc_table(f'tmp/{clocname}.htm', ['Файлов', 'Язык', 'Пустых', 'Комментариев', 'Строчек кода', 'Мощность языка', 'COCOMO строк'],
