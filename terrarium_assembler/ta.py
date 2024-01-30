@@ -837,6 +837,8 @@ sudo apt-get install -y firefox-esr xcompmgr || true
 
         scmd = f'''
 toolbox rm -f {self.container_name} -y || true
+podman rm -f {self.container_name} -y || true
+toolbox rm -f {self.container_name} -y || true
 
 podman_version=$(podman --version  2>&1 | grep -Po '(?<=podman version )(\d\.\d+)')
 
