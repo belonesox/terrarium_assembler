@@ -3183,9 +3183,16 @@ rm -rf {self.curdir}/$PPDIR/.svace-dir || true;
     ''')
 
             lines.append(f'''
+if ! [ -f $PPDIR/.build_ok ]; then
 {self.tb_mod} bash -c "cd $PPDIR; {command} " 
+fi            
+        ''')
+
+            lines.append(f'''
+{self.tb_mod} touch $PPDIR/.build_ok            
 {self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ \;  
         ''')
+
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
