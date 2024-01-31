@@ -3239,7 +3239,7 @@ rm -f {self.ext_whl_path}/*
         # self.lines2sh("12-download-pip-sources", [scmd_srcs], "download-pip-sources")
         pass
 
-    def stage_26_compile_pip_tars(self):
+    def stage_26_compile_pip_sources_from_dependencies(self):
         '''
         Compile TAR python packages for which not exists WHL
         '''
@@ -3263,10 +3263,9 @@ rm -f {self.ext_whl_path}/*
         )}
                
 rm -f {self.ext_compiled_tar_path}/*
-TARS=`find {self.ext_whl_path} -name '*.tar.*'`
+TARS=`find {self.ext_whl_path} -name '*.tar.*' -o -name '*.zip' `
 for TAR in `echo $TARS`
 do
-#    {self.tb_mod} .venv/bin/python3 -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
     {self.tb_mod} python3 -m pip wheel $TAR --no-deps --no-index --no-build-isolation --wheel-dir {self.ext_compiled_tar_path}
 done
 {save_state_hash(self.ext_compiled_tar_path)}
