@@ -775,6 +775,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         self.base_whl_path = in_bin_fld("external_python_wheels_fixed_versions")
         self.extra_whl_path = in_bin_fld("python_wheels_for_rebuild_pip_from_sources")
         self.extra_whl_deps_path = in_bin_fld("python_wheel_deps_for_rebuild_pip_from_sources")
+        self.extra_whl_deps_path_compiled = in_bin_fld("python_wheel_deps_compiled_for_rebuild_pip_from_sources")
 
         self.states_path =  tmp_fld("states")
         self.rpmbuild_path =  tmp_fld("rpmbuild")
@@ -837,7 +838,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
 
         scmd = f'''
 toolbox rm -f {self.container_name} -y || true
-podman rm -f {self.container_name} -y || true
+podman rm -f {self.container_name} || true
 toolbox rm -f {self.container_name} -y || true
 
 podman_version=$(podman --version  2>&1 | grep -Po '(?<=podman version )(\d\.\d+)')
@@ -2092,7 +2093,7 @@ done
         scmd = f'''dnf download  --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch  --resolve  {packages} -y '''
         #--alldeps
         lines.append(f'''
-{bashash_ok_folders_strings(self.states_path + '/' + mn_, [], [scmd],
+{bashash_ok_folders_strings(self.rpms_path + '/' + mn_, [], [scmd],
         f"Looks required base RPMs already downloaded"
         )}
 {self.rm_locales}
@@ -2100,12 +2101,12 @@ done
 {self.rm_locales}
 createrepo {self.rpmrepo_path}
 createrepo {self.tarrepo_path}
-{save_state_hash(self.states_path + '/' + mn_)}
+{save_state_hash(self.rpms_path + '/' + mn_)}
 ''')
         self.lines2sh(mn_, lines, mn_)
 
 
-    def stage_06_download_rpm_packages(self):
+    def stage_05_download_rpm_packages(self):
         '''
         Download RPM packages.
         '''
@@ -2135,7 +2136,7 @@ createrepo {self.tarrepo_path}
             scmd_builddep = f'''{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} {ps_} -y '''
 
         lines.append(f'''
-{bashash_ok_folders_strings(self.rpms_path, [], [scmd, scmd_builddep],
+{bashash_ok_folders_strings(self.rpms_path, [], [scmd, scmd_builddep, str(self.ps.exclude_prefix)],
         f"Looks required RPMs already downloaded"
         )}
 # rm -rf '{self.rpms_path}'
@@ -2144,13 +2145,22 @@ createrepo {self.tarrepo_path}
 {scmd_builddep}
 {self.rm_locales}
 {self.create_repo_cmd}
+''')
+
+
+        for pack_ in self.ps.exclude_prefix or []:
+            scmd = f'rm -f {self.rpms_path}/{pack_}* '
+            lines.append(scmd)
+
+
+        lines.append(f'''
 {save_state_hash(self.rpms_path)}
 ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
 
-    def stage_08_audit_download_srpms(self):
+    def stage_07_audit_download_srpms(self):
         '''
         Download Source RPM packages.
         '''
@@ -2165,10 +2175,6 @@ rm -rf '{self.srpms_path}'
 {self.rm_locales}
 {self.tb_mod} {scmd}
 {self.create_repo_cmd}
-rm -f {self.rpm_specs_path}/*.spec
-rm -f {self.rpm_specs_path}/SOURCES/*
-#{self.tb_mod} find "{self.srpms_path}" -name "*.src.rpm" | xargs -i{{}} -t bash -c "rpm2cpio {{}} | cpio -D {self.rpm_specs_path} -civ '*.spec' "
-{self.tb_mod} find "{self.srpms_path}" -name "*.src.rpm" | xargs -i{{}} -t bash -c "rpm2cpio {{}} | cpio -D {self.rpm_sources_path} -civ '*.*' "
 {save_state_hash(self.srpms_path)}
 ''')
 
@@ -2176,6 +2182,25 @@ rm -f {self.rpm_specs_path}/SOURCES/*
         #     scmd = f'rm -f {self.srpms_path}/{pack_}* '
         #     lines.append(scmd)
 
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+    def stage_08_audit_unpack_srpms(self):
+        '''
+        Unpack SPEC-files from SRPMS to temp directory
+        '''
+        lines = []
+
+        lines.append(f'''
+{bashash_ok_folders_strings(self.rpm_sources_path, [self.srpms_path], [],
+        f"Looks we already unpack SPEC-files from SRPMs"
+        )}
+rm -f {self.rpm_specs_path}/*.spec
+rm -f {self.rpm_specs_path}/SOURCES/*
+{self.tb_mod} find "{self.srpms_path}" -name "*.src.rpm" | xargs -i{{}} -t bash -c "rpm2cpio {{}} | cpio -D {self.rpm_sources_path} -civ '*.*' "
+{save_state_hash(self.rpm_sources_path)}
+''')
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2209,9 +2234,10 @@ rm -f {self.rpm_specs_path}/SOURCES/*
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), glibc_686_download, rebuild_mod],
         f"Looks required RPMs for building SRPMs already downloaded"
         )}
+rm -f {self.rpm_specs_path}/*.spec
+rm -f {self.rpm_specs_path}/SOURCES/*
+{self.tb_mod} find "{self.srpms_path}" -name "*.src.rpm" | xargs -i{{}} -t bash -c "rpm2cpio {{}} | cpio -D {self.rpm_sources_path} -civ '*.*' "
 {self.rm_locales}
-# SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
-# SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
 SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`        
 #{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch  --resolve  $SRPMS -y 
 {self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --exclude 'fedora-release-*' --skip-broken  --allowerasing  --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
@@ -2644,7 +2670,7 @@ createrepo {self.rpmrepo_path}
 # {self.tb_mod} sudo dnf config-manager --add-repo file://$d/{self.rpmrepo_path}/ -y 
 
 
-    def stage_07_install_rpms(self):
+    def stage_06_install_rpms(self):
         '''
         Install downloaded RPM packages
         '''
@@ -2847,10 +2873,8 @@ rm -f {self.our_whl_path}/*
 {bashash_ok_folders_strings(f'tmp/states/{mn_}', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path, self.extra_whl_path], ['v1'],
         f"Looks like dont need to do {mn_}"
         )}
-#{self.tb_mod} sudo python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}" --find-links="{self.extra_whl_deps_path}"  --force-reinstall --ignore-installed  --no-cache-dir --no-index   
-
 if ls ./{self.extra_whl_path}/*.whl 1> /dev/null 2>&1; then
-    {self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}" --find-links="{self.extra_whl_deps_path}" --no-cache-dir --no-index
+    {self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}" --find-links="{self.extra_whl_deps_path}" --find-links="{self.extra_whl_deps_path_compiled}" --no-cache-dir --no-index
 fi    
 '''
 
@@ -3011,25 +3035,27 @@ done
         )}
 rm -f {self.base_whl_path}/*
 {self.tb_mod} {scmd}
-{self.tb_mod} bash -c "find {self.base_whl_path} -name '*.tar.*' | xargs -i[] -t python3 -m pip wheel [] --no-deps --wheel-dir {self.base_whl_path}"
+{self.tb_mod} bash -c "find {self.base_whl_path} -name '*.tar.*' -o -name '*.zip' | xargs -i[] -t python3 -m pip wheel [] --no-deps --wheel-dir {self.base_whl_path}"
 {save_state_hash(self.base_whl_path)}
 ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_32_audit_download_extra_wheels(self):
+    def stage_32_audit_download_extra_pip_for_build_pip_from_sources(self):
         '''
         Downloading extra python packages with fixed versions for rebuilding
-        pip from source. These packages will be installed to container after
-        installing consistent set of python wheels.
-
-        We need it, because rebuilding of some packages from sources may need
-        different versions of some package (not consistent with our set).
-
-        For example, we need pythran==0.13.1 to build scipy, even
-        if tensorflow does not consistent with it.
+        pip from source. 
         '''
+        # These packages will be installed to container after
+        # installing consistent set of python wheels.
+
+        # We need it, because rebuilding of some packages from sources may need
+        # different versions of some package (not consistent with our set).
+
+        # For example, we need pythran==0.13.1 to build scipy, even
+        # if tensorflow does not consistent with it.
+
         os.chdir(self.curdir)
 
         lines = []
@@ -3048,8 +3074,30 @@ rm -f {self.extra_whl_path}/*
 rm -f {self.extra_whl_deps_path}/*
 {self.tb_mod} {scmd}
 {self.tb_mod} {scmd2}
-{self.tb_mod} bash -c "find {self.extra_whl_path} -name '*.tar.*' | xargs -i[] -t python3 -m pip wheel [] --no-deps --wheel-dir {self.extra_whl_path}"
+{self.tb_mod} bash -c "find {self.extra_whl_path} -name '*.tar.*' -o -name '*.zip' | xargs -i[] -t python3 -m pip wheel [] --no-deps --wheel-dir {self.extra_whl_path}"
 {save_state_hash(self.extra_whl_path)}
+''')
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+    def stage_33_audit_build_whl_from_extra_pip_deps(self):
+        '''
+        Compiling *.whl from extra python packages with fixed versions for rebuilding
+        pip from source. 
+        '''
+        os.chdir(self.curdir)
+
+        lines = []
+
+        scmd = f'''{self.tb_mod} bash -c "find {self.extra_whl_path} -name '*.tar.*' -o -name '*.zip' | xargs -i[] -t python3 -m pip wheel [] --no-deps --wheel-dir {self.extra_whl_deps_path_compiled}"'''
+        lines.append(f'''
+{bashash_ok_folders_strings(self.extra_whl_deps_path_compiled, [], [self.extra_whl_path, scmd],
+        f"Looks required extra wheels already builded from sources"
+        )}
+rm -f {self.extra_whl_deps_path_compiled}/*
+{scmd}
+{save_state_hash(self.extra_whl_deps_path_compiled)}
 ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -3254,8 +3302,6 @@ rm -f {self.ext_whl_path}/*
         lines = []
 
         pip_args_ = self.pip_args_from_sources()
-
-        # {self.tb_mod} bash -c "find {self.ext_whl_path} -name '*.tar.*' | xargs -i[] -t ./.venv/bin/python3 -m pip wheel [] --no-deps --no-index --wheel-dir {self.ext_compiled_tar_path}"
 
         lines.append(f'''
 {bashash_ok_folders_strings(self.ext_compiled_tar_path, [self.ext_whl_path], [],
