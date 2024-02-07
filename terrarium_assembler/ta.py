@@ -2008,8 +2008,11 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
 {bashash_ok_folders_strings(self.states_path + '/' + mn_, [], [self.spec.fc_version],
         f"Looks like required platform {self.spec.fc_version} already downloaded"
         )}
-toolbox create tmpfc{self.spec.fc_version} --distro fedora --release {self.spec.fc_version} -y        
-toolbox rm -f tmpfc{self.spec.fc_version} -y || true
+toolbox rm -f tmp{self.container_name} -y || true
+podman rm -f tmp{self.container_name} || true
+toolbox rm -f tmp{self.container_name} -y || true
+toolbox create tmp{self.container_name} --distro fedora --release {self.spec.fc_version} -y        
+toolbox rm -f tmp{self.container_name} -y || true
 podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_version}/platform/ fedora-toolbox:{self.spec.fc_version}
 {save_state_hash(self.states_path + '/' + mn_)}
 ''')
