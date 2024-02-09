@@ -1151,6 +1151,9 @@ rm -rf {ok_dir}.old
                 path_to_dir__ = os.path.relpath(
                     path_to_dir_, start=self.curdir)
                 outputname = os.path.split(path_to_dir_)[-1]
+                target_ = ''
+                if 'target' in td_:
+                    target_ = td_.target
                 if 'name' in td_:
                     outputname = td_.name
                 target_dir = os.path.join(tmpdir, outputname + '.build')
@@ -1163,7 +1166,8 @@ x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 pushd {path_to_dir__}
 {self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod download"
-{self.tb_mod} bash -c "GOPATH=$d/tmp/go CGO_ENABLED=0 go build -ldflags='-linkmode=internal -r' -o {target_dir_}/{outputname} 2>&1 > {log_dir_}/{build_name}.log"
+{self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod vendor"
+{self.tb_mod} bash -c "GOPATH=$d/tmp/go CGO_ENABLED=0 go build -ldflags='-linkmode=internal -r' {target_} -o {target_dir_}/{outputname} 2>&1 > {log_dir_}/{build_name}.log"
 popd
     """)
                 self.fs.folders.append(target_dir)
