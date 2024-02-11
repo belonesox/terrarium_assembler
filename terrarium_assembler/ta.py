@@ -2100,7 +2100,7 @@ done
         scmd = f'''dnf download  --downloaddir {self.rpms_path} --arch=x86_64  --arch=x86_64 --arch=noarch  --resolve  {packages} -y '''
         #--alldeps
         lines.append(f'''
-{bashash_ok_folders_strings(self.rpms_path + '/' + mn_, [], [scmd],
+{bashash_ok_folders_strings(self.rpms_path + '/' + mn_, [], [scmd, str(self.ps.exclude_prefix)],
         f"Looks required base RPMs already downloaded"
         )}
 {self.rm_locales}
