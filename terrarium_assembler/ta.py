@@ -28,7 +28,7 @@ from pydantic.dataclasses import dataclass
 import dacite
 
 # class MyBaseModel(BaseModel):
-#     """ 
+#     """
 #     Base Pydantic Model
 #     """
 #     class Config:
@@ -123,7 +123,7 @@ class FileInBuild:
         assert(self.source_path)
         if isinstance(self.source_type, str):
             self.source_type = SourceType.value_of(self.source_type)
-        pass    
+        pass
 
 class FileSource(dict):
     pass
@@ -236,8 +236,8 @@ class PythonPackages:
         build: only needed for building on builder host
         terra: needed to be install into terrarium
     '''
-    build: Optional[PythonPackagesSpec] 
-    terra: Optional[PythonPackagesSpec] 
+    build: Optional[PythonPackagesSpec]
+    terra: Optional[PythonPackagesSpec]
     rebuild: Optional[List]   = dc.field(default_factory=list)
     remove_from_download: Optional[List]  = dc.field(default_factory=list)
     shell_commands: Optional[List] = dc.field(default_factory=list)
@@ -330,7 +330,7 @@ class PackagesSpec:
     #     for k, v in adict.items():
     #         if v:
     #             setattr(self, k, v)
-    #     ...        
+    #     ...
     def __post_init__(self):
         '''
         Add some base-packages to «build» list
@@ -394,7 +394,7 @@ def test_box_name(container_name, profile_name, distro_):
     # todo: replace it with method
     hostname = socket.gethostname()
     distro_canon = canonical_distro_name(distro_)
-    # https://github.com/89luca89/distrobox/issues/1017    
+    # https://github.com/89luca89/distrobox/issues/1017
     uniq_ = hashlib.md5((profile_name + distro_canon).encode('utf-8')).hexdigest()
     box_name = '-'.join([container_name, 'T', uniq_])[:63-len(hostname)]
     return box_name
@@ -442,7 +442,7 @@ class TerrariumAssembler:
         self.build_mode = False
 
         self.container_info = None
-        self.container_path = None        
+        self.container_path = None
 
         self.patching_dir = 'tmp/patching'
         mkdir_p(self.patching_dir)
@@ -503,7 +503,7 @@ class TerrariumAssembler:
 
         self.stages = {}
         for s_, sm_ in zip(self.stages_names, self.stage_methods):
-            self.stages[fname2stage(s_)] = sm_.__doc__.strip() 
+            self.stages[fname2stage(s_)] = sm_.__doc__.strip()
 
 
         for stage, desc in self.stages.items():
@@ -533,7 +533,7 @@ class TerrariumAssembler:
             selected_stages_ = [fname2stage(s_).replace('_', '-') for s_ in self.stages_names if filter_(s_)]
             desc = ' + '.join(selected_stages_)
             ap.add_argument(f'--{cs_}', default=False, action='store_true', help=f'{desc}')
-            
+
         self.args = args = ap.parse_args()
 
         if args.steps:
@@ -659,17 +659,17 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         if self.args.stage_make_packages == 'default':
             self.args.stage_make_packages = self.package_modes
 
-        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build', 
-                                  'system-rpm-config', 'annobin-plugin-gcc', 'gcc-plugin-annobin', 
-                                  'gcc', 
+        self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build',
+                                  'system-rpm-config', 'annobin-plugin-gcc', 'gcc-plugin-annobin',
+                                  'gcc',
                                  'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
                               'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs', 'git',
-                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel', 
+                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel',
                               #WTF, why they not downloaded as deps for python3-devel? Todo!
                               # https://github.com/rpm-software-management/dnf/issues/1998
-                              'pyproject-rpm-macros', 
+                              'pyproject-rpm-macros',
                               'python3-rpm-generators', 'python-rpm-macros', 'python3-rpm-macros',
                               ]
 
@@ -698,7 +698,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
             spec.packages.terra_exclude = []
 
         if 'python3-libs' in spec.packages.terra_exclude:
-            wtf = 1    
+            wtf = 1
 
         if not 'rebuild_disable_features' in spec.packages:
             spec.packages.rebuild_disable_features = ['tests', 'doc']
@@ -781,6 +781,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         self.rpmbuild_path =  tmp_fld("rpmbuild")
         self.common_rpmbuild_path =  tmp_fld("common_rpmbuild")
         self.nuitka_compiled_path =  tmp_fld("nuitka_compiled")
+        self.go_compiled_path =  tmp_fld("go_compiled")
         self.rpms_backup_pool = tmp_fld("rpms_backup_pool")
         self.ext_compiled_tar_path = tmp_fld("external_python_wheels_compiled_from_tars")
 
@@ -854,7 +855,7 @@ verlt() {{
 if verlt "$podman_version" "4.3"; then
   toolbox create {self.container_name} --distro fedora --release {self.spec.fc_version} -y;
 else
-  podman load --quiet -i  in/bin/fc{self.spec.fc_version}/platform 
+  podman load --quiet -i  in/bin/fc{self.spec.fc_version}/platform
   toolbox create {self.container_name} --image fedora-toolbox:{self.spec.fc_version} -y;
 fi
 
@@ -869,9 +870,9 @@ fi
                 def delete_dir_of_file(file_or_dir):
                     if file_or_dir.is_dir():
                         shutil.rmtree(file_or_dir)
-                    else:    
+                    else:
                         file_or_dir.unlink()
-                    ...            
+                    ...
 
                 if dirname.endswith(suffix):
                     if 'acl-' in dirname:
@@ -885,12 +886,12 @@ fi
                         if version_utils.rpm.compare_packages(package_name, current_package) > 0:
                             delete_dir_of_file( Path(dir_) / (current_package + suffix)  )
                             packages_[p_.name] = (package_name, p_)
-                        else:    
+                        else:
                             delete_dir_of_file( Path(dir_) / (package_name + suffix)  )
-        # clean_dir_from_old_versions(self.rpms_path, '.rpm')                            
-        clean_dir_from_old_versions(self.rpmbuild_path, '-rpmbuild')                            
-        clean_dir_from_old_versions(self.srpms_path, '.rpm')                            
-        # clean_dir_from_old_versions(self.rpms_backup_pool, '.rpm')                            
+        # clean_dir_from_old_versions(self.rpms_path, '.rpm')
+        clean_dir_from_old_versions(self.rpmbuild_path, '-rpmbuild')
+        clean_dir_from_old_versions(self.srpms_path, '.rpm')
+        # clean_dir_from_old_versions(self.rpms_backup_pool, '.rpm')
         ...
 
 
@@ -903,12 +904,12 @@ fi
     #         ps_ = []
     #         with open(ip_file, 'r', encoding='utf-8') as lf:
     #             ps_ = lf.read().strip().split('\n')
-    #         self.installed_packages_ = []    
+    #         self.installed_packages_ = []
     #         for p_ in ps_:
     #             try:
     #                 self.installed_packages_.append(version_utils.rpm.package(p_))
     #             except:
-    #                 pass              
+    #                 pass
     #     return self.installed_packages_
 
     def cmd(self, scmd):
@@ -956,7 +957,7 @@ fi
             if spy:
                 #!/usr/bin/env shellpy
                 lf.write(f"#!/usr/bin/env shellpy\n")
-            else:    
+            else:
                 lf.write(f"#!/bin/bash\n")
             lf.write(f"# Generated {name} \n ")
             def bash_line(msg):
@@ -969,7 +970,7 @@ fi
                 desc = '# ' + '\n# '.join(self.stages[stage].splitlines())
                 stage_ = stage.replace('_', '-')
                 if 'packing' in stage_:
-                    stage_ += f'={self.package_modes}' 
+                    stage_ += f'={self.package_modes}'
                 lf.write(f'''
 {desc}
 # Automatically called when terrarium_assembler --{stage_} "{self.args.specfile}"
@@ -985,7 +986,7 @@ d="$(dirname "$x")"
                     if not spy:
                         if '\n' not in str(v):
                             bash_line(f'''export TA_{k}="{v}"\n''')
-            if not spy:            
+            if not spy:
                 lf.write('''
 set -ex
 ''')
@@ -1042,21 +1043,21 @@ export PATH="/usr/lib64/ccache:$PATH"
     """)
 
                 svace_prefix = ''
-                if self.svace_mod:                
+                if self.svace_mod:
                     lines.append(fR"""
-rm -rf {build_dir}/.svace-dir                    
+rm -rf {build_dir}/.svace-dir
                     """)
                     svace_prefix = f'{self.svace_path} build --svace-dir {build_dir} '
                     lines.append(f'''
 {self.svace_path} init {build_dir}
     ''')
 
-        
+
                 lines.append(fR"""
 {self.tb_mod} bash -c 'time nice -19 {svace_prefix} ./.venv/bin/python3 -X utf8 -m nuitka --report={build_dir}/report.xml {nflags} {flags_} {src} 2>&1 > reports/{build_name}.log'
 {self.tb_mod} ./.venv/bin/python3 -m pip freeze > {target_dir_}/{build_name}-pip-freeze.txt
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {target_dir_}/{build_name}-pip-list.txt
-mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true 
+mv {target_dir}/{outputname}.bin {target_dir}/{outputname} || true
     """)
                 self.fs.folders.append(ok_dir)
                 if "outputname" in target_:
@@ -1069,12 +1070,12 @@ mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
                 if "sync" in target_:
                     ts_ = target_.sync
                     for dst_ in ts_:
-                        si_ = ts_[dst_]    
+                        si_ = ts_[dst_]
                         srcs = []
                         filtermod = ''
                         if isinstance(si_, str):
                             srcs.append(si_)
-                        elif isinstance(si_, dict):   
+                        elif isinstance(si_, dict):
                             filtermods = []
                             if "filters" in si_:
                                 filtermods += [
@@ -1089,13 +1090,13 @@ mv  %(target_dir_)s/%(outputname)s   %(target_dir_)s/%(srcname)s
                                     "--exclude='*'"
                                 ]
 
-                            filtermod = ' '.join(filtermods)        
+                            filtermod = ' '.join(filtermods)
                             for s_ in si_.src:
-                                srcs.append(s_)    
-                        for src in srcs:        
+                                srcs.append(s_)
+                        for src in srcs:
                             scmd = f'''
-mkdir -p {target_dir_}/{dst_}                            
-{self.tb_mod} rsync -ravm {src} {target_dir_}/{dst_} {filtermod} 
+mkdir -p {target_dir_}/{dst_}
+{self.tb_mod} rsync -ravm {src} {target_dir_}/{dst_} {filtermod}
                             '''
                             lines.append(scmd)
 
@@ -1116,7 +1117,7 @@ rm -rf {ok_dir}.old
                 build_name_inside_tb = 'build_in_tb_' + cb.name
                 self.lines2sh(build_name_inside_tb, [cb.shell.strip()], None)
                 self.lines2sh(build_name, [f'''
-{self.tb_mod} bash {fname2shname(build_name_inside_tb)}               
+{self.tb_mod} bash {fname2shname(build_name_inside_tb)}
                 '''], None)
                 bfiles.insert(0, fname2shname(build_name))
 
@@ -1135,7 +1136,7 @@ rm -rf {ok_dir}.old
         if not self.gp:
             return
 
-        tmpdir = os.path.join(self.curdir, "tmp/ta")
+        # tmpdir = os.path.join(self.curdir, "tmp/ta")
         bfiles = []
 
         # First pass
@@ -1156,18 +1157,35 @@ rm -rf {ok_dir}.old
                     target_ = td_.target
                 if 'name' in td_:
                     outputname = td_.name
-                target_dir = os.path.join(tmpdir, outputname + '.build')
+                target_dir = os.path.join(self.curdir, self.go_compiled_path, outputname + '.build')
+
+                mkdir_p(target_dir)
                 target_dir_ = os.path.relpath(target_dir, start=path_to_dir_)
                 log_dir_ = os.path.relpath(self.curdir, start=path_to_dir_)
                 lines = []
                 build_name = 'build_' + outputname
+# {self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod download"
                 lines.append(fR"""
 x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 pushd {path_to_dir__}
-{self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod download"
-{self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod vendor"
-{self.tb_mod} bash -c "GOPATH=$d/tmp/go CGO_ENABLED=0 go build -ldflags='-linkmode=internal -r' {target_} -o {target_dir_}/{outputname} 2>&1 > {log_dir_}/{build_name}.log"
+""")
+
+                svace_prefix = ''
+                if self.svace_mod:
+                    svace_dir_ = os.path.relpath(Path(self.curdir) / self.svace_path, start=path_to_dir_)
+                    lines.append(fR"""
+rm -rf .svace-dir || true
+                    """)
+                    svace_prefix = f'{svace_dir_} build  '
+                    lines.append(f'''
+{svace_dir_} init
+{self.tb_mod} go clean -cache
+    ''')
+
+                lines.append(fR"""
+{self.tb_mod} bash -c "go mod vendor"
+{self.tb_mod} bash -c "CGO_ENABLED=0 {svace_prefix} go build -ldflags='-linkmode=internal -r' -o {target_dir_}/  {target_}  >{log_dir_}/{build_name}.log 2>&1 "
 popd
     """)
                 self.fs.folders.append(target_dir)
@@ -1189,10 +1207,10 @@ popd
         '''
         if not 'post_pack' in self.spec:
             return
-        
+
         lines = []
         lines.append(fR"""
-{self.spec.post_pack} 
+{self.spec.post_pack}
     """)
 
         mn_ = get_method_name()
@@ -1206,7 +1224,7 @@ popd
         for sh_ in Path(self.curdir).glob('*.*'):
             if re_.match(sh_.name):
                 sh_.unlink()
-        pass        
+        pass
 
 
     def mycopy(self, src, dst):
@@ -1413,7 +1431,7 @@ popd
         args_ = []
         if self.toolbox_mode:
             args_ += ['toolbox', 'run', '--container', self.container_name]
-        return  args_   
+        return  args_
 
     def lines_from_cmd(self, args):
         args_ = self.prefix_args_for_toolbox() + args
@@ -1423,7 +1441,7 @@ popd
     def toolbox_path(self, path):
         if not self.toolbox_mode:
             return path
-        
+
         if not path.startswith(os.path.sep):
             return path
 
@@ -1438,9 +1456,9 @@ popd
                 inspect_file = Path(self.curdir) / 'tmp/container.json'
                 # if not inspect_file.exists():
                 os.system(f'podman inspect {self.container_name} > {inspect_file}')
-                assert(inspect_file.exists())    
+                assert(inspect_file.exists())
                 self.container_info = json.loads(open(inspect_file).read())
-            self.container_path = Path('/tmp') / 'overlay' / self.container_name                
+            self.container_path = Path('/tmp') / 'overlay' / self.container_name
             self.container_path.mkdir(exist_ok=True, parents=True)
             upper = Path(self.container_info[0]["GraphDriver"]["Data"]["UpperDir"])
             lower = Path(self.container_info[0]["GraphDriver"]["Data"]["LowerDir"])
@@ -1572,9 +1590,9 @@ popd
         # patched_elf = cached_path.as_posix()
         fd_, patched_elf = mkstemp(dir=self.patching_dir)
         shutil.copy2(path, patched_elf)
-        
+
         orig_perm = stat.S_IMODE(os.lstat(path).st_mode)
-        os.chmod(patched_elf, orig_perm | stat.S_IWUSR)         
+        os.chmod(patched_elf, orig_perm | stat.S_IWUSR)
 
         if libpath:
             try:
@@ -1592,7 +1610,7 @@ popd
 
         self.optional_patch_binary(patched_elf)
         # shutil.move(patched_elf, cached_path)
-        # self.cache.put_file(key_, open(patched_elf, 'rb'))        
+        # self.cache.put_file(key_, open(patched_elf, 'rb'))
         return patched_elf
 
 
@@ -1654,8 +1672,8 @@ popd
                 res = subprocess.check_output(
                     [self.optional_bin_patcher, f], universal_newlines=True)
             except Exception as ex_:
-                print("Cannot optionally patch ", f) 
-                raise Exception("Cannot patch!111")    
+                print("Cannot optionally patch ", f)
+                raise Exception("Cannot patch!111")
             wtf = 1
 
     def get_all_sources(self):
@@ -1756,7 +1774,7 @@ git lfs install
 git lfs pull
 popd
 mv "{newpath}" "{path_to_dir}" || true
-''' 
+'''
                 lines.append(scmd)
 
 #                 lines2.append(f'''
@@ -1784,7 +1802,7 @@ mv "{newpath}" "{path_to_dir}" || true
         lines.append(f"""
 tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
 
-        
+
 # We need to update all shell files after checkout.
 #terrarium_assembler "{self.args.specfile}"
 """)
@@ -1815,7 +1833,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
 #                 probably_package_name = os.path.split(path_to_dir_)[-1]
 #                 already_checkouted.add(path_to_dir_)
 #                 path_to_dir = os.path.relpath(path_to_dir_, start=self.curdir)
-#                 newpath = os.path.join(self.pure_sources_path, self.src_path, probably_package_name) 
+#                 newpath = os.path.join(self.pure_sources_path, self.src_path, probably_package_name)
 #                 # scmd = 'git --git-dir=/dev/null clone --single-branch --branch %(git_branch)s  --depth=1 %(git_url)s %(newpath)s ' % vars()
 #                 scmd = f'''
 # git --git-dir=/dev/null clone --depth 1 --branch {git_branch} file://{self.curdir}/{path_to_dir} {newpath}
@@ -1825,19 +1843,19 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
 # git lfs install
 # git lfs pull
 # popd
-# ''' 
+# '''
 #                 lines.append(scmd)
 
 #         psp_ = self.pure_sources_path.replace("/","\/")
 #         sd_ = self.src_dir.replace("/","\/")
 
 #         lines.append(f'''
-# pushd {self.pure_sources_path}        
+# pushd {self.pure_sources_path}
 # tar -cvf  in-src.tar *
 # popd
 # ''')
 
-# #--transform "s/^{psp_}/{sd_}/"                     
+# #--transform "s/^{psp_}/{sd_}/"
 
 #         mn_ = get_method_name()
 #         self.lines2sh(mn_, lines, mn_)
@@ -1880,7 +1898,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
         our_whl_path = os.path.relpath(self.our_whl_path, self.curdir)
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
         ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
-        
+
         scmd = f' -m pip install {target} --no-index --no-cache-dir --use-deprecated=legacy-resolver --find-links="{ext_whl_path}" --find-links"{ext_compiled_tar_path}" --find-links="{our_whl_path}"  --force-reinstall --no-deps --ignore-installed '
         return scmd
 
@@ -1902,7 +1920,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
             terra_ = True
 
         if not terra_:
-            return    
+            return
 
         # Пока хардкодим вставку нашего питон-пипа. потом конечно надо бы избавится.
         root_dir = self.root_dir
@@ -1915,7 +1933,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
                 break
 
         # if not pipdir:
-        #     return        
+        #     return
         # os.chdir(pipdir)
         # # os.chdir(os.path.join('in', 'src', 'github-belonesox-pip'))
         # scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
@@ -1930,7 +1948,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
         args = self.args
 
 
-        findlinks_mod = f''' --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.base_whl_path}"  ''' 
+        findlinks_mod = f''' --find-links="{self.our_whl_path}" --find-links="{self.ext_whl_path}" --find-links="{self.ext_compiled_tar_path}" --find-links="{self.base_whl_path}"  '''
 
         # os.system(f'''{self.root_dir}/ebin/python3 -m pip install {pip_args_} --find-links="{our_whl_path}" --find-links="{ext_whl_path}"''')
 
@@ -1948,7 +1966,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
 # {self.root_dir}/ebin/python3 -m pip install {pip_args_} {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location --no-index
 #             '''
         scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install {pip_args_}  {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location 
+{self.root_dir}/ebin/python3 -m pip install {pip_args_}  {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
         '''
         os.chdir(self.curdir)
         self.cmd(scmd)
@@ -2015,7 +2033,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
 toolbox rm -f tmp{self.container_name} -y || true
 podman rm -f tmp{self.container_name} || true
 toolbox rm -f tmp{self.container_name} -y || true
-toolbox create tmp{self.container_name} --distro fedora --release {self.spec.fc_version} -y        
+toolbox create tmp{self.container_name} --distro fedora --release {self.spec.fc_version} -y
 toolbox rm -f tmp{self.container_name} -y || true
 podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_version}/platform/ fedora-toolbox:{self.spec.fc_version}
 {save_state_hash(self.states_path + '/' + mn_)}
@@ -2035,7 +2053,7 @@ podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_ver
 
         lines.append(f'''
 
-        {self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs ru:en/g' /usr/lib/rpm/macros     
+        {self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs ru:en/g' /usr/lib/rpm/macros
 {self.rm_locales}
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
 
@@ -2059,13 +2077,13 @@ podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_ver
 
         lines.append(
             f'''
-REPS=`{self.tb_mod} bash -c 'grep -Poh "(?<=^\[)[^\]]+" /etc/yum.repos.d/*'`                
-for rep in $REPS 
+REPS=`{self.tb_mod} bash -c 'grep -Poh "(?<=^\[)[^\]]+" /etc/yum.repos.d/*'`
+for rep in $REPS
 do
   sudo dnf config-manager --save --setopt=$rep.gpgcheck=0 -y  || true
 done
 
-''')           
+''')
 # s
 
         mn_ = get_method_name()
@@ -2078,7 +2096,7 @@ done
             if rp_.endswith('.rpm'):
                 pls_.append(rp_)
         packages = " ".join(pls_)
-        return packages        
+        return packages
 
     def stage_02_download_base_packages(self):
         '''
@@ -2134,10 +2152,10 @@ createrepo {self.tarrepo_path}
 
         # packages = " ".join(self.dependencies(pls_, local=False) + purls_)
         packages = " ".join(pls_ + purls_)
-            #--arch=x86_64  --arch=x86_64 --arch=noarch         
+            #--arch=x86_64  --arch=x86_64 --arch=noarch
         scmd = f'''dnf download --downloaddir {self.rpms_path} --arch=x86_64 --arch=noarch --resolve  {packages} -y '''
 
-        scmd_builddep = '' 
+        scmd_builddep = ''
         if self.ps.builddep:
             ps_ = " ".join(self.ps.builddep)
             scmd_builddep = f'''{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --skip-broken --downloadonly --downloaddir {self.rpms_path} {ps_} -y '''
@@ -2231,11 +2249,11 @@ rm -f {self.rpm_specs_path}/SOURCES/*
         # conflicting_686_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel unixODBC-devel'.split()
         # conflicting_packages = 'bash gobject-introspection-devel mpdecimal-devel uid_wrapper pkgconf-pkg-config libdb-devel-static pybind11-devel flexiblas-devel unixODBC-devel'.split()
         # filter_egrep_686 = ' '.join([f''' | egrep -v "{p}.*.i686" ''' for p in conflicting_686_packages])
-# SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`        
+# SRPMS=`find . -wholename "./{self.rpmbuild_path}/*/SRPMS/*.{self.disttag}.src.rpm"`
 # {filter_egrep_686}
         state_dir = self.states_path + '/build_deps1'
         glibc_686_download = f'''
-{self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y 
+{self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y
 '''
         lines.append(f'''
 {bashash_ok_folders_strings(state_dir, [self.srpms_path], [str(self.ps.remove_from_download), glibc_686_download, rebuild_mod],
@@ -2245,9 +2263,9 @@ rm -f {self.rpm_specs_path}/*.spec
 rm -f {self.rpm_specs_path}/SOURCES/*
 {self.tb_mod} find "{self.srpms_path}" -name "*.src.rpm" | xargs -i{{}} -t bash -c "rpm2cpio {{}} | cpio -D {self.rpm_sources_path} -civ '*.*' "
 {self.rm_locales}
-SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`        
-#{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch  --resolve  $SRPMS -y 
-{self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --exclude 'fedora-release-*' --skip-broken  --allowerasing  --downloadonly --downloaddir {self.rpms_path} $SRPMS -y 
+SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`
+#{self.tb_mod} dnf download --exclude 'fedora-release-*' --skip-broken --downloaddir {self.rpms_path} --arch=x86_64   --arch=noarch  --resolve  $SRPMS -y
+{self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --exclude 'fedora-release-*' --skip-broken  --allowerasing  --downloadonly --downloaddir {self.rpms_path} $SRPMS -y
 {self.rm_locales}
 # SRC_DEPS_PACKAGES=`{self.tb_mod} sudo dnf repoquery -y --resolve --recursive --requires $SRPMS | grep -v "fedora-release" `
 # SRC_DEPS_PACKAGES_MAIN=`echo $SRC_DEPS_PACKAGES | tr ' ' '\\n' | grep -v i686 | tr '\\n' ' '`
@@ -2257,7 +2275,7 @@ SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`
 # echo $SRC_DEPS_PACKAGES > {self.src_deps_packages}
 # echo $SRC_DEPS_PACKAGES_ADD > {self.src_deps_packages_add}
 # echo $SRC_DEPS_PACKAGES_MAIN > {self.src_deps_packages_main}
-# {self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $SRC_DEPS_PACKAGES 
+# {self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.rpms_path} --arch=x86_64 --arch=i686 --arch=noarch  -y  $SRC_DEPS_PACKAGES
 {self.create_repo_cmd}
 {save_state_hash(state_dir)}
 ''')
@@ -2273,14 +2291,14 @@ SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`
 # {self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.build_deps_rpms} --arch=x86_64  --arch=noarch  -y  $SRC_PACKAGES
 
 # {self.tb_mod} dnf download --exclude 'fedora-release-*' --downloaddir {self.build_deps_rpms} --skip-broken --arch=x86_64  --arch=noarch  -y  $FILTERED_BUILD_REQUIRES
-# SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+# SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`
 # ALL_BUILD_REQUIRES=""
 # for SPEC in `echo $SPECS`
 # do
 #     echo $SPEC
 #     REQUIRES=`{self.tb_mod} rpmspec -q --buildrequires $SPEC | tr '\\n' ' ' `
 #     ALL_BUILD_REQUIRES="$ALL_BUILD_REQUIRES $REQUIRES"
-# done        
+# done
 # echo $ALL_BUILD_REQUIRES > ALL_BUILD_REQUIRES
 # RESOLVED_REQUIRES=`{self.tb_mod} dnf repoquery -y --archlist=x86_64,noarch $ALL_BUILD_REQUIRES`
 # echo $RESOLVED_REQUIRES > RESOLVED_REQUIRES
@@ -2308,7 +2326,7 @@ SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`
         rebuild_mod = self.get_rebuild_mod_for_dnf()
 
         glibc_686_download = f'''
-{self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y 
+{self.tb_mod} dnf download --downloaddir {self.rpms_path}  --resolve --arch=i686 glibc-devel -y
 '''
 
         lines.append(f'''
@@ -2317,14 +2335,14 @@ SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`
         )}
 {self.rm_locales}
 
-#SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+#SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`
 #for SPEC in `echo $SPECS`
 #do
 #    BASEDIR=`dirname $SPEC`/..
 #    echo $BASEDIR
-#{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --define "java_arches nono" {rebuild_mod} --skip-broken --skip-unavailable --downloadonly --downloaddir {self.rpms_path} $SPEC -y 
+#{self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/$BASEDIR" --define "java_arches nono" {rebuild_mod} --skip-broken --skip-unavailable --downloadonly --downloaddir {self.rpms_path} $SPEC -y
 {self.tb_mod} sudo dnf builddep --exclude 'fedora-release-*' --define "_topdir $d/{self.common_rpmbuild_path}" --define "java_arches nono" {rebuild_mod} --skip-broken -y --downloadonly --downloaddir {self.rpms_path} {self.common_rpmbuild_path}/SPECS/*.spec
-#done        
+#done
 {self.rm_locales}
 {glibc_686_download}
 {self.create_repo_cmd}
@@ -2340,7 +2358,7 @@ SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`
         lines = []
         # scmd = f'''find {self.srpms_path} -name "*.src.rpm" | xargs -t sh -c 'rpmbuild --rebuild --nocheck --nodeps --nodebuginfo --define "_topdir $d/${{1##*/}}-rpmbuild" $1' '''
 # import os
-# curdir = os.path.abspath(os.getcwd())        
+# curdir = os.path.abspath(os.getcwd())
 # src_rpms = `find {self.srpms_path} -name "*.src.rpm"
 # for src_rpm_path in src_rpms:
 #     src_rpm = os.path.basename(src_rpm_path)
@@ -2359,27 +2377,27 @@ mkdir -p {self.common_rpmbuild_path}/SOURCES
 rm -rf {self.common_rpmbuild_path}/SPECS/*
 rm -rf {self.common_rpmbuild_path}/SOURCES/*
 
-SRPMS=`find {self.srpms_path} -name "*.src.rpm"`        
+SRPMS=`find {self.srpms_path} -name "*.src.rpm"`
 for SRPM in `echo $SRPMS`
 do
     echo $SRPM
     BASEDIR=`basename $SRPM`-rpmbuild
     rm -rf $d/{self.rpmbuild_path}/$BASEDIR/BUILD/*
     {self.tb_mod} rpmbuild -rp --nodeps --nobuild --rebuild  --define "_topdir $d/{self.rpmbuild_path}/$BASEDIR" $SRPM
-done        
+done
 
-SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`
 for SPEC in `echo $SPECS`
 do
     BASENAME=`basename $SPEC`
     ln -sf $d/$SPEC {self.common_rpmbuild_path}/SPECS/$BASENAME
-done        
-SOURCES=`find {self.rpmbuild_path} -wholename "*SOURCES/*.*"`        
+done
+SOURCES=`find {self.rpmbuild_path} -wholename "*SOURCES/*.*"`
 for SOURCE in `echo $SOURCES`
 do
     BASENAME=`basename $SOURCE`
     ln -sf $d/$SOURCE {self.common_rpmbuild_path}/SOURCES/$BASENAME
-done        
+done
 {save_state_hash(self.rpmbuild_path)}
 ''')
 
@@ -2397,27 +2415,27 @@ done
 
         if self.svace_mod:
             svace_prefix = f'{self.svace_path} build --svace-dir $BASEDIR '
-            svace_clean_mod = fR'rm -rf $BASEDIR/.svace-dir'                    
+            svace_clean_mod = fR'rm -rf $BASEDIR/.svace-dir'
 
 
         rebuild_mod = ' --without '.join([''] + self.ps.rebuild_disable_features)
 
         lines.append(f'''
 chmod u+w {self.rpmbuild_path} -R
-SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`
 for SPEC in `echo $SPECS`
 do
     echo $SPEC
     BASEDIR=`dirname $SPEC`/..
     SPECNAME=`basename $SPEC`
-    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
+    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \;
     {bashash_ok_folders_strings("$d/$BASEDIR/RPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [self.disttag, rebuild_mod], f"Looks all here already build RPMs from $BASEDIR", cont=True)}
     echo -e "\\n\\n\\n ****** Build $SPEC ****** \\n\\n"
         ''')
-        if self.svace_mod:                
+        if self.svace_mod:
             lines.append(f'''
-{svace_clean_mod}            
-{self.svace_path} init $BASEDIR            
+{svace_clean_mod}
+{self.svace_path} init $BASEDIR
             ''')
         lines.append(f'''
     rm -rf $BASEDIR/BUILD/*
@@ -2432,7 +2450,7 @@ do
                 ''')
                 for sed_patch in self.spec.packages.rebuild_patches[package]:
                     lines.append(f'''
-                        {self.tb_mod} sed -e '{sed_patch}' -i $SPEC 
+                        {self.tb_mod} sed -e '{sed_patch}' -i $SPEC
                     ''')
                 lines.append(f'''
     fi
@@ -2447,7 +2465,7 @@ NO_SVACE=0
     if [[ "$SPECNAME" =~ ^({specs_disable_svace_})$ ]]; then
         NO_SVACE=1
     fi
-            ''')    
+            ''')
 
         rpmbuild_cmd = f'''rpmbuild -bb --noclean --nocheck --nodeps  {rebuild_mod} --define "_smp_mflags -j8" --define "java_arches 0" --define "_unpackaged_files_terminate_build 0" --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC'''
 
@@ -2459,8 +2477,8 @@ else
 fi
 
     {save_state_hash("$d/$BASEDIR/RPMS")}
-    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \; 
-done        
+    {self.tb_mod} find $d/$BASEDIR -wholename "$d/$BASEDIR*/RPMS/*/*.rpm" -exec cp {{}} {self.rebuilded_rpms_path}/ \;
+done
 {self.create_rebuilded_repo_cmd}
 ''')
 
@@ -2480,10 +2498,10 @@ done
 #{self.rebuilded_rpms_path}/
         lines.append(f'''
 {self.rm_locales}
-#RPMS=`find . -wholename "./{self.rpmbuild_path}/*/RPMS/*.{self.disttag}.*.rpm"`        
+#RPMS=`find . -wholename "./{self.rpmbuild_path}/*/RPMS/*.{self.disttag}.*.rpm"`
 {self.tb_mod} sudo rm /etc/dnf/protected.d/systemd.conf || true
 {self.tb_mod} sudo dnf remove -y "*.i686"
-#RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`        
+#RPMS=`ls {self.rebuilded_rpms_path}/*.rpm`
 #for RPM in `echo $RPMS`
 #do
 #{self.tb_mod} sudo rpm -ivh --force --nodeps $RPMS
@@ -2493,7 +2511,7 @@ done
 #done
 #{self.tb_mod} sudo dnf install --refresh --disablerepo="*" --enablerepo="tar" -y {packages}
 ''')
-# {self.tb_mod} sudo rpm install -ivh --excludedocs $RPMS  
+# {self.tb_mod} sudo rpm install -ivh --excludedocs $RPMS
 #--disablerepo="*"
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2639,7 +2657,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 #         lines.append(f'''
 # x="$(readlink -f "$0")"
 # d="$(dirname "$x")"
-# SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+# SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`
 # for SPEC in `echo $SPECS`
 # do
 #     echo $SPEC
@@ -2647,7 +2665,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
 #     {bashash_ok_folders_strings("$d/$BASEDIR/SRPMS", ["$d/$BASEDIR/SPECS", "$d/$BASEDIR/SOURCES"], [], f"Looks all here already build SRPMS from $BASEDIR", cont=True)}
 #     {self.tb_mod} rpmbuild -bs --nocheck --nodeps --nodebuginfo --without docs --without doc_pdf --without doc --without tests --define "_topdir $d/$BASEDIR" --define 'dist %{{!?distprefix0:%{{?distprefix}}}}%{{expand:%{{lua:for i=0,9999 do print("%{{?distprefix" .. i .."}}") end}}}}.{self.disttag}'  $SPEC
 #     {save_state_hash("$d/$BASEDIR/SRPMS")}
-# done        
+# done
 # ''')
 
 #         mn_ = get_method_name()
@@ -2668,23 +2686,23 @@ createrepo {self.rpmrepo_path}
 {self.tb_mod} sudo bash -c 'sudo echo -e "[ta]\\nname=TA\\nbaseurl=file://$PWD/{self.rpmrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/ta.repo'
 {self.tb_mod} sudo bash -c 'sudo echo -e "[tar]\\nname=TAR\\nbaseurl=file://$PWD/{self.tarrepo_path}/\\nenabled=0\\ngpgcheck=0\\nrepo_gpgcheck=0\\n" > /etc/yum.repos.d/tar.repo'
 {self.tb_mod} sudo dnf install  --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"   {packages} -y --allowerasing
-""" 
+"""
 #--skip-broken
         ]
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
-# {self.tb_mod} sudo dnf config-manager --add-repo file://$d/{self.rpmrepo_path}/ -y 
+# {self.tb_mod} sudo dnf config-manager --add-repo file://$d/{self.rpmrepo_path}/ -y
 
 
     def stage_06_install_rpms(self):
         '''
         Install downloaded RPM packages
         '''
-        packages = " ".join(self.ps.build + self.need_packages 
+        packages = " ".join(self.ps.build + self.need_packages
                             + self.ps.terra + self.minimal_packages + self.ps.builddep)
 
-        scmd_builddep = '' 
+        scmd_builddep = ''
         if self.ps.builddep:
             ps_ = " ".join(self.ps.builddep)
             scmd_builddep = f'''{self.tb_mod} sudo dnf builddep --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {ps_} -y '''
@@ -2700,7 +2718,7 @@ createrepo {self.rpmrepo_path}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
 {self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
 {self.tb_mod} cat {self.file_list_from_terra_rpms} {self.file_list_from_deps_rpms} > {self.file_list_from_rpms}
-""" 
+"""
 #{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.doc_list_from_deps_rpms}
 #{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --cacheonly --list {terra_package_names} > {self.doc_list_from_terra_rpms}
 #{self.tb_mod} cat {self.doc_list_from_terra_rpms} {self.doc_list_from_deps_rpms} > {self.doc_list_from_rpms}
@@ -2718,26 +2736,26 @@ createrepo {self.rpmrepo_path}
         rebuild_mod = ' '.join([f'--define "without_{f_} 1" ' for f_ in self.ps.rebuild_disable_features])
         lines = [
             f"""
-{self.backup_rpm_command_because_of_strange_dnf_behaviour()}     
+{self.backup_rpm_command_because_of_strange_dnf_behaviour()}
 {self.rm_locales}
-{self.tb_mod} sudo dnf --refresh --disablerepo="*" --enablerepo="ta" update -y 
-#SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`        
+{self.tb_mod} sudo dnf --refresh --disablerepo="*" --enablerepo="ta" update -y
+#SPECS=`find {self.rpmbuild_path} -wholename "*SPECS/*.spec"`
 #for SPEC in `echo $SPECS`
 #do
 #    BASEDIR=`dirname $SPEC`/..
 #    echo $BASEDIR
-#    {self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
-#    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' {rebuild_mod} --define "java_arches nono" --define "_topdir $d/$BASEDIR" --skip-unavailable $SPEC -y 
+#    {self.backup_rpm_command_because_of_strange_dnf_behaviour()}
+#    {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' {rebuild_mod} --define "java_arches nono" --define "_topdir $d/$BASEDIR" --skip-unavailable $SPEC -y
 #    rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
-#done        
-for try in 1 2 3 
+#done
+for try in 1 2 3
 do
     rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
     {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' --define "_topdir $d/{self.common_rpmbuild_path}" --define "java_arches nono" {rebuild_mod} --skip-broken --skip-unavailable -y {self.common_rpmbuild_path}/SPECS/*.spec || true
-done   
+done
 rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 {self.tb_mod} sudo dnf builddep --disablerepo="*" --enablerepo="ta" --exclude 'fedora-release-*' --define "_topdir $d/{self.common_rpmbuild_path}" --define "java_arches nono" {rebuild_mod} --skip-broken --skip-unavailable -y {self.common_rpmbuild_path}/SPECS/*.spec
-""" 
+"""
         ]
 
         mn_ = get_method_name()
@@ -2749,7 +2767,7 @@ rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
         Command to «hide» and «save» rpm files from local repo, because 'dnf builddep' REMOVES IT.
         '''
         relative_dir = os.path.relpath(self.rpms_path, start=self.rpms_backup_pool)
-        return f"""rsync --link-dest={relative_dir} {self.rpms_path}/*.rpm  {self.rpms_backup_pool}/ """    
+        return f"""rsync --link-dest={relative_dir} {self.rpms_path}/*.rpm  {self.rpms_backup_pool}/ """
 
 
     def stage_10_audit_install_build_deps_rpms1(self):
@@ -2759,17 +2777,17 @@ rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 
         rebuild_mod = self.get_rebuild_mod_for_dnf()
 
-# SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`        
+# SRPMS=`find . -wholename "./{self.srpms_path}/*.src.rpm"`
         lines = [
             f"""
-{self.backup_rpm_command_because_of_strange_dnf_behaviour()}        
-           
+{self.backup_rpm_command_because_of_strange_dnf_behaviour()}
+
 {self.rm_locales}
-SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`        
+SRPMS=`find . -wholename "./{self.rpm_specs_path}/*.spec"`
 {self.tb_mod} sudo dnf builddep {rebuild_mod} --define "_topdir $d/{self.rpm_specs_path}" --nodocs --refresh --disablerepo="*" --enablerepo="ta" --nogpgcheck -y --allowerasing $SRPMS
 {self.rm_locales}
 rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
-""" 
+"""
         ]
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2858,7 +2876,7 @@ rm -f {self.our_whl_path}/*
 
         lines.append(f'''
 {save_state_hash('.venv')}
-''')   
+''')
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -2882,7 +2900,7 @@ rm -f {self.our_whl_path}/*
         )}
 if ls ./{self.extra_whl_path}/*.whl 1> /dev/null 2>&1; then
     {self.tb_mod} sudo python3 -m pip install `ls ./{self.extra_whl_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}" --find-links="{self.extra_whl_deps_path}" --find-links="{self.extra_whl_deps_path_compiled}" --no-cache-dir --no-index
-fi    
+fi
 '''
 
         lines.append(scmd)   # --no-cache-dir
@@ -2892,7 +2910,7 @@ fi
 
         lines.append(f'''
 {save_state_hash(f'tmp/states/{mn_}')}
-''')   
+''')
 
         self.lines2sh(mn_, lines, mn_)
         pass
@@ -2907,7 +2925,7 @@ fi
         # pps = " ".join([''] + [p.replace('-','_') for p in self.pp.rebuild])
         pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
         if not pps.strip():
-            return 
+            return
 
         lines.append(f'''
 PIP_SOURCE_DIR={self.pip_source_path}
@@ -2929,7 +2947,7 @@ do
 {self.tb_mod} ln -s $d/tmp/syslibs .venv/lib64/python{self.python_version_for_build()}/site-packages/$PPN.libs
 
     fi
-done        
+done
 ''')
 
         mn_ = get_method_name()
@@ -3052,7 +3070,7 @@ rm -f {self.base_whl_path}/*
     def stage_32_audit_download_extra_pip_for_build_pip_from_sources(self):
         '''
         Downloading extra python packages with fixed versions for rebuilding
-        pip from source. 
+        pip from source.
         '''
         # These packages will be installed to container after
         # installing consistent set of python wheels.
@@ -3069,7 +3087,7 @@ rm -f {self.base_whl_path}/*
 
         pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_install()
         if not pps.strip():
-            return 
+            return
 
         scmd = f"python3 -m pip download  {pps} --dest {self.extra_whl_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --find-links='{self.ext_whl_path}' --no-dependencies "
         scmd2 = f"python3 -m pip download  {pps} --dest {self.extra_whl_deps_path} --find-links='{self.our_whl_path}' --find-links='{self.base_whl_path}' --find-links='{self.ext_whl_path}'"
@@ -3091,7 +3109,7 @@ rm -f {self.extra_whl_deps_path}/*
     def stage_33_audit_build_whl_from_extra_pip_deps(self):
         '''
         Compiling *.whl from extra python packages with fixed versions for rebuilding
-        pip from source. 
+        pip from source.
         '''
         os.chdir(self.curdir)
 
@@ -3118,11 +3136,11 @@ rm -f {self.extra_whl_deps_path_compiled}/*
 
         lines = []
         # if not self.ps.rebuild:
-        #     return 
+        #     return
         # pps = " ".join([''] + self.pp.rebuild)
         pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
         if not pps.strip():
-            return 
+            return
 
 
         lines.append(f'''
@@ -3140,7 +3158,7 @@ do
         echo $URL
         wget --secure-protocol=TLSv1_2 -c -P $PIP_SOURCE_DIR/ $URL
     fi
-done        
+done
         ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -3154,11 +3172,11 @@ done
 
         lines = []
         # if not self.ps.rebuild:
-        #     return 
+        #     return
         # pps = " ".join([''] + self.pp.rebuild)
         pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
         if not pps.strip():
-            return 
+            return
 
         lines.append(f'''
 PIP_SOURCE_DIR={self.pip_source_path}
@@ -3167,10 +3185,10 @@ mkdir -p $PIP_SOURCE_DIR
 
         if self.svace_mod:
             lines.append(f'''
-for DIR_ in `ls -d {self.pip_source_path}/*/` 
+for DIR_ in `ls -d {self.pip_source_path}/*/`
 do
     rm -rf $DIR_
-done    
+done
             ''')
 
         lines.append(f'''
@@ -3187,8 +3205,8 @@ do
         if [ -f "$PIP_SOURCE_DIR/$FILENAME.zip" ]; then
             unzip -d $PIP_SOURCE_DIR $PIP_SOURCE_DIR/$FILENAME.zip
         fi
-    fi    
-done        
+    fi
+done
         ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -3203,22 +3221,22 @@ done
 
         lines = []
         # if not self.ps.rebuild:
-        #     return 
+        #     return
         # pps = " ".join([''] + self.pp.rebuild)
 
         pps = self.python_rebuild_profiles.get_list_of_pip_packages_to_rebuild()
         if not pps.strip():
-            return 
+            return
 
         lines.append(f'''
 PIP_SOURCE_DIR={self.pip_source_path}
 mkdir -p $PIP_SOURCE_DIR
-rm -f {self.rebuilded_whl_path}/* 
+rm -f {self.rebuilded_whl_path}/*
         ''')
 
         svace_prefix = f''
         if self.svace_mod:
-            svace_prefix = f'''{self.curdir}/{self.svace_path} build --svace-dir {self.curdir}/$PPDIR ''' 
+            svace_prefix = f'''{self.curdir}/{self.svace_path} build --svace-dir {self.curdir}/$PPDIR '''
 
         for pp, command, files_ in self.python_rebuild_profiles.get_commands_to_build_packages(svace_prefix):
             lines.append(f'''
@@ -3227,25 +3245,25 @@ PP={pp}
 FILENAME=$PP-$VERSION
 PPDIR=$PIP_SOURCE_DIR/$FILENAME
         ''')
-            for file_ in files_ or []:    
+            for file_ in files_ or []:
                 content_ = files_[file_].replace('\n','\\n')
                 lines.append(f'''echo -e "{content_}" > $PPDIR/{file_} ''')
 
-            if self.svace_mod:                
+            if self.svace_mod:
                 lines.append(f'''
-rm -rf {self.curdir}/$PPDIR/.svace-dir || true; 
+rm -rf {self.curdir}/$PPDIR/.svace-dir || true;
 {self.svace_path} init $PPDIR
     ''')
 
             lines.append(f'''
 if ! [ -f $PPDIR/.build_ok ]; then
-{self.tb_mod} bash -c "cd $PPDIR; {command} " 
-fi            
+{self.tb_mod} bash -c "cd $PPDIR; {command} "
+fi
         ''')
 
             lines.append(f'''
-{self.tb_mod} touch $PPDIR/.build_ok            
-{self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ \;  
+{self.tb_mod} touch $PPDIR/.build_ok
+{self.tb_mod} find $PPDIR -name "*.whl" -exec cp {{}} {self.rebuilded_whl_path}/ \;
         ''')
 
         mn_ = get_method_name()
@@ -3277,7 +3295,7 @@ fi
 {bashash_ok_folders_strings(self.ext_whl_path, [self.src_dir], [scmd, remove_pips_str],
         f"Looks required RPMs already downloaded"
         )}
-               
+
 rm -f {self.ext_whl_path}/*
 {self.tb_mod} {scmd}
 ''')
@@ -3314,7 +3332,7 @@ rm -f {self.ext_whl_path}/*
 {bashash_ok_folders_strings(self.ext_compiled_tar_path, [self.ext_whl_path], [],
         f"Looks like python tars already compiled"
         )}
-               
+
 rm -f {self.ext_compiled_tar_path}/*
 TARS=`find {self.ext_whl_path} -name '*.tar.*' -o -name '*.zip' `
 for TAR in `echo $TARS`
@@ -3355,7 +3373,7 @@ done
         bin_files_relnames = set(bin_files_sources.values())
 
         packages = yaml.unsafe_load(open('tmp/rpm-packages-info.yaml', 'r'))
-        file_source_from_packages = [r for r in file_source 
+        file_source_from_packages = [r for r in file_source
                                      if (r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value
                                         ) and r.source_path in bin_files_relnames]
 
@@ -3385,7 +3403,7 @@ done
             mn_ = get_method_name()
             lines = [
                 f'''
-{sys.executable} {sys.argv[0]} "{self.args.specfile}" --stage-audit-analyse                
+{sys.executable} {sys.argv[0]} "{self.args.specfile}" --stage-audit-analyse
                 ''']
             self.lines2sh(mn_, lines, mn_)
             return
@@ -3416,23 +3434,23 @@ done
             # if 1:
                 lines = [f'''
                 digraph G {{
-                    rankdir=LR; 
+                    rankdir=LR;
                     ranksep=1;
-                    node[shape=box3d, fontsize=8, fontname=Calibry, style=filled fillcolor=aliceblue]; 
-                    edge[color=blue, fontsize=6, fontname=Calibry, style=dashed, dir=back]; 
+                    node[shape=box3d, fontsize=8, fontname=Calibry, style=filled fillcolor=aliceblue];
+                    edge[color=blue, fontsize=6, fontname=Calibry, style=dashed, dir=back];
                 ''']
                 json_ = json.loads(open('tmp/pipdeptree.json').read())
-                # temporary hack. 
+                # temporary hack.
                 # todo: later we need to rewrite the code, deleting autoorphaned deps from auxiliary packages such as Nuitka
-                ignore_packages = set('''pipdeptree 
-pip pip-api 
+                ignore_packages = set('''pipdeptree
+pip pip-api
 Jinja2 MarkupSafe
 Nuitka zstandard
     '''.split() + self.minimal_pips + self.need_pips
     )
 
 # Nuitka cyclonedx-python-lib py-serializeable
-#     defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock  pip pip-api          
+#     defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock  pip pip-api
 #     rich Pygments markdown-it-py mdurl Jinja2 MarkupSafe
 
                 our_packages = set()
@@ -3488,7 +3506,7 @@ Nuitka zstandard
                             name2_ = v2_['package_name']
                             if name2_ not in ignore_packages:
                                 lines.append(f''' "{key1_}" -> "{key2_}" ;''')
-                
+
                 for np_name, np_ in self.nuitka_profiles.profiles.items():
                     for target_ in np_.builds or []:
                         folder_ = target_.folder
@@ -3501,17 +3519,17 @@ Nuitka zstandard
 
                         folderfullpath_ = Path(self.src_dir) / folder_
                         utility_path = folderfullpath_ / (utility_ + '.py')
-                        
+
                         if not utility_path.exists():
                             continue
 
-                        code_ = open(utility_path, 'r', encoding='utf-8').read()            
+                        code_ = open(utility_path, 'r', encoding='utf-8').read()
 
-                        imported_modules = set()    
+                        imported_modules = set()
                         for module_ in generate_imports_from_python_file(code_, utility_path):
                             name_ = module_.replace('_', '-')
                             if name_ == 'trans':
-                                wtf = 1 
+                                wtf = 1
                             if name_ in known_packages:
                                 imported_modules.add(name_)
 
@@ -3526,10 +3544,10 @@ Nuitka zstandard
                                     for req in parsed_:
                                         lines.append(f''' "{utility_}-tool" -> "{req.name}" [style=dotted] ;''')
                                 except Exception as ex_:
-                                    print(f'Failed to parse {reqs}')        
-                                    print(ex_)        
+                                    print(f'Failed to parse {reqs}')
+                                    print(ex_)
 
-                
+
                 lines.append('}')
 
                 with open('reports/pipdeptree.dot', 'w') as lf:
@@ -3607,7 +3625,7 @@ Nuitka zstandard
         # bin_files_sources = yaml.unsafe_load(open(self.bin_files_sources_after_minimization_path, 'r'))
 
         # ToDo — pydantic, enums, etc
-        file_source_from_packages = [r for r in file_source 
+        file_source_from_packages = [r for r in file_source
                                      if r.source_type==SourceType.rpm_package.value or r.source_type==SourceType.rebuilded_rpm_package.value]
 
         used_files = set(yaml.unsafe_load(open(self.used_files_path, 'r'))) if Path(self.used_files_path).exists() else set([v.relname for v in file_source])
@@ -3676,7 +3694,7 @@ Nuitka zstandard
                 row_.extend(["Пересобранный Python-пакет", f"Исходники пакета {fti_.source} в {self.pip_source_path}"])
             if fti_.source_type == 'our_source':
                 row_.extend(["Наше расширение", f"Исходники пакета {fti_.source} в {self.src_dir}"])
-            binary_files_report.append(row_)    
+            binary_files_report.append(row_)
 
             if fti_.source_type == SourceType.rpm_package.value:
                 if not fti_.source in rbs_:
@@ -3687,7 +3705,7 @@ Nuitka zstandard
                 if fti_.source in rpm_packages_not_need_to_be_rebuilded:
                     rpm_packages_not_need_to_be_rebuilded.remove(fti_.source)
                 if fti_.source not in rbs_:
-                    rpm_packages_rebuilded_but_not_declared.add(fti_.source)    
+                    rpm_packages_rebuilded_but_not_declared.add(fti_.source)
             elif fti_.source_type == SourceType.python_package.value:
                 if 'skimage' in fti_.source:
                     wtf  = 1
@@ -3938,7 +3956,7 @@ Nuitka zstandard
                                     self.cmd(scmd)
                                 else:
                                     shutil.copy2(path_, out_fname_)
-                                processed_ = True    
+                                processed_ = True
                             elif plain or fname_.endswith('.nj2'):
                                 try:
                                     if fname_.endswith('compton.conf'):
@@ -3953,10 +3971,10 @@ Nuitka zstandard
                                         os.system(scmd)
                                     with open(out_fname_, 'w', encoding='utf-8') as lf_:
                                         lf_.write(output)
-                                    processed_ = True        
-                                except jinja2.exceptions.TemplateError as ex_:         
+                                    processed_ = True
+                                except jinja2.exceptions.TemplateError as ex_:
                                     print(f'''{fname_} looks not Jinja template''')
-                            if not processed_:        
+                            if not processed_:
                                 shutil.copy2(fname_, out_fname_)
                             if not os.path.isdir(out_fname_):
                                 shutil.copymode(fname_, out_fname_)
@@ -3976,7 +3994,7 @@ Nuitka zstandard
                     lf.write(yaml.dump(packages))
             except:
                 # Cursed dnf module not working on Non-Fedoras now. But should not block building.
-                pass        
+                pass
 
         # self.remove_exclusions()
 
@@ -3999,16 +4017,16 @@ Nuitka zstandard
         #     try:
         #         vp_ = version_utils.rpm.package(p_)
         #     except:
-        #         pass    
+        #         pass
 
         # file_list = None
-        # if Path(self.file_list_from_rpms).exists(): 
+        # if Path(self.file_list_from_rpms).exists():
         # # and Path(self.doc_list_from_rpms).exists():
         #     all_list = open(self.file_list_from_rpms).readlines()
         #     # doc_list = open(self.doc_list_from_rpms).readlines()
         #     file_list = [x.strip() for x in set(all_list) if x.strip() and self.should_copy(x.strip())]
         #     #- set(doc_list)
-        # else:    
+        # else:
         #     assert(False)
         #     # deps_packages = self.dependencies(packages_to_deploy)
         #     # file_list = self.generate_file_list_from_packages(deps_packages)
@@ -4017,7 +4035,7 @@ Nuitka zstandard
         # file_list.extend(fs_)
 
         os.system('echo 2 > /proc/sys/vm/drop_caches ')
-        user_ = os.getlogin()            
+        user_ = os.getlogin()
         scmd = f'sudo chown {user_} {root_dir} -R '
         self.cmd(scmd)
         old_root_dir = root_dir + ".old"
@@ -4043,7 +4061,7 @@ Nuitka zstandard
 
             if self.br.is_need_patch(f):
                 return self.process_binary(f)
-            
+
             if self.br.is_just_copy(f):
                 return self.add(f)
             elif self.args.debug and f.startswith("/usr/include"):
@@ -4092,7 +4110,7 @@ Nuitka zstandard
                             self.bin_files_sources[libfile] = f
                             return libfile
                         except:
-                            print('Cannot optionally patch', tf)    
+                            print('Cannot optionally patch', tf)
                             assert(False)
                     else:
                         # in case this is a directory that is listed, we don't want to include everything that is in that directory
@@ -4105,21 +4123,21 @@ Nuitka zstandard
 
         self.cmd(f'{self.tb_mod} sudo chmod a+r /usr/lib/cups -R')
 
-        # file_source_table = {}      
-        file_source_table = FileSource()  
+        # file_source_table = {}
+        file_source_table = FileSource()
         def register_rpmpackage_file(relpath, f, pfr):
             if not relpath:
-                return                        
+                return
             if 'libdl.so' in relpath:
                 wtf = 1
             if '.' in pfr.release and self.disttag in pfr.release.split('.'):
                 file_source_table[relpath] = FileInBuild(relpath, SourceType.rebuilded_rpm_package, pfr.package, f)
-            else:                
+            else:
                 file_source_table[relpath] = FileInBuild(relpath, SourceType.rpm_package, pfr.package, f)
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
-            if 'libpython3.11.so.1.0' in fpl_.filename:    
+            if 'libpython3.11.so.1.0' in fpl_.filename:
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
                 ok = True
@@ -4127,7 +4145,7 @@ Nuitka zstandard
                     if fpl_.package.startswith(prefix):
                         ok = False
                     break
-                if ok:    
+                if ok:
                     f = fpl_.filename
                     if 'extract' in f:
                         wtf = 1
@@ -4243,7 +4261,7 @@ Nuitka zstandard
                             # elif filename.startswith('lib') and dirpath == folder_:
                             #     relname = f.replace(folder_, 'lib64')
                             # else:
-                            #     relname = f.replace(folder_, 'pbin')    
+                            #     relname = f.replace(folder_, 'pbin')
                             if relname not in file_source_table:
                                 if 'extract' in relname:
                                     wtf = 1
@@ -4255,13 +4273,13 @@ Nuitka zstandard
                                 #     source_ = sofile2rpmfile[filename]
                                 #     package_ = file2rpmpackage[source_]
                                 #     register_rpmpackage_file(relname, source_, package_)
-                                else:    
+                                else:
                                     type_ = SourceType.file_from_folder
-                                    what_ = folder_ 
+                                    what_ = folder_
                                     if f in so_files_from_src_path2folder:
                                         type_ = SourceType.our_source
                                         what_ = so_files_from_src_path2folder[f]
-                                    elif 'site-packages' in f and f.split('site-packages')[1][1:] in so_files_rpips_path2whl:                                        
+                                    elif 'site-packages' in f and f.split('site-packages')[1][1:] in so_files_rpips_path2whl:
                                     # elif f in so_files_rpips_path2package:
                                         type_ = SourceType.rebuilded_python_package
                                         what_ = so_files_rpips_path2whl[f.split('site-packages')[1][1:]]
@@ -4281,8 +4299,8 @@ Nuitka zstandard
                 pass
 
         scmd = f"""
-{self.tb_mod} python3 -c "from ctypes.util import _findSoname_ldconfig;print(_findSoname_ldconfig('c'))"      
-"""            
+{self.tb_mod} python3 -c "from ctypes.util import _findSoname_ldconfig;print(_findSoname_ldconfig('c'))"
+"""
         libc_name = subprocess.check_output(scmd, shell=True).decode('utf-8').strip()
         self.cmd(f"ln -s {libc_name} {self.out_dir}/lib64/libc.so")
 
@@ -4379,7 +4397,7 @@ Nuitka zstandard
                     setup_cmd = self.tests.profiles[p_].setup
                 box_name = test_box_name(self.container_name, profile_name, distro_)
                 lines.append(f'''
-DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {distro_}  || true               
+DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {distro_}  || true
 DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
                 ''')
 
@@ -4395,7 +4413,7 @@ DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
 
 
         lines.append(f'''
-nohup x11vnc -display :96 -forever -autoport 5901 --auth ./tmp/test.xvfb.auth &  
+nohup x11vnc -display :96 -forever -autoport 5901 --auth ./tmp/test.xvfb.auth &
 vncviewer localhost:5901
         ''')
 
@@ -4411,7 +4429,7 @@ vncviewer localhost:5901
         lines.append(f'''
 DST=$1
 mkdir -p $DST
-for pyth in python3.10 python3.11 
+for pyth in python3.10 python3.11
 do
   rm -f $DST/ta/$pyth/* || true
   $pyth -m pip wheel /home/stas/projects/terrarium_assembler --wheel-dir $DST/ta/$pyth
@@ -4420,12 +4438,12 @@ done
 for adir in {self.base_whl_path} {self.ext_whl_path} {self.pip_source_path} {self.extra_whl_path} {self.extra_whl_deps_path}
 do
    rsync -av --mkpath --delete --exclude='*/'  --exclude *.md5 $adir/ $DST/$adir
-done 
+done
 
-for adir in {self.platform_path} {self.rpmrepo_path} 
+for adir in {self.platform_path} {self.rpmrepo_path}
 do
    rsync -rav --mkpath --delete --exclude *.md5 $adir/ $DST/$adir
-done 
+done
 
 # перенести в основной чекаут. может там вообще сделать основным, чекаут двух типов с убиранием лишних папок?
 # вообще может не тащить все ветки каждый раз, ускорит?
@@ -4448,7 +4466,7 @@ rsync --mkpath {self.used_files_path} $DST/{self.used_files_path} || true
 
 
         lines.append(f'''
-TESTBOXES=`distrobox list --no-color | grep -oh "{self.container_name}-T-[[:alnum:]]*" || true`        
+TESTBOXES=`distrobox list --no-color | grep -oh "{self.container_name}-T-[[:alnum:]]*" || true`
 for BOX in `echo $TESTBOXES`
 do
     distrobox rm --force $BOX
@@ -4469,7 +4487,7 @@ rm -rf {self.in_bin}
 
 
         lines.append(f'''
-TESTBOXES=`distrobox list --no-color | grep -oh "{self.container_name}-T-[[:alnum:]]*" || true`        
+TESTBOXES=`distrobox list --no-color | grep -oh "{self.container_name}-T-[[:alnum:]]*" || true`
 for BOX in `echo $TESTBOXES`
 do
     distrobox rm --force $BOX
@@ -4512,7 +4530,7 @@ done
         stage_ = fname2stage(mn_).replace('_', '-')
         lines = [
             f'''
-{sys.executable} {sys.argv[0]} "{self.args.specfile}" --{stage_}                
+{sys.executable} {sys.argv[0]} "{self.args.specfile}" --{stage_}
             ''']
         self.lines2sh(mn_, lines, mn_)
         return
@@ -4579,7 +4597,7 @@ done
                                 if os.path.islink(fname):
                                     link_ = os.readlink(fname)
                                     fname = os.path.join(os.path.split(fname)[0], link_)
-                                relpath = os.path.relpath(os.path.abspath(fname), start=self.out_dir)    
+                                relpath = os.path.relpath(os.path.abspath(fname), start=self.out_dir)
                                 used_files.add(relpath)
 
         with open(os.path.join(self.curdir, self.used_files_path), 'w') as lf:
@@ -4589,7 +4607,7 @@ done
     def stage_55_mininize_terrarium(self):
         '''
         Minimize Terrarium.
-        Postprocessing, removing unused files. 
+        Postprocessing, removing unused files.
         '''
         if not self.build_mode:
             mn_ = get_method_name()
@@ -4619,15 +4637,15 @@ done
             if path_.exists() and path_.is_relative_to(out_dir_):
                 rpp_ = str(path_.relative_to(out_dir_))
                 used_files_resolved.add(rpp_)
-                    
+
         for fib in list(file_source_table.keys()):
             rp_ = fib
             if '.gitattributes' in rp_:
                 wtf = 1
             if 'sotruss-lib.so' in rp_:
                 wtf = 1
-            if used_files and not self.br.is_needed(rp_): 
-                if rp_ not in used_files_resolved:    
+            if used_files and not self.br.is_needed(rp_):
+                if rp_ not in used_files_resolved:
                     if rp_ in bin_files_sources:
                         del bin_files_sources[ rp_ ]
                     del file_source_table[fib]
@@ -4674,7 +4692,7 @@ done
             versions_ = self.spec.version
             if version.parse(versions_) > version.parse(version_):
                 version_ = versions_
-        return version_        
+        return version_
 
 
     def stage_59_make_packages(self):
@@ -4692,11 +4710,11 @@ done
 
         if not self.args.stage_make_packages:
             return
-        
+
         os.chdir(self.curdir)
 
         root_dir = os.path.realpath(self.out_dir)
-        user_ = os.getlogin()            
+        user_ = os.getlogin()
         scmd = f'sudo chown {user_} {root_dir} -R '
         self.cmd(scmd)
 
@@ -4711,9 +4729,9 @@ done
 
         current_time = datetime.datetime.now().replace(microsecond=0)
         time_ = current_time.isoformat().replace(':', '').replace('-', '').replace('T', '')
-        version_with_time = f"{git_version}-{time_}" 
+        version_with_time = f"{git_version}-{time_}"
         def deployname(label_=label):
-            return f"{label_.lower()}-{version_with_time}" 
+            return f"{label_.lower()}-{version_with_time}"
 
         prev_release_time = current_time + relativedelta(months=-1)
         old_changelogs = sorted([f for f in (Path(self.curdir) / self.changelogdir).glob(f'*.txt') if f.is_file() and not f.is_symlink()], key=os.path.getmtime)
@@ -4750,7 +4768,7 @@ done
 
         labels = [self.spec.label]
         if isinstance(self.spec.label, list):
-            labels = self.spec.label  
+            labels = self.spec.label
 
         for label_ in labels:
             isofilename = f"{deployname(label_)}.iso"
@@ -4760,8 +4778,8 @@ done
             package_modes = self.package_modes
 
             os.chdir(nfpm_dir)
-            install_mod = ''            
-            postinst_script_path_ = os.path.join(nfpm_dir, 'postinstall.sh')            
+            install_mod = ''
+            postinst_script_path_ = os.path.join(nfpm_dir, 'postinstall.sh')
             Path(postinst_script_path_).unlink(missing_ok=True)
             if 'post_installer' in self.spec:
                 with open(postinst_script_path_, 'w', encoding='utf-8') as lf:
@@ -4775,7 +4793,7 @@ exit $?
       postinstall: ./postinstall.sh
     """
 
-            remove_mod = ''            
+            remove_mod = ''
             pre_remove_script_path_ = os.path.join(nfpm_dir, 'pre_remove.sh')
             Path(pre_remove_script_path_).unlink(missing_ok=True)
             if 'pre_remove' in self.spec:
@@ -4808,11 +4826,11 @@ overrides:
   rpm:
     scripts:
 {install_mod}
-{remove_mod}      
+{remove_mod}
   deb:
     scripts:
 {install_mod}
-{remove_mod}      
+{remove_mod}
     ''')
             for packagetype in ['rpm', 'deb']:
                 if not packagetype in package_modes:
@@ -4821,7 +4839,7 @@ overrides:
                 os.chdir(nfpm_dir)
                 mkdir_p(pkgdir)
                 scmd = f'''
-    {self.tb_mod} nfpm pkg --packager {packagetype} --target {pkgdir}        
+    {self.tb_mod} nfpm pkg --packager {packagetype} --target {pkgdir}
         '''.strip()
                 self.cmd(scmd)
 
@@ -4889,7 +4907,7 @@ overrides:
 {self.tb_mod} makeself.sh {pmode} {add_opts} --header {makeself_header_path} --target "{self.spec.install_dir}" --tar-extra "--xattrs --xattrs-include=*" --untar-extra " --xattrs --xattrs-include=*"  --needroot {root_dir} {installscriptpath} "Installation" {self.spec.install_dir}/install-me
         ''' % vars()).replace('\n', ' ').strip()
                 if not self.cmd(scmd) == 0:
-                    print(f'« {scmd} » failed!')    
+                    print(f'« {scmd} » failed!')
                     return
             os.chdir(self.curdir)
             isofilepath = os.path.join(isodir, isofilename)
@@ -4915,7 +4933,7 @@ overrides:
         os.chdir(self.curdir)
         lines = []
         lines.append(f'''
-{self.tb_mod} ./.venv/bin/python3 -m pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"            
+{self.tb_mod} ./.venv/bin/python3 -m pip install -e "git+https://github.com/Nuitka/Nuitka.git@develop#egg=nuitka"
 ''')
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
