@@ -2052,7 +2052,7 @@ podman save --compress --format docker-dir --quiet -o in/bin/fc{self.spec.fc_ver
         lines = [self.toolbox_create_line()]
 
         lines.append(f'''
-
+        rm -rf tmp/states/*depswheels* || true
         {self.tb_mod} sudo sed -i 's/%_install_langs.*all/%_install_langs ru:en/g' /usr/lib/rpm/macros
 {self.rm_locales}
 {self.tb_mod} sudo dnf config-manager --save '--setopt=*.skip_if_unavailable=1' "fedora*"
@@ -3594,7 +3594,7 @@ Nuitka zstandard
             cloc_csv = f'tmp/{clocname}.csv'
             if not os.path.exists(cloc_csv):
                 if shutil.which('cloc'):
-                    os.system(f'cloc {filetemplate} --csv  --report-file={cloc_csv} --3')
+                    os.system(f'cloc {filetemplate} --csv  --timeout 3600  --report-file={cloc_csv} --3')
             if os.path.exists(cloc_csv):
                 table_csv = []
                 with open(cloc_csv, newline='') as csvfile:
@@ -4137,7 +4137,7 @@ Nuitka zstandard
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
-            if 'libpython3.11.so.1.0' in fpl_.filename:
+            if 'libQt5Core.so.5.15.11' in fpl_.filename:
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
                 ok = True
@@ -4380,6 +4380,8 @@ Nuitka zstandard
 
         with open(os.path.join(self.curdir, self.bin_files_sources_path), 'w') as lf:
             lf.write(yaml.dump(self.bin_files_sources))
+        if os.path.exists(self.bin_files_sources_after_minimization_path):
+            os.unlink(self.bin_files_sources_after_minimization_path)
 
     def stage_51_tests_setup(self):
         '''
