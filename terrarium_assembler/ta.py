@@ -1176,6 +1176,7 @@ pushd {path_to_dir__}
                     svace_dir_ = os.path.relpath(Path(self.curdir) / self.svace_path, start=path_to_dir_)
                     lines.append(fR"""
 rm -rf .svace-dir || true
+rm -rf {target_dir_}/*
                     """)
                     svace_prefix = f'{svace_dir_} build  '
                     lines.append(f'''
@@ -4451,6 +4452,7 @@ done
 # вообще может не тащить все ветки каждый раз, ускорит?
 # ./ta-98-checkout-clean-version.sh
 rsync --checksum {self.src_dir}/in-src.tar $DST/
+tar --append --file=$DST/in-src.tar  $(find ./in/src/ -name 'node_modules' -o -name 'vendor')
 
 rsync *.yml $DST/
 rsync --mkpath {self.used_files_path} $DST/{self.used_files_path} || true
