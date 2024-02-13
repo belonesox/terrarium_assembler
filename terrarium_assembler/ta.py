@@ -1159,6 +1159,10 @@ rm -rf {ok_dir}.old
                     outputname = td_.name
                 target_dir = os.path.join(self.curdir, self.go_compiled_path, outputname + '.build')
 
+                env_mod = ''
+                if 'env' in td_:
+                    env_mod = td_.env
+
                 mkdir_p(target_dir)
                 target_dir_ = os.path.relpath(target_dir, start=path_to_dir_)
                 log_dir_ = os.path.relpath(self.curdir, start=path_to_dir_)
@@ -1172,7 +1176,7 @@ pushd {path_to_dir__}
 """)
 
                 svace_prefix = ''
-                if self.svace_mod:
+                if self.svace_mod and not ('svace' in td_ and not td_.svace):
                     svace_dir_ = os.path.relpath(Path(self.curdir) / self.svace_path, start=path_to_dir_)
                     lines.append(fR"""
 rm -rf .svace-dir || true
@@ -1184,9 +1188,10 @@ rm -rf {target_dir_}/*
 {self.tb_mod} go clean -cache
     ''')
 
+# {self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod download"
                 lines.append(fR"""
-{self.tb_mod} bash -c "go mod vendor"
-{self.tb_mod} bash -c "CGO_ENABLED=0 {svace_prefix} go build -ldflags='-linkmode=internal -r' -o {target_dir_}/  {target_}  >{log_dir_}/{build_name}.log 2>&1 "
+{self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod vendor"
+{self.tb_mod} bash -c "GOPATH=$d/tmp/go {env_mod} {svace_prefix} go build -ldflags='-linkmode=internal -r' -o {target_dir_}/  {target_}  >{log_dir_}/{build_name}.log 2>&1 "
 popd
     """)
                 self.fs.folders.append(target_dir)
