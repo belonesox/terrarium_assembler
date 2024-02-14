@@ -1129,7 +1129,39 @@ rm -rf {ok_dir}.old
         self.lines2sh(mn_, lines, mn_)
         pass
 
-    def stage_41_build_go(self):
+    def stage_41_download_go(self):
+        '''
+        Download vendor dirs for Go projects
+        '''
+        if not self.gp:
+            return
+
+        lines = []
+        lines.append(fR"""
+x="$(readlink -f "$0")"
+d="$(dirname "$x")"
+""")
+                     
+        for td_ in self.gp.projects():
+            git_url, git_branch, path_to_dir_, _ = self.explode_pp_node(td_)
+            os.chdir(self.curdir)
+            if os.path.exists(path_to_dir_):
+                os.chdir(path_to_dir_)
+                path_to_dir__ = os.path.relpath(
+                    path_to_dir_, start=self.curdir)
+                outputname = os.path.split(path_to_dir_)[-1]
+# {self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod download"
+                lines.append(fR"""
+pushd {path_to_dir__}
+{self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod vendor"
+popd
+    """)
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+        pass
+
+    def stage_42_build_go(self):
         '''
         Build / compile Go projects to executables
         '''
@@ -1190,7 +1222,6 @@ rm -rf {target_dir_}/*
 
 # {self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod download"
                 lines.append(fR"""
-{self.tb_mod} bash -c "GOPATH=$d/tmp/go go mod vendor"
 {self.tb_mod} bash -c "GOPATH=$d/tmp/go {env_mod} {svace_prefix} go build -ldflags='-linkmode=internal -r' -o {target_dir_}/  {target_}  >{log_dir_}/{build_name}.log 2>&1 "
 popd
     """)
