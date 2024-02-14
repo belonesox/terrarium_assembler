@@ -3726,7 +3726,10 @@ Nuitka zstandard
             if fti_.source_type == 'rebuilded_rpm_package':
                 row_.extend(["Пересобранный RPM-пакет", f"Исходники пакета {fti_.source} в {self.rpmbuild_path}"])
             if fti_.source_type == 'file_from_folder':
-                row_.extend(["Компиляция Nuitka", f"Компиляция в папке {fti_.source}"])
+                source_ = fti_.source
+                if os.path.isabs(source_):
+                    source_ = os.path.relpath(source_, start=self.curdir)
+                row_.extend(["Компиляция Nuitka/Go", f"Компиляция в папке {source_}"])
             if fti_.source_type == 'rebuilded_python_package':
                 row_.extend(["Пересобранный Python-пакет", f"Исходники пакета {fti_.source} в {self.pip_source_path}"])
             if fti_.source_type == 'our_source':
@@ -4481,12 +4484,12 @@ tar -v -c  --use-compress-program=pbzip2 -f svace-dirs.tar.bz2 $(find . -name ".
 
         lines.append(f'''
 DST=$1
-mkdir -p $DST
 for pyth in python3.10 python3.11
 do
-  rm -f $DST/ta/$pyth/* || true
-  $pyth -m pip wheel /home/stas/projects/terrarium_assembler --wheel-dir $DST/ta/$pyth
+  rm -f ./tmp/ta/$pyth/* || true
+  $pyth -m pip wheel /home/stas/projects/terrarium_assembler --wheel-dir ./tmp/ta/$pyth
 done
+rsync -rav --mkpath --delete --exclude *.md5 ./tmp/ta/ $DST/tmp/ta/
 
 for adir in {self.base_whl_path} {self.ext_whl_path} {self.pip_source_path} {self.extra_whl_path} {self.extra_whl_deps_path}
 do
@@ -4498,16 +4501,26 @@ do
    rsync -rav --mkpath --delete --exclude *.md5 $adir/ $DST/$adir
 done
 
-# перенести в основной чекаут. может там вообще сделать основным, чекаут двух типов с убиранием лишних папок?
-# вообще может не тащить все ветки каждый раз, ускорит?
-# ./ta-98-checkout-clean-version.sh
-rsync --checksum {self.src_dir}/in-src.tar $DST/
-tar --append --file=$DST/in-src.tar  $(find ./in/src/ -name 'node_modules' -o -name 'vendor')
+rsync --checksum {self.src_path}/in-src.tar $DST/
+tar -cv --file=./tmp/vendor-sources.tar  $(find {self.src_path} -name 'node_modules' -o -name 'vendor')
+rsync --checksum ./tmp/vendor-sources.tar $DST/
 
 rsync *.yml $DST/
 rsync --mkpath {self.used_files_path} $DST/{self.used_files_path} || true
 
         ''')
+
+        with open('ta-install-freezed-version.py', 'w', encoding='utf-8') as lf:
+            lf.write('''
+#!/bin/env python3
+import sys
+import os
+install_folder = f'./tmp/ta/python{sys.version_info[0]}.{sys.version_info[1]}'
+scmd = f'sudo {sys.executable} -m pip install {install_folder}/terrarium_assembler* --find-links={install_folder}' 
+print(scmd)
+os.system(scmd)  
+...      
+        '''.strip())
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
