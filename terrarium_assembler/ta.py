@@ -4459,6 +4459,20 @@ vncviewer localhost:5901
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
+    def stage_98_audit_pack_svace_dirs(self):
+        '''
+        Pack all svace dirs, after svace managed compilation
+        '''
+        lines = []
+
+        lines.append(f'''
+tar cvfjS --use-compress-program=pbzip2 svace-dirs.tar.bz2 $(find . -name ".svace-dir" )        
+        ''')
+
+        mn_ = get_method_name()
+        self.lines2sh(mn_, lines, mn_)
+
+
     def stage_99_export_for_audit(self):
         '''
         Export source for reproduceable audit build
