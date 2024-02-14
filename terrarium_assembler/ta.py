@@ -4466,7 +4466,7 @@ vncviewer localhost:5901
         lines = []
 
         lines.append(f'''
-tar cvfjS --use-compress-program=pbzip2 svace-dirs.tar.bz2 $(find . -name ".svace-dir" )        
+tar cvf --use-compress-program=pbzip2 svace-dirs.tar.bz2 $(find . -name ".svace-dir" )        
         ''')
 
         mn_ = get_method_name()
