@@ -4508,6 +4508,10 @@ rsync --checksum ./tmp/vendor-sources.tar $DST/
 rsync *.yml $DST/
 rsync --mkpath {self.used_files_path} $DST/{self.used_files_path} || true
 
+tar -cvf  ./tmp/app-svace.tar app/svace || true
+rsync --checksum -av ./tmp/app-svace.tar $DST/  || true
+
+rsync ta-install-freezed-version.py $DST/
         ''')
 
         with open('ta-install-freezed-version.py', 'w', encoding='utf-8') as lf:
