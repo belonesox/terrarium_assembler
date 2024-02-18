@@ -889,6 +889,7 @@ fi
                         else:
                             delete_dir_of_file( Path(dir_) / (package_name + suffix)  )
         # clean_dir_from_old_versions(self.rpms_path, '.rpm')
+        clean_dir_from_old_versions(self.rebuilded_rpms_path, '.rpm')
         clean_dir_from_old_versions(self.rpmbuild_path, '-rpmbuild')
         clean_dir_from_old_versions(self.srpms_path, '.rpm')
         # clean_dir_from_old_versions(self.rpms_backup_pool, '.rpm')
