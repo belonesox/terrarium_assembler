@@ -879,13 +879,15 @@ fi
                         wtf = 1
                     package_name = dirname[:-len(suffix)]
                     p_ = version_utils.rpm.package(package_name)
-                    if not p_.name in packages_:
-                        packages_[p_.name] = (package_name, p_)
+                    if p_.arch not in packages_:
+                        packages_[p_.arch] = {}
+                    if not p_.name in packages_[p_.arch]:
+                        packages_[p_.arch][p_.name] = (package_name, p_)
                     else:
-                        current_package = packages_[p_.name][0]
+                        current_package = packages_[p_.arch][p_.name][0]
                         if version_utils.rpm.compare_packages(package_name, current_package) > 0:
                             delete_dir_of_file( Path(dir_) / (current_package + suffix)  )
-                            packages_[p_.name] = (package_name, p_)
+                            packages_[p_.arch][p_.name] = (package_name, p_)
                         else:
                             delete_dir_of_file( Path(dir_) / (package_name + suffix)  )
         
@@ -4504,8 +4506,8 @@ do
 done
 
 rsync --checksum {self.src_path}/in-src.tar $DST/
-tar -cv --file=./tmp/vendor-sources.tar  $(find {self.src_path} -name 'node_modules' -o -name 'vendor')
-rsync --checksum ./tmp/vendor-sources.tar $DST/
+tar -cv --file=./tmp/vendor-sources.tar  $(find {self.src_path} -name 'node_modules' -o -name 'vendor') || true
+rsync --checksum ./tmp/vendor-sources.tar $DST/  || true
 
 rsync *.yml $DST/
 rsync --mkpath {self.used_files_path} $DST/{self.used_files_path} || true
