@@ -4185,7 +4185,7 @@ Nuitka zstandard
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
                 ok = True
-                for prefix in self.ps.exclude_prefix:
+                for prefix in self.ps.exclude_prefix or []:
                     if fpl_.package.startswith(prefix):
                         ok = False
                     break
