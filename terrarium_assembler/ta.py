@@ -1505,7 +1505,8 @@ popd
             lower = Path(self.container_info[0]["GraphDriver"]["Data"]["LowerDir"])
             work  = Path(self.container_info[0]["GraphDriver"]["Data"]["WorkDir"])
             scmd = f'sudo mount -t overlay -o lowerdir={lower},upperdir={upper},workdir={work} overlay {self.container_path}'
-            os.system(scmd)
+            self.cmd(scmd)
+            # os.system(scmd)
             assert(any(self.container_path.iterdir()))
 
             assert(self.container_path.exists())
