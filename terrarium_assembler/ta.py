@@ -564,7 +564,7 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc xorg-x11-server-Xvfb xcompmgr || true
+sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc xorg-x11-server-Xvfb xcompmgr fuse-overlayfs || true
 sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop distrobox  || true
 sudo apt-get install -y firefox-esr xcompmgr || true
 ''')
@@ -1504,7 +1504,8 @@ popd
             upper = Path(self.container_info[0]["GraphDriver"]["Data"]["UpperDir"])
             lower = Path(self.container_info[0]["GraphDriver"]["Data"]["LowerDir"])
             work  = Path(self.container_info[0]["GraphDriver"]["Data"]["WorkDir"])
-            scmd = f'sudo mount -t overlay -o lowerdir={lower},upperdir={upper},workdir={work} overlay {self.container_path}'
+            # scmd = f'sudo mount -t overlay -o lowerdir={lower},upperdir={upper},workdir={work} overlay {self.container_path}'
+            scmd = f'sudo fuse-overlayfs --debug -o lowerdir={lower},upperdir={upper},workdir={work} overlay {self.container_path}'
             self.cmd(scmd)
             # os.system(scmd)
             assert(any(self.container_path.iterdir()))

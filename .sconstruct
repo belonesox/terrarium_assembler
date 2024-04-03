@@ -1,0 +1,26 @@
+
+# -*- coding: utf-8 -*-
+import os
+import os.path
+
+targets = BUILD_TARGETS
+
+import docsassembler as docs
+env = docs.DocstructEnvironment(r"", ENV = os.environ )
+env['ENV']['PATH'] = os.environ['PATH']
+
+env.Decider('timestamp-match')
+docs.write_project_path()
+
+taskCleanObj = os.path.join(os.getcwd(), '--obj/cleanObj') 
+cmd = env.Command(taskCleanObj, [], [docs.clean_obj])
+env.Alias('clean-obj', cmd)
+
+for filename in targets:
+    if filename.endswith(".pdf"):
+        env.meta_analyzer.register_pdf(filename)
+    if filename.endswith(".html"):
+        env.meta_analyzer.register_html(filename)
+    if filename.endswith(".docx"):
+        env.meta_analyzer.register_docx(filename)
+        
