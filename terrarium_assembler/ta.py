@@ -3096,7 +3096,7 @@ done
         # pipenv environment does not exists we using regular python to download base packages.
         # scmd = 'date'
         # if bws:
-        scmd = f"python3 -m pip download  {bws} --dest {self.base_whl_path}  --default-timeout=1000 "
+        scmd = f"python{self.python_version_for_build()} -m pip download  {bws} --dest {self.base_whl_path}  --default-timeout=1000 "
         lines.append(f'''
 {bashash_ok_folders_strings(self.base_whl_path, [], [bws],
         f"Looks required base wheels already downloaded"
