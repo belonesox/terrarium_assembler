@@ -9,7 +9,6 @@ import stat
 import re
 import json
 import dataclasses as dc
-# import pydantic
 import datetime
 import hashlib
 import time
@@ -26,14 +25,7 @@ from typing import List
 from pydantic import BaseModel, constr, validator
 from pydantic.dataclasses import dataclass
 import dacite
-
-# class MyBaseModel(BaseModel):
-#     """
-#     Base Pydantic Model
-#     """
-#     class Config:
-#         validate_assignment = True
-#         use_enum_values = True
+from wheel_filename import parse_wheel_filename
 
 class DCConfig:
     validate_assignment = True
@@ -564,8 +556,8 @@ class TerrariumAssembler:
 
         if args.specfile == 'systeminstall':
             self.cmd(f'''
-sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc xorg-x11-server-Xvfb xcompmgr fuse-overlayfs || true
-sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop distrobox  || true
+sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc xorg-x11-server-Xvfb xcompmgr fuse-overlayfs jq || true
+sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop distrobox jq || true
 sudo apt-get install -y firefox-esr xcompmgr || true
 ''')
             if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
@@ -585,6 +577,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         #         f.unlink()
 
         os.environ['TERRA_SPECDIR'] = self.start_dir
+        self.our_builddir2sourcedesc = {}
         os.chdir(self.curdir)
 
         self.tvars = edict()
@@ -1040,6 +1033,9 @@ date
 export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
+
+                self.our_builddir2sourcedesc[ok_dir] = f'Компиляция {src}, сборка скриптом {build_name}'
+
                 lines.append(fR"""
 {bashash_ok_folders_strings(ok_dir, ['.venv', src_dir], [flags_, nflags],
         f"Sources for {build_name} not changed, skipping"
@@ -1230,6 +1226,10 @@ rm -rf {target_dir_}/*
 popd
     """)
                 self.fs.folders.append(target_dir)
+
+                target_dir_rel = os.path.relpath(target_dir, start=self.curdir)
+                self.our_builddir2sourcedesc[target_dir_rel] = f'Компиляция {path_to_dir_}, сборка скриптом {build_name}'
+
                 self.lines2sh(build_name, lines, None)
                 bfiles.append(fname2shname(build_name))
 
@@ -3718,28 +3718,86 @@ Nuitka zstandard
         rpm_packages_not_need_to_be_rebuilded = set(self.ps.rebuild)
         rpm_packages_rebuilded_but_not_declared = set()
         python_packages_recommended_for_rebuild = set()
+
+        def sources4rpm(fti_):
+            return f"Исходники пакета {fti_.source} в {self.rpmbuild_path}"
+
+        def sources4pip(fti_):
+            return f"Исходники пакета {fti_.source} в {self.pip_source_path}"
+
+        def fti2type_and_source(fti_):
+            if fti_.source_type == 'rpm_package':
+                return ["RPM-пакет", f"<b>Требуется пересборка RPM-пакета {fti_.source}!</b>"]
+            if fti_.source_type == 'python_package':
+                return ["Python-пакет", f"<b>Нужна пересборка Python-пакета {fti_.source}!</b>"]
+            if fti_.source_type == 'rebuilded_rpm_package':
+                return ["Пересобранный RPM-пакет", sources4rpm(fti_)]
+            if fti_.source_type == 'file_from_folder':
+                source_ = fti_.source
+                if os.path.isabs(source_):
+                    source_ = os.path.relpath(source_, start=self.curdir).replace('.ok', '.build')
+                if source_ in self.our_builddir2sourcedesc:
+                    source_ = self.our_builddir2sourcedesc[source_]        
+                return ["Компиляция Nuitka/Go", f"{source_}"]
+            if fti_.source_type == 'rebuilded_python_package':
+                return ["Пересобранный Python-пакет", sources4pip(fti_)]
+            if fti_.source_type == 'our_source':
+                return ["Собственное расширение", f"Исходники пакета {fti_.source} в {self.src_dir}"]
+            return ['', '']
+
+        module2files = {}
+        module2type = {}
+        for file_, source_ in sorted(bin_files_sources.items()):
+            fti_ = file_source_table[file_]
+            name_ = fti_.source
+            type_ = ''
+            if fti_.source_type in ['rpm_package', 'rebuilded_rpm_package']:
+                type_ = 'RPM-пакет'
+            elif fti_.source_type in ['python_package', 'rebuilded_python_package']:
+                type_ = 'Стандартный python-пакет'
+            elif fti_.source_type in ['our_source']:
+                type_ = 'Python-пакет проекта'
+            elif fti_.source_type in ['file_from_folder']:
+                type_ = 'Модуль проекта'
+                name_ = os.path.split(name_)[-1].split('.')[0]
+            if 'python' in fti_.source_type:
+                name_ = parse_wheel_filename(name_).project                
+            if fti_.source not in module2files:
+                module2files[name_] = [] 
+            module2type[name_] = fti2type_and_source(fti_)
+            module2files[name_].append(file_)
+        module_files_report = []
+        for k, v in module2files.items():
+            type_ = module2type[k]
+            row_ = [k] + type_ + [" ".join(v)]
+            module_files_report.append(row_)
+
+        write_doc_table(os.path.join(self.curdir, 
+                                        'reports/modules-report.htm'), 
+                                        ['Модуль', 'Тип', 'Исходники', 'Бинарные файлы модуля'], module_files_report)
+
         binary_files_report = []
         for file_, source_ in sorted(bin_files_sources.items()):
             fti_ = file_source_table[file_]
             if fti_.source == 'geos':
                 wtf = 1
 
-            row_ = [file_]
-            if fti_.source_type == 'rpm_package':
-                row_.extend(["RPM-пакет", f"<b>Требуется пересборка RPM-пакета {fti_.source}!</b>"])
-            if fti_.source_type == 'python_package':
-                row_.extend(["Python-пакет", f"<b>Нужна пересборка Python-пакета {fti_.source}!</b>"])
-            if fti_.source_type == 'rebuilded_rpm_package':
-                row_.extend(["Пересобранный RPM-пакет", f"Исходники пакета {fti_.source} в {self.rpmbuild_path}"])
-            if fti_.source_type == 'file_from_folder':
-                source_ = fti_.source
-                if os.path.isabs(source_):
-                    source_ = os.path.relpath(source_, start=self.curdir)
-                row_.extend(["Компиляция Nuitka/Go", f"Компиляция в папке {source_}"])
-            if fti_.source_type == 'rebuilded_python_package':
-                row_.extend(["Пересобранный Python-пакет", f"Исходники пакета {fti_.source} в {self.pip_source_path}"])
-            if fti_.source_type == 'our_source':
-                row_.extend(["Наше расширение", f"Исходники пакета {fti_.source} в {self.src_dir}"])
+            row_ = [file_] + fti2type_and_source(fti_)
+            # if fti_.source_type == 'rpm_package':
+            #     row_.extend(["RPM-пакет", f"<b>Требуется пересборка RPM-пакета {fti_.source}!</b>"])
+            # if fti_.source_type == 'python_package':
+            #     row_.extend(["Python-пакет", f"<b>Нужна пересборка Python-пакета {fti_.source}!</b>"])
+            # if fti_.source_type == 'rebuilded_rpm_package':
+            #     row_.extend(["Пересобранный RPM-пакет", sources4rpm(fti_)])
+            # if fti_.source_type == 'file_from_folder':
+            #     source_ = fti_.source
+            #     if os.path.isabs(source_):
+            #         source_ = os.path.relpath(source_, start=self.curdir)
+            #     row_.extend(["Компиляция Nuitka/Go", f"Компиляция в папке {source_}"])
+            # if fti_.source_type == 'rebuilded_python_package':
+            #     row_.extend(["Пересобранный Python-пакет", sources4pip(fti_)])
+            # if fti_.source_type == 'our_source':
+            #     row_.extend(["Наше расширение", f"Исходники пакета {fti_.source} в {self.src_dir}"])
             binary_files_report.append(row_)
 
             if fti_.source_type == SourceType.rpm_package.value:
@@ -4183,7 +4241,7 @@ Nuitka zstandard
 
         terra_closure_packages = [p.strip('\n') for p in open(self.terra_rpms_closure).readlines()] + self.ps.terra
         for fpl_ in file_package_list:
-            if 'libQt5Core.so.5.15.11' in fpl_.filename:
+            if fpl_.filename.endswith('bin/clickhouse'):
                 wtf = 1
             if fpl_.package in terra_closure_packages and not fpl_.package in self.ps.terra_exclude:
                 ok = True
