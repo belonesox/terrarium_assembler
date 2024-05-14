@@ -3643,7 +3643,7 @@ Nuitka zstandard
                 with open(cloc_csv, newline='') as csvfile:
                     csv_r = csv.reader(csvfile, delimiter=',', quotechar='|')
                     for row in list(csv_r)[1:]:
-                        if 'Dockerfile' != row[1]:
+                        if row[1] not in ('Dockerfile', 'Assembly'):  # Scary files for someone...
                             row[-1] = int(float(row[-1]))
                             table_csv.append(row)
 
@@ -4539,6 +4539,193 @@ tar -v -c  --use-compress-program=pbzip2 -f svace-dirs.tar.bz2 $(find . -name ".
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
+    def stage_97_pack_generated_sources(self):
+        '''
+        pack generated/unpacked sources after_build_process
+        '''
+        import tarfile
+        import magic
+        
+        if not self.build_mode:
+            lines = [
+                f'''
+{sys.executable} {sys.argv[0]} --stage-pack-generated-sources "{self.args.specfile}"
+                ''' ]
+            mn_ = get_method_name()
+            self.lines2sh(mn_, lines, mn_)
+            return
+
+        if not self.args.stage_pack_generated_sources:
+            return
+
+        # time_prefix = datetime.datetime.now().replace(microsecond=0).isoformat().replace(':', '-')
+        # parentdir, curname = os.path.split(self.curdir)
+        # disabled_suffix = curname + '.tar.bz2'
+
+        banned_ext = ['.old', '.iso', '.egg-info',
+                        '.lock', '.tar.bz2', '.dblite', '.tmp', '.log', '.asm']
+        banned_start = []
+        banned_mid = ['/out', '/wtf', '.svace-dir', 
+                        '/test.', '/test/', '/.vagrant', 
+                        '/cache_',  '/.git/',
+                        'cachefilelist_', '/.image', '/!',
+                        '/.fingerprint/', '/BUILDROOT/', 'Dockerfile']
+
+
+        tbzname = os.path.join(self.curdir, "only-source-files-after-build.tar")
+        tar = tarfile.open(tbzname+'.bz2', "w:bz2")
+        # tar = tarfile.open(tbzname, "w")
+
+        magic_sources = '''
+GNU message catalog
+Git commit
+Grace project file
+Hewlett-Packard Graphics Language
+OpenPGP Public Key
+PGP public key
+SVG Scalable Vector Graphics
+SVG XML document
+empty
+symbolic link
+text
+very short file (no magic)
+public key
+
+
+
+'''.strip().split('\n')
+        
+        magic_nonsources = '''
+Acoustic
+Apache Avro
+Apache ORC
+Apache Parquet
+Byte-compiled
+Commodore
+Composite Document File
+Desktop Services Store
+DiskCopy
+Document File
+Dyalog APL
+ELF
+Embedded OpenType
+GTA script
+JPEG
+Lotus unknown worksheet
+MPEG
+Microsoft Excel
+MySQL table
+OpenDocument
+OpenDocument Drawing
+OpenDocument Drawingarchive data
+OpenPGP Secret Key
+PDF document
+PDP-11 UNIX/RT ldp
+PDP-11 old overlay
+PDP11
+PEM EC private key
+PEM RSA private key
+Photoshop
+PowerPoint
+QDOS object
+ROM image
+RPM v3.0 bin
+StarOffice
+TeX DVI file
+TrueType
+_BINARY_
+ar archive
+archive
+binary
+bitcode
+bitmap
+certificate
+compressed data
+core file
+dBase
+data
+executable
+icon resource
+raw G
+relocatable
+xBase
+Microsoft Word
+Certificate
+Serial=
+Matlab
+video
+Encoded Key
+64-bit x86_64 object
+object file
+cursor resource
+private key
+crash report
+byte-codes
+vCalendar
+Binary
+screen image
+Encryption
+object file
+Microsoft a.out
+MMDF mailbox
+IRIS Showcase
+BALANCE NS
+Sendmail frozen
+FoxPro
+KeyStore
+Zstandard dictionary
+NumPy array
+'''.strip().split('\n')
+        ...
+
+        def add_dir(dir_):
+            ...    
+            pdir = Path(dir_)
+            unknown_types = set()
+            def filter_(tarinfo):
+                ...
+                for s in banned_ext:
+                    if tarinfo.name.endswith(s):
+                        print(tarinfo.name)
+                        return None
+
+                for s in banned_start:
+                    if tarinfo.name.startswith(s):
+                        print(tarinfo.name)
+                        return None
+
+                for s in banned_mid:
+                    if s in tarinfo.name:
+                        print(tarinfo.name)
+                        return None
+
+                file_ = Path(tarinfo.name)
+                if not file_.is_dir() and file_.exists():
+                    m = magic.from_file(file_)  # empty,
+                    if m not in unknown_types:
+                        for s in magic_nonsources:
+                            if s in m:
+                                return
+                        ok = False
+                        for s in magic_sources:
+                            if s in m:
+                                ok = True
+                                break
+
+                        if not ok:
+                            unknown_types.add(m)
+                            print(tarinfo.name)
+                            print(m)
+                            ...
+                return tarinfo          
+
+            tar.add(dir_, dir_, recursive=True, filter=filter_)
+
+        add_dir(self.rpmbuild_path)
+        add_dir(self.src_path)
+        add_dir(self.pip_source_path)
+        tar.close() 
+        ...
 
     def stage_99_export_for_audit(self):
         '''
