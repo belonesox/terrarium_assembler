@@ -1033,8 +1033,8 @@ date
 export PATH="/usr/lib64/ccache:$PATH"
     """ % vars(self))
                 build_name = 'build_' + srcname
-
-                self.our_builddir2sourcedesc[ok_dir] = f'Компиляция {src}, сборка скриптом {build_name}'
+                shellname = fname2shname(build_name)
+                self.our_builddir2sourcedesc[ok_dir] = f'Компиляция {src}, сборка скриптом {shellname}'
 
                 lines.append(fR"""
 {bashash_ok_folders_strings(ok_dir, ['.venv', src_dir], [flags_, nflags],
@@ -3841,50 +3841,6 @@ Nuitka zstandard
 
         pass
 
-    # def pack_me(self):
-    #     if self.args.stage_pack_me:
-    #         return
-
-    #     time_prefix = datetime.datetime.now().replace(
-    #         microsecond=0).isoformat().replace(':', '-')
-    #     parentdir, curname = os.path.split(self.curdir)
-    #     disabled_suffix = curname + '.tar.bz2'
-
-    #     banned_ext = ['.old', '.iso', '.lock',
-    #                   disabled_suffix, '.dblite', '.tmp', '.log']
-    #     banned_start = ['tmp']
-    #     banned_mid = ['/out', '/wtf', '/ourwheel/', '/.vagrant', '/.git', '/.vscode', '/key/',
-    #                   '/tmp/', '/src.', '/bin.',  '/cache_', 'cachefilelist_', '/tmp', '/.image', '/!']
-
-    #     # there are regularly some files unaccessable for reading.
-    #     self.cmd('sudo chmod a+r /usr/lib/cups -R')
-    #     self.cmd('systemd-tmpfiles --remove dnf.conf')
-
-    #     def filter_(tarinfo):
-    #         for s in banned_ext:
-    #             if tarinfo.name.endswith(s):
-    #                 print(tarinfo.name)
-    #                 return None
-
-    #         for s in banned_start:
-    #             if tarinfo.name.startswith(s):
-    #                 print(tarinfo.name)
-    #                 return None
-
-    #         for s in banned_mid:
-    #             if s in tarinfo.name:
-    #                 print(tarinfo.name)
-    #                 return None
-
-    #         return tarinfo
-
-    #     tbzname = os.path.join(self.curdir,
-    #                            "%(time_prefix)s-%(curname)s.tar.bz2" % vars())
-    #     tar = tarfile.open(tbzname, "w:bz2")
-    #     tar.add(self.curdir, "./sources-for-audit",
-    #             recursive=True, filter=filter_)
-    #     tar.close()
-
     def load_file_package_list_from_rpms(self):
         file_package_list = []
         file2package = {}
@@ -4720,6 +4676,9 @@ NumPy array
                 return tarinfo          
 
             tar.add(dir_, dir_, recursive=True, filter=filter_)
+
+        for path_ in Path('.').glob('ta-*.sh'):
+            tar.add(path_)
 
         add_dir(self.nuitka_compiled_path)
         add_dir(self.rpmbuild_path)
