@@ -4721,6 +4721,7 @@ NumPy array
 
             tar.add(dir_, dir_, recursive=True, filter=filter_)
 
+        add_dir(self.nuitka_compiled_path)
         add_dir(self.rpmbuild_path)
         add_dir(self.src_path)
         add_dir(self.pip_source_path)
