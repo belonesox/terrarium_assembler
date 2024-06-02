@@ -624,6 +624,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         # self.start_dir = os.getcwd()
 
         self.disable_patchelf = False
+        # self.disable_patchelf = True
 
         need_patch = just_copy = need_exclude = None
         if 'bin_regexps' in spec:
@@ -796,7 +797,20 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         if 'optional_bin_patcher' in self.spec and os.path.exists(self.spec.optional_bin_patcher):
             self.optional_bin_patcher = self.spec.optional_bin_patcher
 
-        self.terra_package_names = " ".join([p for p in self.ps.terra if isinstance(p, str)])
+        rex_ver = re.compile(r"[\d\.]+")
+        def strip_rpm_version(p):
+            if not '-' in p:
+                return p
+            terms = p.split('-')
+            good_terms = []
+            for term in terms:
+                if rex_ver.match(term):
+                    break
+                good_terms.append(term)
+            return '-'.join(good_terms)
+
+        self.terra_package_names      = " ".join([p for p in self.ps.terra if isinstance(p, str)])
+        self.terra_package_names_only = " ".join([strip_rpm_version(p) for p in self.ps.terra if isinstance(p, str)])
 
         self.packages_to_rebuild = [p for p in self.ps.terra if isinstance(p, str)] + [p for p in self.ps.rebuild if isinstance(p, str)]
 
@@ -1407,7 +1421,7 @@ popd
     #         res = ''
     #         for try_ in range(3):
     #             try:
-    #                 res = ",".join(self.lines_from_cmd(['repoquery', '-y'] + options_ + pl_))
+    #                 res = ",".join(self.lines_from_cmd(['dnf', 'repoquery', '-y'] + options_ + pl_))
     #                 break
     #             except subprocess.CalledProcessError:
     #                 #  died with <Signals.SIGSEGV: 11>.
@@ -1564,7 +1578,7 @@ popd
         #         if 'i686' in file:
         #             assert(True)
 
-        candidates = self.lines_from_cmd(['repoquery',
+        candidates = self.lines_from_cmd(['dnf', 'repoquery',
                                               '-y',
                                               '--installed',
                                               '--archlist=x86_64,noarch',
@@ -1688,6 +1702,7 @@ popd
             with open(self.ld_so_path, 'r') as lf:
                 self.interpreter = lf.read().strip()
             patched_interpreter = self.fix_elf(self.toolbox_path(self.interpreter))
+            # patched_interpreter = self.fix_elf(self.interpreter)
             self.add(patched_interpreter, self.out_interpreter)
             self.bin_files.add( self.out_interpreter )
 
@@ -2566,7 +2581,9 @@ done
         lines = []
         lines.append(f'''
 {self.tb_mod} bash -c "rpm -qa --queryformat '[%{{=NAME}}{ROW_SPLIT}%{{=VERSION}}{ROW_SPLIT}%{{=RELEASE}}{ROW_SPLIT}%{{=BUILDTIME}}{ROW_SPLIT}%{{=BUILDHOST}}{ROW_SPLIT}%{{FILENAMES}}\\n]' > {self.file_package_list_from_rpms} "
-{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --queryformat "%{{name}}" --resolve --recursive --cacheonly --requires {self.terra_package_names} > {self.terra_rpms_closure}
+{self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --queryformat "%{{name}}" --resolve --recursive --cacheonly --requires {self.terra_package_names_only} > {self.terra_rpms_closure}-1
+{self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --queryformat "%{{name}}" --cacheonly {self.terra_package_names_only} > {self.terra_rpms_closure}-2
+{self.tb_mod} sort -u {self.terra_rpms_closure}-1 {self.terra_rpms_closure}-2 > {self.terra_rpms_closure}
 {self.tb_mod} rpm -qa --queryformat "%{{NAME}} " > tmp/rpm-packages-names-list.txt
 {self.tb_mod} patchelf --print-interpreter /usr/bin/createrepo > {self.ld_so_path}
 ''')
@@ -2758,8 +2775,9 @@ createrepo {self.rpmrepo_path}
 {self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {packages}
 {scmd_builddep}
 {self.tb_mod} sudo dnf install --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {packages}
-{self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names} > {self.file_list_from_terra_rpms}
-{self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names} > {self.file_list_from_deps_rpms}
+{self.tb_mod} sudo dnf update --refresh --nodocs --nogpgcheck --disablerepo="*" --enablerepo="ta"  -y --allowerasing {packages}
+{self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --cacheonly --list {self.terra_package_names_only} > {self.file_list_from_terra_rpms}
+{self.tb_mod} sudo dnf repoquery -y --installed --archlist=x86_64,noarch --resolve --recursive --cacheonly --requires --list {self.terra_package_names_only} > {self.file_list_from_deps_rpms}
 {self.tb_mod} cat {self.file_list_from_terra_rpms} {self.file_list_from_deps_rpms} > {self.file_list_from_rpms}
 """
 #{self.tb_mod} sudo repoquery -y --installed --archlist=x86_64,noarch --docfiles --resolve --recursive --cacheonly --requires --list {terra_package_names} > {self.doc_list_from_deps_rpms}
@@ -4111,6 +4129,8 @@ Nuitka zstandard
         mkdir_p(root_dir)
 
         def copy_file_to_environment(f):
+            if 'grafana-server' in f:
+                ...
 
             if not self.should_copy(f):
                 assert(False)
