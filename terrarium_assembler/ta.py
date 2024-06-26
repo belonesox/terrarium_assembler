@@ -485,8 +485,8 @@ class TerrariumAssembler:
         ap = argparse.ArgumentParser(
             description='Create a «portable linux folder»-application')
         # ap.add_argument('--output', required=True, help='Destination directory')
-        ap.add_argument('--debug', default=False,
-                        action='store_true', help='Debug version of release')
+        # ap.add_argument('--debug', default=False,
+        #                 action='store_true', help='Debug version of release')
         ap.add_argument('--docs', default=False, action='store_true',
                         help='Output documentation version')
 
@@ -583,9 +583,10 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         self.tvars = edict()
         self.tvars.python_version_1, self.tvars.python_version_2 = sys.version_info[:2]
         self.tvars.py_ext = ".pyc"
-        if self.args.debug:
-            self.tvars.py_ext = ".py"
-        self.tvars.release = not self.args.debug
+        # if self.spec.debug:
+        #     self.tvars.py_ext = ".py"
+        # self.tvars.release = not self.spec.debug
+        self.tvars.release = True #not self.spec.debug
         self.tvars.fc_version = ''
         self.tvars.python_major_version = sys.version_info.major
         self.tvars.python_minor_version = sys.version_info.minor
@@ -598,10 +599,13 @@ sudo apt-get install -y firefox-esr xcompmgr || true
             pass  # Building not on Fedora.
 
         self.spec, vars_ = yaml_load(specfile_, self.tvars)
+        if not 'debug' in self.spec:
+            self.spec.debug = False
         self.tvars = edict(vars_)
         spec = self.spec
         self.tvars.python_version_1 = self.spec.python_major_version
         self.tvars.python_version_2 = self.spec.python_minor_version
+        self.tvars.python_version = f'{self.tvars.python_version_1}.{self.tvars.python_version_2}'
 
         for term in self.args.override_spec:
             if '=' in term:
@@ -640,7 +644,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
             need_patch=need_patch,
             just_copy=just_copy,
             need_exclude=need_exclude,
-            debug=self.args.debug,
+            debug=False, #self.args.debug,
         )
 
         self.package_modes = 'iso'
@@ -885,7 +889,16 @@ fi
                     if 'acl-' in dirname:
                         wtf = 1
                     package_name = dirname[:-len(suffix)]
-                    p_ = version_utils.rpm.package(package_name)
+                    p_ = None
+                    try:
+                        p_ = version_utils.rpm.package(package_name)
+                    except Exception as ex_:
+                        try:
+                            p_ = version_utils.rpm.package(package_name, arch_included=False)
+                        except Exception:
+                            print(f'Cannot parse {package_name}')
+                            continue
+                        p_.arch = 'all' 
                     if p_.arch not in packages_:
                         packages_[p_.arch] = {}
                     if not p_.name in packages_[p_.arch]:
@@ -991,6 +1004,7 @@ d="$(dirname "$x")"
 ''')
 
             bash_line('''export PIPENV_VENV_IN_PROJECT=1\n''')
+            bash_line('''export XDG_RUNTIME_DIR=/run/user/$(id -u)\n''')
 
             for k, v in self.tvars.items():
                 if isinstance(v, str) or isinstance(v, int):
@@ -1364,7 +1378,7 @@ popd
         if not parts:
             return False
 
-        if not self.args.debug:
+        if not self.spec.debug:
             if (parts[0] not in ["lib", "lib64", "libexec"]) and (parts[0] != ['bin', 'bash', 'sbin']):
                 return False
         parts.pop(0)
@@ -1974,7 +1988,7 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
             return
 
         terra_ = False
-        if self.args.debug:
+        if self.spec.debug:
             terra_ = True
 
         if not terra_:
@@ -1984,23 +1998,55 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
         root_dir = self.root_dir
         os.chdir(self.curdir)
 
-        pipdir = ''
-        for pdir in ('github-belonesox-pip', 'pip'):
-            pipdir = os.path.join('in', 'src', pdir)
-            if os.path.exists(pipdir):
+        tadapter_dir = ''
+        for dir_ in (['terrarium_adapter']):
+            tadapter_dir = os.path.join('in', 'src', dir_)
+            if os.path.exists(tadapter_dir):
                 break
 
-        # if not pipdir:
-        #     return
-        # os.chdir(pipdir)
-        # # os.chdir(os.path.join('in', 'src', 'github-belonesox-pip'))
-        # scmd = f'''{self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
-        # os.system(scmd)
+        if tadapter_dir and os.path.exists(tadapter_dir):
+            os.chdir(tadapter_dir)
+            scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
+            os.system(scmd)
 
-        scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 -m ensurepip --root / --upgrade '''
-        self.cmd(scmd)
-        scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 -m pip install wheel '''
-        self.cmd(scmd)
+        os.chdir(self.curdir)
+
+        pip_main = Path(f'out/lib64/python{self.tvars.python_version}/site-packages/pip/__main__.py')
+        pip_main_txt = pip_main.read_text()
+        ta_import = '''
+try:
+    import terrarium_adapter
+except:
+    pass    
+'''
+        if not ta_import in pip_main_txt:
+            pip_main_txt = '\n'.join([ta_import, pip_main_txt])
+        pip_main.write_text(pip_main_txt)            
+        ...
+
+        # ensurepip_init = Path(f'out/lib64/python{self.tvars.python_version}/ensurepip/__init__.py')
+        # ensurepip_init_txt = ensurepip_init.read_text()
+        # ta_import = '''import terrarium_adapter'''
+        # if not ensurepip_init_txt.startswith(ta_import):
+        #     ensurepip_init_txt = '\n'.join([ta_import, ensurepip_init_txt])
+        # ensurepip_init.write_text(ensurepip_init_txt)            
+
+        # pipdir = ''
+        # for pdir in ('github-belonesox-pip', 'pip'):
+        #     pipdir = os.path.join('in', 'src', pdir)
+        #     if os.path.exists(pipdir):
+        #         break
+
+        # if pipdir and os.path.exists(pipdir):
+        #     os.chdir(pipdir)
+        # # # os.chdir(os.path.join('in', 'src', 'github-belonesox-pip'))
+        #     scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 setup.py install --single-version-externally-managed --root / '''
+        #     os.system(scmd)
+
+        # scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 -m ensurepip --root / --upgrade '''
+        # self.cmd(scmd)
+        # scmd = f'''{self.tb_mod} {self.root_dir}/ebin/python3 -m pip install wheel '''
+        # self.cmd(scmd)
 
         os.chdir(self.curdir)
         args = self.args
@@ -2024,10 +2070,11 @@ tar -cvf  {in_src}/{self.src_tar_filename} {in_src}
 # {self.root_dir}/ebin/python3 -m pip install {pip_args_} {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location --no-index
 #             '''
         scmd = f'''
-{self.root_dir}/ebin/python3 -m pip install {pip_args_}  {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
+{self.tb_mod} {self.root_dir}/ebin/python3 -m pip install {pip_args_}  {findlinks_mod} --force-reinstall --ignore-installed --no-warn-script-location
         '''
         os.chdir(self.curdir)
         self.cmd(scmd)
+        ...
 
         # os.chdir(self.curdir)
         # self.cmd(scmd)
@@ -2690,6 +2737,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                             scmd = f'''
     DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {line}
                             '''
+                        scmd = scmd.format(profile_name=profile_name, script_name=script_name)    
                         scmds.append(scmd)
 
                     lines2.append("\n".join(scmds))
@@ -2897,7 +2945,10 @@ rm -f {self.our_whl_path}/*
 {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
 {self.tb_mod} rm -f Pipfile*
 {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
-{self.tb_mod} ./.venv/bin/python3 -m pip install {self.base_whl_path}/*.whl --force-reinstall  --no-cache-dir --no-index
+
+if ls -d ./{self.base_whl_path}/*.whl 1>/dev/null 2>/dev/null; then
+    {self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{self.base_whl_path}/*.whl` --force-reinstall  --no-cache-dir --no-index
+fi
 '''
 
 #{self.tb_mod} touch Pipfile
@@ -3090,8 +3141,8 @@ done
     def base_wheels_string(self):
         pip_targets, _ = self.get_pip_targets_and_reqs_from_sources(terra=False)
         pip_targets_ = " ".join([r for r in pip_targets if '==' in r])
-        if not pip_targets_:
-            pip_targets_ = 'pip==23.2.1'
+        # if not pip_targets_:
+        #     pip_targets_ = 'pip==23.2.1'
         return pip_targets_
 
     def stage_21_download_base_wheels(self):
@@ -3112,9 +3163,9 @@ done
         bws =  self.base_wheels_string()
 
         # pipenv environment does not exists we using regular python to download base packages.
-        # scmd = 'date'
-        # if bws:
-        scmd = f"python{self.python_version_for_build()} -m pip download  {bws} --dest {self.base_whl_path}  --default-timeout=1000 "
+        scmd = 'date'
+        if bws:
+            scmd = f"python{self.python_version_for_build()} -m pip download  {bws} --dest {self.base_whl_path}  --default-timeout=1000 "
         lines.append(f'''
 {bashash_ok_folders_strings(self.base_whl_path, [], [bws],
         f"Looks required base wheels already downloaded"
@@ -4017,7 +4068,8 @@ Nuitka zstandard
                         print(f"Processing template «{fname_}» type «{m}»...")
                         if os.path.islink(fname_):
                             linkto = os.readlink(fname_)
-                            os.symlink(linkto, out_fname_)
+                            if not os.path.exists(out_fname_):
+                                os.symlink(linkto, out_fname_)
                         else:
                             processed_ = False
                             if fname_.endswith('.copy-file'):
@@ -4081,7 +4133,7 @@ Nuitka zstandard
 
         packages_to_deploy = []
         pips_to_deploy = []
-        if self.args.debug:
+        if self.spec.debug:
             packages_to_deploy += self.ps.terra + self.ps.build
             pips_to_deploy = self.pp.pip()
         else:
@@ -4144,7 +4196,7 @@ Nuitka zstandard
 
             if self.br.is_just_copy(f):
                 return self.add(f)
-            elif self.args.debug and f.startswith("/usr/include"):
+            elif self.spec.debug and f.startswith("/usr/include"):
                 return self.add(f)
             else:
                 libfile = f
@@ -4386,8 +4438,8 @@ Nuitka zstandard
 
         install_templates(root_dir, args)
         self.install_terra_pythons()
-        # install_templates(root_dir, args)
-        # self.install_terra_pythons()
+        install_templates(root_dir, args)
+        self.install_terra_pythons()
 
         # if self.args.debug:
         #     self.overwrite_mode = True
