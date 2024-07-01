@@ -116,3 +116,4 @@ demo/out*
 *.tar.gz
 docs/.$*
 wtfm
+--obj

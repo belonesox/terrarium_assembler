@@ -4069,7 +4069,11 @@ Nuitka zstandard
                         if os.path.islink(fname_):
                             linkto = os.readlink(fname_)
                             if not os.path.exists(out_fname_):
-                                os.symlink(linkto, out_fname_)
+                                try:
+                                    os.symlink(linkto, out_fname_)
+                                except Exception as ex_:
+                                    # !!! разобраться какого хрена тут  FileExistsError: [Errno 17] File exists: './flexiblas/libflexiblas_netlib.so' -> '/home/admin/dm-linux-client-building/out/./lib64/libflexiblas_netlib.so'
+                                    ...    
                         else:
                             processed_ = False
                             if fname_.endswith('.copy-file'):
