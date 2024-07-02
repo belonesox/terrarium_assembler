@@ -327,7 +327,7 @@ class PackagesSpec:
         '''
         Add some base-packages to «build» list
         '''
-        for p_ in ['git', 'mc', 'pipenv']:
+        for p_ in ['git', 'mc', 'python3-virtualenv']:
             if p_ not in self.build:
                 self.build.append(p_)
 
@@ -663,7 +663,7 @@ sudo apt-get install -y firefox-esr xcompmgr || true
                                  'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
-                              'python3-wheel', 'python3-pip', 'pipenv', 'e2fsprogs', 'git',
+                              'python3-wheel', 'python3-pip', 'python3-virtualenv', 'e2fsprogs', 'git',
                               'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel',
                               #WTF, why they not downloaded as deps for python3-devel? Todo!
                               # https://github.com/rpm-software-management/dnf/issues/1998
@@ -1003,9 +1003,6 @@ x="$(readlink -f "$0")"
 d="$(dirname "$x")"
 ''')
 
-            bash_line('''export PIPENV_VENV_IN_PROJECT=1\n''')
-            # if 'pip_version' in self.spec:
-            #     bash_line('''export VIRTUALENV_PIP=1\n''')
             bash_line('''export XDG_RUNTIME_DIR=/run/user/$(id -u)\n''')
 
             for k, v in self.tvars.items():
@@ -2943,21 +2940,22 @@ rm -f {self.our_whl_path}/*
         os.chdir(self.curdir)
 
         lines = []
-# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
-# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
-# {self.tb_mod} rm -f Pipfile*
         scmd = f'''
 {self.tb_mod} bash -c "rm -rf .venv || true"
+DOWNLOADED_PIP_WHL=`ls -d ./in/bin/fc38/external_python_wheels_fixed_versions/pip-*.whl || true`
+if [[ $DOWNLOADED_PIP_WHL ]]; then
 {self.tb_mod} virtualenv .venv --python python{self.python_version_for_build()} --no-pip
+else
+{self.tb_mod} virtualenv .venv --python python{self.python_version_for_build()} 
+fi
 
 if ls -d ./{self.base_whl_path}/*.whl 1>/dev/null 2>/dev/null; then
-    DOWNLOADED_PIP_WHL=`ls -d ./in/bin/fc38/external_python_wheels_fixed_versions/pip-*.whl || true`
-    {self.tb_mod} ./.venv/bin/python3 $DOWNLOADED_PIP_WHL/pip install $DOWNLOADED_PIP_WHL --no-index
+    if [[ $DOWNLOADED_PIP_WHL ]]; then
+        {self.tb_mod} ./.venv/bin/python3 $DOWNLOADED_PIP_WHL/pip install $DOWNLOADED_PIP_WHL --no-index
+    fi    
     {self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{self.base_whl_path}/*.whl` --force-reinstall  --no-cache-dir --no-index
 fi
 '''
-
-#{self.tb_mod} touch Pipfile
 
         lines.append(scmd)
         mn_ = get_method_name()
@@ -2975,19 +2973,23 @@ fi
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
         ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
 
-# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
-# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
-
         scmd = f'''
 {bashash_ok_folders_strings('.venv', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path], [],
         f"Looks like dont need to update .venv"
         )}
 
 {self.tb_mod} bash -c "rm -rf .venv || true"
+
+if [[ $DOWNLOADED_PIP_WHL ]]; then
 {self.tb_mod} virtualenv .venv --python python{self.python_version_for_build()} --no-pip
+else
+{self.tb_mod} virtualenv .venv --python python{self.python_version_for_build()} 
+fi
 
 DOWNLOADED_PIP_WHL=`ls -d ./in/bin/fc38/external_python_wheels_fixed_versions/pip-*.whl || true`
-{self.tb_mod} ./.venv/bin/python3 $DOWNLOADED_PIP_WHL/pip install $DOWNLOADED_PIP_WHL --no-index
+if [[ $DOWNLOADED_PIP_WHL ]]; then
+    {self.tb_mod} ./.venv/bin/python3 $DOWNLOADED_PIP_WHL/pip install $DOWNLOADED_PIP_WHL --no-index
+fi    
 
 {self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall  --no-cache-dir --no-index
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {self.pip_list}
