@@ -1004,6 +1004,8 @@ d="$(dirname "$x")"
 ''')
 
             bash_line('''export PIPENV_VENV_IN_PROJECT=1\n''')
+            # if 'pip_version' in self.spec:
+            #     bash_line('''export VIRTUALENV_PIP=1\n''')
             bash_line('''export XDG_RUNTIME_DIR=/run/user/$(id -u)\n''')
 
             for k, v in self.tvars.items():
@@ -2941,12 +2943,16 @@ rm -f {self.our_whl_path}/*
         os.chdir(self.curdir)
 
         lines = []
+# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
+# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
+# {self.tb_mod} rm -f Pipfile*
         scmd = f'''
-{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
-{self.tb_mod} rm -f Pipfile*
-{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
+{self.tb_mod} bash -c "rm -rf .venv || true"
+{self.tb_mod} virtualenv .venv --python python{self.python_version_for_build()} --no-pip
 
 if ls -d ./{self.base_whl_path}/*.whl 1>/dev/null 2>/dev/null; then
+    DOWNLOADED_PIP_WHL=`ls -d ./in/bin/fc38/external_python_wheels_fixed_versions/pip-*.whl || true`
+    {self.tb_mod} ./.venv/bin/python3 $DOWNLOADED_PIP_WHL/pip install $DOWNLOADED_PIP_WHL --no-index
     {self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{self.base_whl_path}/*.whl` --force-reinstall  --no-cache-dir --no-index
 fi
 '''
@@ -2969,13 +2975,20 @@ fi
         ext_whl_path = os.path.relpath(self.ext_whl_path, self.curdir)
         ext_compiled_tar_path = os.path.relpath(self.ext_compiled_tar_path, self.curdir)
 
+# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
+# {self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
+
         scmd = f'''
 {bashash_ok_folders_strings('.venv', [self.our_whl_path, self.ext_whl_path, ext_compiled_tar_path, self.base_whl_path], [],
         f"Looks like dont need to update .venv"
         )}
 
-{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv --rm || true"
-{self.tb_mod} bash -c "PIPENV_VENV_IN_PROJECT=1 python3 -m pipenv install --python python{self.python_version_for_build()}"
+{self.tb_mod} bash -c "rm -rf .venv || true"
+{self.tb_mod} virtualenv .venv --python python{self.python_version_for_build()} --no-pip
+
+DOWNLOADED_PIP_WHL=`ls -d ./in/bin/fc38/external_python_wheels_fixed_versions/pip-*.whl || true`
+{self.tb_mod} ./.venv/bin/python3 $DOWNLOADED_PIP_WHL/pip install $DOWNLOADED_PIP_WHL --no-index
+
 {self.tb_mod} ./.venv/bin/python3 -m pip install `ls ./{our_whl_path}/*.whl` `ls ./{ext_whl_path}/*.whl` `ls ./{ext_compiled_tar_path}/*.whl` --find-links="{our_whl_path}" --find-links="{ext_compiled_tar_path}" --find-links="{ext_whl_path}"  --force-reinstall  --no-cache-dir --no-index
 {self.tb_mod} ./.venv/bin/python3 -m pip list > {self.pip_list}
 {self.tb_mod} ./.venv/bin/python3 -m pip list --format json > {self.pip_list_json}
@@ -3148,7 +3161,7 @@ done
     def stage_21_download_base_wheels(self):
         '''
         Consistent downloading only python packages with fixed versions.
-        They should be downloaded before building our packages and creating pipenv environment.
+        They should be downloaded before building our packages and creating virtualenv environment.
         '''
         os.chdir(self.curdir)
         # os.chdir(self.out_dir)
@@ -3162,7 +3175,7 @@ done
 
         bws =  self.base_wheels_string()
 
-        # pipenv environment does not exists we using regular python to download base packages.
+        # venv environment does not exists we using regular python to download base packages.
         scmd = 'date'
         if bws:
             scmd = f"python{self.python_version_for_build()} -m pip download  {bws} --dest {self.base_whl_path}  --default-timeout=1000 "
