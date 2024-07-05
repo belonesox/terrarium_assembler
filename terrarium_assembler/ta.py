@@ -370,7 +370,9 @@ class TestProfileSpec:
     Specification for a test profile
     '''
     distro:   str = ''
-    setup:    str = ''
+    packages: Optional[str] = ''
+    setup:    Optional[str] = ''
+    wait:     Optional[str] = ''
 
     def canonical_distro_name(self):
         name_ = self.distro.replace(':', '-')
@@ -397,13 +399,22 @@ class TestProfiles(Dict[str, TestProfileSpec]):
     ...
 
 
+# @dc.dataclass
+# class TestScript:
+#     '''
+#     Test Script
+#     '''
+#     script:       str = ''
+#     profiles:     str = ''
+
+
 @dc.dataclass
-class TestSpec:
+class TestRunSpec:
     '''
     Specification for a test
     '''
-    name:       str = ''
-    command:    str = ''
+    script:       str = ''
+    profiles:     str = ''
 
 
 @dc.dataclass
@@ -412,7 +423,9 @@ class TestsSpec:
         Specification for tests
     '''
     profiles: Optional[TestProfiles] = dc.field(default_factory=TestProfiles)
-    scripts: Optional[List] = dc.field(default_factory=list)
+    scripts: Optional[Dict] = dc.field(default_factory=dict)
+    runs_before_compile: Optional[List] = dc.field(default_factory=list)
+    runs_after_compile: Optional[List] = dc.field(default_factory=list)
 
     def __post_init__(self):
         if not self.profiles:
@@ -647,6 +660,11 @@ sudo apt-get install -y firefox-esr xcompmgr || true
             debug=False, #self.args.debug,
         )
 
+        self.tests = None
+        if 'tests' in spec:
+            self.tests = dacite.from_dict(data_class=TestsSpec, data=spec.tests, config=dacite.Config(cast=[TestProfiles, TestProfileSpec]))
+
+
         self.package_modes = 'iso'
         if 'packaging' in self.spec:
             if isinstance(self.spec.packaging, list):
@@ -658,18 +676,18 @@ sudo apt-get install -y firefox-esr xcompmgr || true
             self.args.stage_make_packages = self.package_modes
 
         self.minimal_packages = ['libtool', 'dnf-utils', 'createrepo', 'rpm-build',
-                                  'system-rpm-config', 'annobin-plugin-gcc', 'gcc-plugin-annobin',
-                                  'gcc',
-                                 'md5deep']
+                                'system-rpm-config', 'annobin-plugin-gcc', 'gcc-plugin-annobin',
+                                'gcc',
+                                'md5deep']
 
         self.need_packages = ['patchelf', 'ccache', 'gcc', 'gcc-c++', 'gcc-gfortran', 'chrpath', 'makeself', 'wget',
-                              'python3-wheel', 'python3-pip', 'python3-virtualenv', 'e2fsprogs', 'git',
-                              'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel',
-                              #WTF, why they not downloaded as deps for python3-devel? Todo!
-                              # https://github.com/rpm-software-management/dnf/issues/1998
-                              'pyproject-rpm-macros',
-                              'python3-rpm-generators', 'python-rpm-macros', 'python3-rpm-macros',
-                              ]
+                            'python3-wheel', 'python3-pip', 'python3-virtualenv', 'e2fsprogs', 'git',
+                            'genisoimage', 'libtool', 'makeself', 'pbzip2', 'jq', 'curl', 'yum', 'nfpm', 'python3-devel',
+                            #WTF, why they not downloaded as deps for python3-devel? Todo!
+                            # https://github.com/rpm-software-management/dnf/issues/1998
+                            'pyproject-rpm-macros',
+                            'python3-rpm-generators', 'python-rpm-macros', 'python3-rpm-macros',
+                            ]
 
         self.minimal_pips = ['wheel']
         self.need_pips = ['pip-audit', 'pipdeptree', 'ordered-set', 'python-magic', 'Scons', 'cyclonedx-bom']
@@ -709,9 +727,6 @@ sudo apt-get install -y firefox-esr xcompmgr || true
         # self.ps = PackagesSpec(spec.packages)
         # self.pp = PythonPackages(spec.python_packages)
         self.pp = dacite.from_dict(data_class=PythonPackages, data=spec.python_packages)
-        self.tests = None
-        if 'tests' in spec:
-            self.tests = dacite.from_dict(data_class=TestsSpec, data=spec.tests, config=dacite.Config(cast=[TestProfiles, TestProfileSpec]))
         self.gp = None
         if 'go_packages' in spec:
             self.gp = GoPackages(**spec.go_packages)
@@ -2676,7 +2691,14 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         self.lines2sh(mn_, lines, mn_)
 
 
-    def generate_tests(self, before_compile=False):
+    def generate_tests_scripts(self, before_compile=False):
+        '''
+        Generate tests files by specs
+        '''
+        lines = []
+        if not self.tests or not self.tests.runs_before_compile:
+            return lines
+
         '''
         Generate tests files by specs
         '''
@@ -2684,36 +2706,22 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         if not self.tests:
             return lines
 
-        # for p_ in self.tests.profiles:
-        #     profile_name = p_
-        #     distro_ = self.tests.profiles[p_].distro
-        #     box_name = test_box_name(self.container_name, profile_name, distro_)
-        for strace in [False, True]:
-            for s_ in self.tests.scripts:
-                for p_ in s_.profiles:
-                    profile_name = p_
-
-                    if before_compile:
-                        if profile_name != 'builder':
-                            continue
-                    else:
-                        if profile_name == 'builder':
-                            continue
-
-                    box_name = self.container_name
-                    if profile_name != 'builder':
-                        distro_ = self.tests.profiles[p_].distro
-                        box_name = test_box_name(self.container_name, profile_name, distro_)
-
-                    script_name = s_.name
-                    if script_name == 'screen-fast':
-                        wtf = 1
-
-
-                    if not strace and 'trace' in s_ and s_.trace and s_.trace not in ['both']:
+        for r_ in self.tests.runs_after_compile:
+            script_name = r_.script
+            profiles_ = []
+            if isinstance(r_.profiles, str):
+                profiles_ = [r_.profiles]
+            if isinstance(r_.profiles, list):
+                profiles_ = r_.profiles
+            for profile_name in profiles_:
+                prof_ = self.tests.profiles[profile_name]
+                distro_ = prof_.distro
+                box_name = test_box_name(self.container_name, profile_name, distro_)
+                for strace in [False, True]:
+                    if not strace and 'trace' in r_ and r_.trace and r_.trace not in ['both']:
                         # от отказываемся от обычного прогона без трейса
                         continue
-                    if strace and not ('trace' in s_ and s_.trace):
+                    if strace and not ('trace' in r_ and r_.trace):
                         # от отказываемся от трейса-прогона
                         continue
                     strace_mod = ''
@@ -2722,19 +2730,13 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                     if strace:
                         strace_mod = f'strace -o {self.strace_files_path}/strace-{box_name}-{script_name}.log -f -e trace=file '
                         shell_name = '-'.join(['test', profile_name, script_name, 'strace'])
-                    if profile_name != 'builder':
-                        box_name = test_box_name(self.container_name, profile_name, distro_)
+                    shell_name = shell_name.replace('_', '-')
                     scmd = ''
 
                     scmds = []
-                    for line in s_.command.split('\n'):
-                        if profile_name == 'builder':
-                            scmd = f'''
-    toolbox -c {box_name} run {line}
-                            '''
-                        else:
-                            scmd = f'''
-    DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {line}
+                    for line in self.spec.tests.scripts[script_name].split('\n'):
+                        scmd = f'''
+DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {line}
                             '''
                         scmd = scmd.format(profile_name=profile_name, script_name=script_name)    
                         scmds.append(scmd)
@@ -2750,7 +2752,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         '''
         Run tests just after terrarium minimization
         '''
-        lines = self.generate_tests()
+        lines = self.generate_tests_scripts()
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
@@ -4542,17 +4544,54 @@ Nuitka zstandard
 
         if self.tests and isinstance(self.tests, TestsSpec):
             hostname = socket.gethostname()
-            for p_ in self.tests.profiles:
+            for p_, prof_ in self.tests.profiles.items():
                 profile_name = p_
-                distro_ = self.tests.profiles[p_].distro
-                setup_cmd = ''
-                if 'setup' in self.tests.profiles[p_]:
-                    setup_cmd = self.tests.profiles[p_].setup
+                distro_ = prof_.distro
+                additional_packages_opt = ''
+                if 'packages' in prof_:
+                    packages_list = prof_.packages
+                    if isinstance(packages_list, list):
+                        packages_list = ' '.join(packages_list)
+                    additional_packages_opt = f' --additional-packages "{packages_list}" '
+                additional_opts = ''
+                if 'opts' in prof_:
+                    additional_opts = prof_.opts
+                setup_cmds = ''
+                if 'setup' in prof_:
+                    setup_cmds = prof_.setup
+                wait_cmd = ''
+                if 'wait' in prof_:
+                    wait_cmd = prof_.wait
                 box_name = test_box_name(self.container_name, profile_name, distro_)
                 lines.append(f'''
-DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {distro_}  || true
-DBX_NON_INTERACTIVE=1  distrobox enter {box_name} -- {setup_cmd}
+DBX_NON_INTERACTIVE=1  distrobox create --name {box_name} --image {distro_} {additional_packages_opt} {additional_opts} || true
                 ''')
+                if wait_cmd:    
+                    lines.append(f'''
+SECONDS=0
+until  distrobox enter {box_name} -- {wait_cmd}
+do
+    if (( SECONDS > 600 ))
+    then
+        echo "Giving up for {box_name}..."
+        exit 1
+    fi
+
+    echo "Waiting  $SECONDS for {box_name} ..."
+    sleep 5
+done
+
+''')
+
+                if not setup_cmds:
+                    setup_cmds = 'uname -a '
+
+                for line in setup_cmds.split('\n'):
+                    if line.strip() != '':
+                        scmd = f'''
+DBX_NON_INTERACTIVE=1  distrobox enter --name {box_name} -- {line}
+                    '''
+                        lines.append(scmd)
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -4870,11 +4909,23 @@ done
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
+
     def stage_39_run_tests_before_compile(self):
         '''
         Run tests before nuitka compiling
         '''
-        lines = self.generate_tests(before_compile=True)
+        lines = []
+        if not self.tests or not self.tests.runs_before_compile:
+            return lines
+
+        for run_ in self.tests.runs_before_compile:
+            s_ = self.tests.scripts[run_]
+            for line in s_.split('\n'):
+                scmd = f'''
+toolbox -c {self.container_name} run {line}
+                '''
+                lines.append(scmd)
+            ...
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
@@ -4883,30 +4934,21 @@ done
         '''
         Run tests just after terrarium forming
         '''
-        lines = self.generate_tests()
+        lines = self.generate_tests_scripts()
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
-    # def stage_53_run_tests_with_strace(self):
-    #     '''
-    #     Run tests just after terrarium forming
-    #     '''
-    #     lines = self.generate_tests(strace=True)
-    #     mn_ = get_method_name()
-    #     self.lines2sh(mn_, lines, mn_)
-
-
     def write_shell_file_for_method(self, mn_):
-        '''
-        Write shell file how to call a function
-        '''
-        stage_ = fname2stage(mn_).replace('_', '-')
-        lines = [
-            f'''
+            '''
+            Write shell file how to call a function
+            '''
+            stage_ = fname2stage(mn_).replace('_', '-')
+            lines = [
+                f'''
 {sys.executable} {sys.argv[0]} "{self.args.specfile}" --{stage_}
-            ''']
-        self.lines2sh(mn_, lines, mn_)
-        return
+                ''']
+            self.lines2sh(mn_, lines, mn_)
+            return
 
 
     def stage_54_analyze_used_files(self):
