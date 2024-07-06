@@ -2312,7 +2312,7 @@ createrepo {self.tarrepo_path}
         packages = " ".join(self.packages_to_rebuild)
         scmd = f'''dnf download --skip-broken --downloaddir {self.srpms_path} --arch=x86_64  --arch=noarch --source  {packages} -y '''
         lines.append(f'''
-{bashash_ok_folders_strings(self.srpms_path, [], [scmd],
+{bashash_ok_folders_strings(self.srpms_path, [], [scmd, self.ps.terra_exclude],
         f"Looks required SRPMs already downloaded"
         )}
 rm -rf '{self.srpms_path}'
@@ -2321,6 +2321,14 @@ rm -rf '{self.srpms_path}'
 {self.create_repo_cmd}
 {save_state_hash(self.srpms_path)}
 ''')
+
+        for pack_ in self.ps.terra_exclude or []:
+            scmd = f'rm -f {self.srpms_path}/{pack_}* '
+            lines.append(scmd)
+
+        # for pack_ in self.ps.exclude_prefix or []:
+        #     scmd = f'rm -f {self.srpms_path}/{pack_}* '
+        #     lines.append(scmd)
 
         # for pack_ in self.ps.exclude_prefix or []:
         #     scmd = f'rm -f {self.srpms_path}/{pack_}* '
