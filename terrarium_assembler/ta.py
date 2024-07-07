@@ -572,6 +572,7 @@ class TerrariumAssembler:
 sudo dnf install -y toolbox md5deep git git-lfs createrepo patchelf rsync tmux htop distrobox x11vnc tigervnc xorg-x11-server-Xvfb xcompmgr fuse-overlayfs jq || true
 sudo apt-get install -y podman-toolbox md5deep git git-lfs createrepo-c patchelf rsync tmux htop distrobox jq || true
 sudo apt-get install -y firefox-esr xcompmgr || true
+sudo sysctl net.ipv4.ip_unprivileged_port_start=0 || true
 ''')
             if not Path('/usr/bin/createrepo').exists() and Path('/usr/bin/createrepo_c').exists():
                 self.cmd('sudo ln -sf /usr/bin/createrepo_c /usr/bin/createrepo')
