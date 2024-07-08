@@ -2705,7 +2705,7 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
         Generate tests files by specs
         '''
         lines = []
-        if not self.tests or not self.tests.runs_before_compile:
+        if not self.tests:
             return lines
 
         '''
@@ -2743,13 +2743,17 @@ find {self.src_dir} -name "*.so*"  > {self.so_files_from_our_packages}
                     scmd = ''
 
                     scmds = []
-                    for line in self.spec.tests.scripts[script_name].split('\n'):
-                        scmd = f'''
-DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {line}
-                            '''
-                        scmd = scmd.format(profile_name=profile_name, script_name=script_name)    
-                        scmds.append(scmd)
 
+                    shellname_ = self.scriptname2shellname(script_name)
+                    scmd = f'''
+DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- bash ./{shellname_} 
+'''
+#                     for line in self.spec.tests.scripts[script_name].split('\n'):
+#                         scmd = f'''
+# DBX_NON_INTERACTIVE=1  {strace_mod} distrobox enter {box_name} -- {line}
+#                             '''
+#                         scmd = scmd.format(profile_name=profile_name, script_name=script_name)    
+                    scmds.append(scmd)
                     lines2.append("\n".join(scmds))
                     self.lines2sh(shell_name, lines2, None)
                     lines.append(f'./ta-{shell_name}.sh')
@@ -4595,12 +4599,13 @@ done
                 if not setup_cmds:
                     setup_cmds = 'uname -a '
 
-                for line in setup_cmds.split('\n'):
-                    if line.strip() != '':
-                        scmd = f'''
-DBX_NON_INTERACTIVE=1  distrobox enter --name {box_name} -- {line}
+                psn_ = self.profilename2shellname(profile_name)
+                Path(psn_).write_text('set -ex\n' + setup_cmds)
+
+                scmd = f'''
+DBX_NON_INTERACTIVE=1  distrobox enter --name {box_name} -- sudo bash ./{psn_}
                     '''
-                        lines.append(scmd)
+                lines.append(scmd)
 
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
@@ -4918,22 +4923,37 @@ done
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
+    def scriptname2shellname(self, sname_):
+        res = 'ta-script-' + sname_ + '.sh'
+        res = res.replace('_', '-')
+        return res
+
+    def profilename2shellname(self, pname_):
+        res = 'ta-profile-setup-' + pname_ + '.sh'
+        res = res.replace('_', '-')
+        return res
 
     def stage_39_run_tests_before_compile(self):
         '''
         Run tests before nuitka compiling
         '''
+        for sname_, script_ in self.tests.scripts.items():
+            Path(self.scriptname2shellname(sname_)).write_text(
+                'set -ex \n' + script_
+            )
+
         lines = []
         if not self.tests or not self.tests.runs_before_compile:
-            return lines
+            return 
+
 
         for run_ in self.tests.runs_before_compile:
-            s_ = self.tests.scripts[run_]
-            for line in s_.split('\n'):
-                scmd = f'''
-toolbox -c {self.container_name} run {line}
+            shellname_ = self.scriptname2shellname(run_)
+            scmd = f'''
+toolbox -c {self.container_name} bash ./{shellname_} 
                 '''
-                lines.append(scmd)
+            lines.append(scmd)
+
             ...
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
