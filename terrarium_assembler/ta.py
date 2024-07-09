@@ -4950,7 +4950,7 @@ done
         for run_ in self.tests.runs_before_compile:
             shellname_ = self.scriptname2shellname(run_)
             scmd = f'''
-toolbox -c {self.container_name} bash ./{shellname_} 
+toolbox -c {self.container_name} run bash ./{shellname_} 
                 '''
             lines.append(scmd)
 
