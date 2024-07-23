@@ -2886,7 +2886,7 @@ rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 """
         ]
 
-        if self.spec.packages.rebuild_remove_packages:
+        if 'rebuild_remove_packages' in self.spec.packages and self.spec.packages.rebuild_remove_packages:
             packages_ = ' '.join(self.spec.packages.rebuild_remove_packages) 
             scmd = f'''{self.tb_mod} sudo dnf remove -y {packages_} '''
             lines.append(scmd)
