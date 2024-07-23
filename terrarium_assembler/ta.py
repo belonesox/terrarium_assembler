@@ -312,6 +312,7 @@ class PackagesSpec:
     builddep:  Optional[List] = dc.field(default_factory=list)
     rebuild:  Optional[List] = dc.field(default_factory=list)
     rebuild_disable_features: Optional[List] = dc.field(default_factory=list)
+    rebuild_remove_packages: Optional[List] = dc.field(default_factory=list)
     terra_exclude: Optional[List] = dc.field(default_factory=list)
     exclude_prefix: Optional[List] = dc.field(default_factory=list)
     exclude_suffix: Optional[List] = dc.field(default_factory=list)
@@ -719,6 +720,10 @@ sudo sysctl net.ipv4.ip_unprivileged_port_start=0 || true
 
         if not 'rebuild_disable_features' in spec.packages:
             spec.packages.rebuild_disable_features = ['tests', 'doc']
+
+        if not 'rebuild_disable_features' in spec.packages:
+            spec.packages.rebuild_remove_packages = []
+
 
         if not 'rebuild' in spec.python_packages:
             spec.python_packages.rebuild = []
@@ -2881,6 +2886,11 @@ rsync  {self.rpms_backup_pool}/*.rpm  {self.rpms_path}/
 """
         ]
 
+        if self.spec.packages.rebuild_remove_packages:
+            packages_ = ' '.join(self.spec.packages.rebuild_remove_packages) 
+            scmd = f'''{self.tb_mod} sudo dnf remove -y {packages_} '''
+            lines.append(scmd)
+
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
         pass
@@ -3860,7 +3870,10 @@ Nuitka zstandard
                 type_ = 'Модуль проекта'
                 name_ = os.path.split(name_)[-1].split('.')[0]
             if 'python' in fti_.source_type:
-                name_ = parse_wheel_filename(name_).project                
+                if 'PIL' in name_:
+                    ...
+                else:    
+                    name_ = parse_wheel_filename(name_).project                
             if fti_.source not in module2files:
                 module2files[name_] = [] 
             module2type[name_] = fti2type_and_source(fti_)
