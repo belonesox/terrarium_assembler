@@ -3882,7 +3882,10 @@ Nuitka zstandard
                 if 'PIL' in name_:
                     ...
                 else:    
-                    name_ = parse_wheel_filename(name_).project                
+                    try:
+                        name_ = parse_wheel_filename(name_).project                
+                    except:
+                        pass    
             if fti_.source not in module2files:
                 module2files[name_] = [] 
             module2type[name_] = fti2type_and_source(fti_)
