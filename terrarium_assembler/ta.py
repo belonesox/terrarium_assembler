@@ -3546,6 +3546,17 @@ done
 
         ...
 
+    def get_set_our_python_packages(self):
+        '''
+        Return set of 'our' python packages.
+        '''
+        our_packages = set()
+        for whl in Path(self.our_whl_path).rglob('*.whl'):
+            package_name = whl.stem.lower().split('-')[0].replace('_', '-')
+            our_packages.add(package_name)
+        return our_packages    
+
+
 
     def stage_90_audit_analyse(self):
         '''
@@ -3605,10 +3616,7 @@ Nuitka zstandard
 #     defusedxml sortedcontainers packageurl-python py-serializable toml SCons license-expression boolean.py filelock  pip pip-api
 #     rich Pygments markdown-it-py mdurl Jinja2 MarkupSafe
 
-                our_packages = set()
-                for whl in Path(self.our_whl_path).rglob('*.whl'):
-                    package_name = whl.stem.lower().split('-')[0].replace('_', '-')
-                    our_packages.add(package_name)
+                our_packages = self.get_set_our_python_packages()
 
                 linked_packages = set()
                 for v1_ in json_:
@@ -3708,6 +3716,7 @@ Nuitka zstandard
                 self.cmd(f'''
     dot -Tsvg reports/pipdeptree.dot > reports/pipdeptree.svg || true
     ''')
+
             except Exception as ex_:
                 print(ex_)
                 pass
@@ -4561,6 +4570,20 @@ Nuitka zstandard
             lf.write(yaml.dump(self.bin_files_sources))
         if os.path.exists(self.bin_files_sources_after_minimization_path):
             os.unlink(self.bin_files_sources_after_minimization_path)
+
+        try:
+            os.chdir(self.curdir)
+            our_packages = self.get_set_our_python_packages()
+            json_ = json.loads(open(self.pip_list_json).read())
+            lines_ = []
+            for r_ in json_:
+                if r_['name'] not in our_packages:
+                    lines_.append(f"""      - {r_['name']}=={r_['version']}""")
+            Path('tmp/python-packages-locked-versions.yml').write_text('\n'.join(lines_))
+        except Exception as ex_:
+            print(ex_)
+            pass
+
 
     def stage_51_tests_setup(self):
         '''
