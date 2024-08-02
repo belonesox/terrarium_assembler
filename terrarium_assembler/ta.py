@@ -388,10 +388,11 @@ def test_box_name(container_name, profile_name, distro_):
     # Temp hack  https://github.com/konradhalas/dacite/issues/247
     # todo: replace it with method
     hostname = socket.gethostname()
+    maxlen_ = 63 - len(hostname)
     distro_canon = canonical_distro_name(distro_)
     # https://github.com/89luca89/distrobox/issues/1017
     uniq_ = hashlib.md5((profile_name + distro_canon).encode('utf-8')).hexdigest()
-    box_name = '-'.join([container_name, 'T', uniq_])[:63-len(hostname)]
+    box_name = '-'.join([container_name, 'T', uniq_])[:maxlen_]
     return box_name
 
 
@@ -631,7 +632,9 @@ sudo sysctl net.ipv4.ip_unprivileged_port_start=0 || true
 
         terms = self.curdir.split(os.path.sep)
         terms.reverse()
-        self.container_name = '-'.join(terms[:2] + [f'fc{self.spec.fc_version}'])
+        self.container_name = '-'.join(terms[:3] + [f'fc{self.spec.fc_version}'])
+        uniqcont_ = hashlib.md5(self.container_name.encode('utf-8')).hexdigest()[:8]
+        self.container_name = self.container_name[:24] + uniqcont_
         self.tb_mod = ''
         if self.toolbox_mode:
             self.tb_mod = f'toolbox run -c {self.container_name}'
@@ -2640,6 +2643,7 @@ done
 #{self.tb_mod} sudo rpm -ivh --force --nodeps $RPMS
 # {self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y $RPMS
 {self.tb_mod} sudo dnf update --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y {packages}
+{self.tb_mod} sudo dnf install --refresh --allowerasing --skip-broken --disablerepo="*" --enablerepo="tar" -y {packages}
 {self.rm_locales}
 #done
 #{self.tb_mod} sudo dnf install --refresh --disablerepo="*" --enablerepo="tar" -y {packages}
