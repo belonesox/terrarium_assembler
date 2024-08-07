@@ -5001,6 +5001,13 @@ toolbox -c {self.container_name} run bash ./{shellname_}
         mn_ = get_method_name()
         self.lines2sh(mn_, lines, mn_)
 
+        scmd = f'''
+toolbox -c {self.container_name} run $@
+            '''
+        self.lines2sh('run-in-build-container', [scmd])
+
+
+
 
     def stage_52_run_tests(self):
         '''
