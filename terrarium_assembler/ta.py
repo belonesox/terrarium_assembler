@@ -5374,9 +5374,9 @@ overrides:
             # res_ = list(p for p in self.installed_packages if p.name=='makeself')
             add_opts = ''
             if 1:
-                version_ = res_[0].version
-                if version.parse(version_) >= version.parse("2.4.5"):
-                    add_opts = ' --tar-format posix '
+                # version_ = res_[0].version
+                # if version.parse(version_) >= version.parse("2.4.5"):
+                add_opts = ' --tar-format posix '
 
                 path_to_dir = Path(__file__).parent
                 makeself_header_template_path = path_to_dir / "ta-makeself-header.sh"
